@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"math/rand/v2"
 	"sync"
 	"time"
@@ -251,7 +252,9 @@ func (h *Hub) session(ctx context.Context, conn transport.Transport) {
 }
 
 // handshake enables the session, selects 115200 baud, requests the device
-// identity strings and the full state dump.
+// identity strings and the full state dump, then enables capacity/energy
+// metering — the D9/DA telemetry the stage-2 features rely on is pushed only
+// while metering is on.
 func (h *Hub) handshake(ctx context.Context, conn transport.Transport) error {
 	h.writeMu.Lock()
 	defer h.writeMu.Unlock()
@@ -262,6 +265,7 @@ func (h *Hub) handshake(ctx context.Context, conn transport.Transport) error {
 		protocol.Get(protocol.RegHardwareVersion),
 		protocol.Get(protocol.RegFirmwareVersion),
 		protocol.GetAll(),
+		protocol.SetByte(protocol.RegMeteringEnable, 1),
 	} {
 		if err := h.writeConn(ctx, conn, frame); err != nil {
 			return err
@@ -359,6 +363,124 @@ func (h *Hub) SetOutput(ctx context.Context, on bool) error {
 		b = 1
 	}
 	return h.write(ctx, protocol.SetByte(protocol.RegOutputEnable, b), protocol.GetAll())
+}
+
+// ProtectionLimits selects the protection thresholds for SetProtections.
+// Nil fields are left untouched on the device.
+type ProtectionLimits struct {
+	OVP *float64 // over-voltage, V
+	OCP *float64 // over-current, A
+	OPP *float64 // over-power, W
+	OTP *float64 // over-temperature, °C
+	LVP *float64 // low input voltage, V
+}
+
+// SetProtections writes exactly the thresholds set in limits (registers
+// D1..D5, in that order) as one serialized series, then requests a full dump
+// to refresh the cache. Hub validation is minimal — every given value must
+// be finite and positive (LVP may be zero, matching the API contract);
+// the contract upper bounds are the API layer's job. It returns
+// ErrInvalidSetpoint for bad values (or an empty limits) and ErrOffline
+// accordingly.
+func (h *Hub) SetProtections(ctx context.Context, limits ProtectionLimits) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	fields := []struct {
+		name      string
+		reg       protocol.Register
+		value     *float64
+		allowZero bool
+	}{
+		{"ovp", protocol.RegOVP, limits.OVP, false},
+		{"ocp", protocol.RegOCP, limits.OCP, false},
+		{"opp", protocol.RegOPP, limits.OPP, false},
+		{"otp", protocol.RegOTP, limits.OTP, false},
+		{"lvp", protocol.RegLVP, limits.LVP, true},
+	}
+	var frames [][]byte
+	for _, f := range fields {
+		if f.value == nil {
+			continue
+		}
+		if v := *f.value; !finiteInRange(v, f.allowZero) {
+			return fmt.Errorf("%w: %s %g is not a positive finite value",
+				ErrInvalidSetpoint, f.name, v)
+		}
+		frames = append(frames, protocol.SetFloat(f.reg, float32(*f.value)))
+	}
+	if len(frames) == 0 {
+		return fmt.Errorf("%w: no protection limits given", ErrInvalidSetpoint)
+	}
+	if err := h.write(ctx, append(frames, protocol.GetAll())...); err != nil {
+		return err
+	}
+	h.mu.Lock()
+	if h.state != nil {
+		if limits.OVP != nil {
+			h.state.OVP = *limits.OVP
+		}
+		if limits.OCP != nil {
+			h.state.OCP = *limits.OCP
+		}
+		if limits.OPP != nil {
+			h.state.OPP = *limits.OPP
+		}
+		if limits.OTP != nil {
+			h.state.OTP = *limits.OTP
+		}
+		if limits.LVP != nil {
+			h.state.LVP = *limits.LVP
+		}
+		h.state.UpdatedAt = time.Now()
+	}
+	h.mu.Unlock()
+	return nil
+}
+
+// SetPreset writes hardware preset slot (1..protocol.PresetCount) as a
+// voltage/current pair — two float writes in one serialized series — then
+// requests a full dump to refresh the cache. A slot outside 1..6 or a
+// non-finite/negative value yields ErrInvalidSetpoint; ErrOffline is
+// returned while the device is disconnected.
+func (h *Hub) SetPreset(ctx context.Context, slot int, volts, amps float64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	vReg, iReg, err := protocol.PresetRegs(slot)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidSetpoint, err)
+	}
+	if !finiteInRange(volts, true) || !finiteInRange(amps, true) {
+		return fmt.Errorf("%w: preset %g V / %g A is not a non-negative finite pair",
+			ErrInvalidSetpoint, volts, amps)
+	}
+	if err := h.write(ctx,
+		protocol.SetFloat(vReg, float32(volts)),
+		protocol.SetFloat(iReg, float32(amps)),
+		protocol.GetAll(),
+	); err != nil {
+		return err
+	}
+	h.mu.Lock()
+	if h.state != nil {
+		h.state.Presets[slot-1] = Preset{Voltage: volts, Current: amps}
+		h.state.UpdatedAt = time.Now()
+	}
+	h.mu.Unlock()
+	return nil
+}
+
+// finiteInRange reports whether v is a finite value that is positive, or
+// non-negative when allowZero is set.
+func finiteInRange(v float64, allowZero bool) bool {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return false
+	}
+	if allowZero {
+		return v >= 0
+	}
+	return v > 0
 }
 
 // write sends the given frames to the device as one serialized unit.

@@ -8,11 +8,11 @@
 // method returns ErrUnavailable, which handlers map to 503
 // storage_unavailable. Device control never depends on storage.
 //
-// Feature packages bring their own models (profiles, history, events, ...)
-// by listing them in Config.Models — they are auto-migrated together with
-// the foundation models. All time columns across models are unix
-// milliseconds (int64); queries must not use dialect time functions so the
-// schema stays portable between SQLite and PostgreSQL.
+// Feature packages bring their own models (profiles, history, ...) by
+// listing them in Config.Models — they are auto-migrated together with
+// the foundation models (settings, events). All time columns across models
+// are unix milliseconds (int64); queries must not use dialect time functions
+// so the schema stays portable between SQLite and PostgreSQL.
 package storage
 
 import (
@@ -59,7 +59,7 @@ type Config struct {
 	// Logger receives connection status logs; slog.Default() when nil.
 	Logger *slog.Logger
 	// Models are feature-owned models auto-migrated in addition to the
-	// foundation models (settings).
+	// foundation models (settings, events).
 	Models []any
 	// BackoffMin/BackoffMax bound the reconnect backoff (defaults 1s/30s).
 	BackoffMin time.Duration

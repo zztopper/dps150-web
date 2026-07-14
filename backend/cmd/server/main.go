@@ -19,6 +19,7 @@ import (
 	"dps150-web/backend/internal/config"
 	"dps150-web/backend/internal/device"
 	"dps150-web/backend/internal/device/emulator"
+	"dps150-web/backend/internal/history"
 	"dps150-web/backend/internal/storage"
 	"dps150-web/backend/internal/transport"
 	"dps150-web/backend/internal/webui"
@@ -62,6 +63,7 @@ func main() {
 		Driver: cfg.DBDriver,
 		DSN:    cfg.DBDSN,
 		Logger: logger,
+		Models: history.Models(), // F-012: samples, samples_1m
 	})
 	if err != nil {
 		slog.Error("storage disabled: invalid configuration", "error", err)
@@ -77,8 +79,28 @@ func main() {
 		}
 	}()
 
+	// Stage-2 assembly anchors. Each parallel track replaces EXACTLY its own
+	// anchor line below with its wiring (hub and store are in scope) and must
+	// not touch the other anchors.
+
+	// History (F-012): the recorder batches hub telemetry into samples and
+	// the janitor maintains minute aggregates and retention (once at start,
+	// then hourly). hist backs GET /api/v1/history; with storage disabled it
+	// degrades to 503 storage_unavailable.
+	hist := history.NewReader(store)
+	if store != nil {
+		go history.NewRecorder(hub, store, logger).Run(ctx)
+		go history.NewJanitor(store, logger).Run(ctx)
+	}
+
+	// wiring:events-journal
+
+	// wiring:notifications
+
+	// wiring:metrics
+
 	gin.SetMode(gin.ReleaseMode)
-	router := api.NewRouter(hub)
+	router := api.NewRouter(hub, hist)
 	// Serve the embedded frontend bundle (single-binary mode); a backend
 	// built without the bundle logs it and serves the API only.
 	webui.Register(router, logger)

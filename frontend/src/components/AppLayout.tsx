@@ -1,16 +1,27 @@
 import { useEffect, useRef } from 'react'
-import { App as AntApp, Badge, Card, Flex, Layout, Typography } from 'antd'
+import { App as AntApp, Badge, Flex, Layout, Menu, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { useDeviceState } from '../hooks/useDeviceState'
-import { Readings } from '../components/Readings'
-import { SetpointsForm } from '../components/SetpointsForm'
-import { OutputControl } from '../components/OutputControl'
+import { Link, Outlet, useLocation } from 'react-router-dom'
+import { useDevice } from '../state/useDevice'
 
-/** Single-page live dashboard for the DPS-150 (F-006). */
-export function Dashboard() {
+const NAV_ITEMS = [
+  { key: '/', labelKey: 'nav.dashboard' },
+  { key: '/history', labelKey: 'nav.history' },
+  { key: '/profiles', labelKey: 'nav.profiles' },
+  { key: '/events', labelKey: 'nav.events' },
+  { key: '/settings', labelKey: 'nav.settings' },
+]
+
+/**
+ * App shell: compact top navigation, device connection badge and
+ * app-global toasts (protection trips, device link changes) that must
+ * fire on every page. Pages render into the Outlet.
+ */
+export function AppLayout() {
   const { t } = useTranslation()
   const { message } = AntApp.useApp()
-  const { connected, wsConnected, deviceLink, state, lastEvent } = useDeviceState()
+  const { wsConnected, deviceLink, lastEvent } = useDevice()
+  const { pathname } = useLocation()
 
   // Protection trip toast.
   useEffect(() => {
@@ -48,35 +59,32 @@ export function Dashboard() {
       ? { status: 'warning' as const, text: t('header.deviceOffline') }
       : { status: 'success' as const, text: t('header.online') }
 
+  const selectedKey =
+    NAV_ITEMS.find((item) => item.key !== '/' && pathname.startsWith(item.key))
+      ?.key ?? '/'
+
   return (
-    <Layout className="dashboard-layout">
-      <Layout.Header className="dashboard-header">
-        <Flex align="center" justify="space-between" wrap gap="small">
+    <Layout className="app-layout">
+      <Layout.Header className="app-header">
+        <Flex align="center" wrap gap="small">
           <Typography.Title level={3} style={{ margin: 0 }}>
             {t('app.title')}
           </Typography.Title>
+          <Menu
+            className="app-nav"
+            mode="horizontal"
+            disabledOverflow
+            selectedKeys={[selectedKey]}
+            items={NAV_ITEMS.map(({ key, labelKey }) => ({
+              key,
+              label: <Link to={key}>{t(labelKey)}</Link>,
+            }))}
+          />
           <Badge status={badge.status} text={badge.text} />
         </Flex>
       </Layout.Header>
-      <Layout.Content className="dashboard-content">
-        <Flex vertical gap="middle">
-          <Card>
-            <Readings state={state} />
-          </Card>
-          <Card title={t('setpoints.title')}>
-            <Flex align="center" justify="space-between" wrap gap="middle">
-              <SetpointsForm
-                setpoints={state?.setpoints ?? null}
-                limits={state?.limits ?? null}
-                disabled={!connected}
-              />
-              <OutputControl
-                outputOn={state?.outputOn ?? false}
-                disabled={!connected}
-              />
-            </Flex>
-          </Card>
-        </Flex>
+      <Layout.Content className="app-content">
+        <Outlet />
       </Layout.Content>
     </Layout>
   )

@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
 
 ### Added
+- Telemetry history (F-012): 2 Hz samples batched into storage every 5 s (loss-tolerant — drops with a throttled warn while the DB is down), hourly minute aggregation catching up after downtime plus retention jobs (raw 30 days, 1m aggregates 365 days), and `GET /api/v1/history` with raw/1m/auto resolutions capped at 20000 points per the API contract v2.
+- App shell for stage 2: client-side routing (react-router-dom v7), AntD
+  layout with top navigation (Dashboard / History / Profiles / Events /
+  Settings) and the device link badge in the header, dashboard moved to
+  `src/pages/DashboardPage.tsx` with `slot:*` anchors for the parallel
+  tracks, i18n'd stub pages and navigation smoke tests.
 - Registry pull-secret runbook (`docs/runbooks/registry-pull-secret.md`): the Vault path `secret/dps150/registry` is a hard deploy prerequisite — seeded with a `read_registry` deploy token and verified live (VSS synced, test pod pulled an image) so the first `deploy:prod` does not hit ImagePullBackOff.
 - Helm chart and prod auto-deploy (F-009): `deploy/helm/dps150-web` with a single-replica Recreate backend (single-client device), nginx frontend, path-based Ingress `dps150.r2bnj.ru` behind Authelia with a dedicated cert-manager certificate, Vault-sourced DB/registry credentials via VSO (fail-soft on first deploy), and an auto `deploy:prod` CI job (master → ns `dps150`, image tag `$CI_COMMIT_SHORT_SHA`).
 - Storage layer (F-007): GORM over SQLite (pure-Go, no cgo) or PostgreSQL
