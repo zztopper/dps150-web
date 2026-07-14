@@ -36,16 +36,25 @@ make run            # run backend on :8080 (device emulator by default)
 make run-frontend   # run Vite dev server
 ```
 
-The backend is configured via environment variables:
+The backend is configured via command-line flags or environment variables
+(a flag wins over its variable):
 
-| Variable | Default | Description |
-|---|---|---|
-| `DPS_LISTEN_ADDR` | `:8080` | HTTP listen address |
-| `DPS_TRANSPORT` | `mock://` | Device transport: `serial:///dev/ttyUSB0`, `tcp://host:port` or `mock://` |
-| `DPS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| Flag | Variable | Default | Description |
+|---|---|---|---|
+| `-listen` | `DPS_LISTEN_ADDR` | `:8080` | HTTP listen address |
+| `-transport` | `DPS_TRANSPORT` | `mock://` | Device transport: `serial:///dev/ttyUSB0`, `tcp://host:port` or `mock://` |
+| `-log-level` | `DPS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `-db-driver` | `DPS_DB_DRIVER` | `sqlite` | Storage backend: `sqlite` or `postgres` |
+| `-db-dsn` | `DPS_DB_DSN` | `dps150.db` | File path for sqlite, `postgres://user:pass@host:port/db` for postgres |
 
-With `mock://` the backend talks to a built-in DPS-150 emulator, so no
-hardware is required for development.
+Unknown flags and stray arguments abort startup — a typo never silently
+falls back to the emulator. With `mock://` the backend talks to a built-in
+DPS-150 emulator, so no hardware is required for development:
+
+```bash
+./dps150-server -transport serial:///dev/tty.usbmodem101   # real hardware
+./dps150-server                                            # emulator
+```
 
 ## End-to-end tests
 

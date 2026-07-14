@@ -28,6 +28,10 @@ Thumbs.db
 # Build artifacts
 backend/bin/
 frontend/dist/
+# Embedded frontend bundle (copied by `make embed-frontend`); only the
+# .gitkeep placeholder is committed so go:embed compiles without a build.
+backend/internal/webui/dist/*
+!backend/internal/webui/dist/.gitkeep
 frontend/node_modules/
 frontend/coverage/
 *.db

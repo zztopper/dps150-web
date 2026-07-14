@@ -19,7 +19,11 @@ USER root
 RUN apk upgrade --no-cache
 USER 101
 
-COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
+# nginx.conf is an envsubst template: the entrypoint renders it into
+# conf.d/default.conf, resolving ${BACKEND_UPSTREAM} (default below matches
+# the docker-compose backend service; override the env in k8s).
+ENV BACKEND_UPSTREAM=backend:8080
+COPY deploy/docker/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
