@@ -24,3 +24,10 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Build artifacts
+backend/bin/
+frontend/dist/
+frontend/node_modules/
+frontend/coverage/
+*.db
