@@ -187,6 +187,67 @@ test:frontend:
     - npm ci
     - npm run test
 
+# Playwright e2e: dashboard in Chromium against the real backend running the
+# built-in device emulator (DPS_TRANSPORT=mock://). Needs glibc for the
+# browser, so a bookworm (not alpine) Go image + Node 22 from nodesource.
+e2e:
+  stage: test
+  image: golang:1.25-bookworm   # MUST match major.minor of backend/go.mod
+  variables:
+    GOPATH: ${CI_PROJECT_DIR}/.go
+    GOMODCACHE: ${CI_PROJECT_DIR}/.go/pkg/mod
+    CGO_ENABLED: "0"
+    npm_config_cache: ${CI_PROJECT_DIR}/.npm
+    # Redirect the browser cache (~/.cache/ms-playwright by default) into
+    # the project dir — GitLab can only cache paths inside CI_PROJECT_DIR.
+    PLAYWRIGHT_BROWSERS_PATH: ${CI_PROJECT_DIR}/.cache/ms-playwright
+  cache:
+    # Go modules: reuse the shared go-mod cache read-only.
+    - key:
+        files:
+          - backend/go.sum
+        prefix: go-mod
+      unprotect: true
+      paths:
+        - .go/pkg/mod/
+      policy: pull
+    # npm tarballs + Playwright browsers, both keyed by the lock file
+    # (the browser build is pinned by the @playwright/test version in it).
+    - key:
+        files:
+          - frontend/package-lock.json
+        prefix: e2e-npm
+      unprotect: true
+      paths:
+        - .npm/
+        - .cache/ms-playwright/
+      policy: pull-push
+    - key: e2e-npm-fallback
+      unprotect: true
+      paths:
+        - .npm/
+        - .cache/ms-playwright/
+      policy: pull
+  before_script:
+    - mkdir -p ${GOMODCACHE}
+    - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    - apt-get install -y -qq nodejs
+    - node --version && npm --version
+  script:
+    - cd frontend
+    - npm ci
+    - npx playwright install --with-deps chromium
+    - cd ../backend
+    - go build -o bin/dps150-server ./cmd/server
+    - cd ../frontend
+    - npm run e2e
+  artifacts:
+    when: on_failure
+    paths:
+      - frontend/playwright-report/
+      - frontend/test-results/
+    expire_in: 1 week
+
 # =============================================================================
 # Build (Docker images) — amd64-only, buildx over dind (cattery pattern)
 # =============================================================================

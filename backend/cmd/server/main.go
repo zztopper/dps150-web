@@ -17,6 +17,7 @@ import (
 	"dps150-web/backend/internal/api"
 	"dps150-web/backend/internal/config"
 	"dps150-web/backend/internal/device"
+	"dps150-web/backend/internal/device/emulator"
 	"dps150-web/backend/internal/transport"
 )
 
@@ -28,16 +29,17 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	// TODO(F-004): wire the mock:// device emulator here once it lands.
+	var dialer transport.Dialer
 	if strings.HasPrefix(cfg.TransportURI, "mock://") {
-		slog.Error("mock transport is wired in the integration MR (F-004)",
-			"transport", cfg.TransportURI)
-		os.Exit(1)
-	}
-	dialer, err := transport.NewDialer(cfg.TransportURI)
-	if err != nil {
-		slog.Error("transport setup failed", "error", err)
-		os.Exit(1)
+		// Built-in device emulator: development and e2e without hardware.
+		dialer = emulator.New().Dialer()
+	} else {
+		var err error
+		dialer, err = transport.NewDialer(cfg.TransportURI)
+		if err != nil {
+			slog.Error("transport setup failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

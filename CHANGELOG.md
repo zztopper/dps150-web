@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Playwright e2e tests for the dashboard against the real backend with the
+  built-in device emulator (`frontend/e2e/`, `npm run e2e`, CI job `e2e`):
+  live telemetry over WS, setpoint apply, confirmed output toggle with the
+  emulator load model, client-side limit validation.
+- Stage-1 integration: `mock://` wires the built-in emulator in `main.go`,
+  hub paces device writes (50 ms gap; real DPS-150 hardware silently drops
+  back-to-back frames — discovered live, documented in the ser2net runbook),
+  ser2net bridge installed on pve and verified against the physical PSU
+  end-to-end (I-001, `docs/runbooks/ser2net-pve.md`).
 - Live dashboard (F-006): single-page React UI with WebSocket telemetry
   (reconnect + backoff), large V/I/P readings, CC/CV and protection
   indicators, setpoints form and confirmed output switch via REST
