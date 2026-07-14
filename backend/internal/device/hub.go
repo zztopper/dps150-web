@@ -304,6 +304,17 @@ func (h *Hub) Snapshot() Snapshot {
 	return h.snapshotLocked()
 }
 
+// Broadcast delivers u to every subscriber under the usual delivery policy
+// (a slow subscriber's full buffer drops the update; see Subscribe). It lets
+// API-layer features mirror their journal entries (JournalEvent) into the
+// update stream so WS clients see them; device-originated updates are
+// broadcast by the hub itself.
+func (h *Hub) Broadcast(u Update) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.broadcastLocked(u)
+}
+
 // SetVoltage validates volts against the known limits and writes the output
 // voltage setpoint, then requests a full dump to refresh the cache.
 // It returns ErrInvalidSetpoint or ErrOffline accordingly.
@@ -378,10 +389,10 @@ type ProtectionLimits struct {
 // SetProtections writes exactly the thresholds set in limits (registers
 // D1..D5, in that order) as one serialized series, then requests a full dump
 // to refresh the cache. Hub validation is minimal — every given value must
-// be finite and positive (LVP may be zero, matching the API contract);
-// the contract upper bounds are the API layer's job. It returns
-// ErrInvalidSetpoint for bad values (or an empty limits) and ErrOffline
-// accordingly.
+// be positive (LVP may be zero, matching the API contract) and finite after
+// the float32 conversion of the wire format; the contract upper bounds are
+// the API layer's job. It returns ErrInvalidSetpoint for bad values (or an
+// empty limits) and ErrOffline accordingly.
 func (h *Hub) SetProtections(ctx context.Context, limits ProtectionLimits) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -404,7 +415,7 @@ func (h *Hub) SetProtections(ctx context.Context, limits ProtectionLimits) error
 			continue
 		}
 		if v := *f.value; !finiteInRange(v, f.allowZero) {
-			return fmt.Errorf("%w: %s %g is not a positive finite value",
+			return fmt.Errorf("%w: %s %g is not a positive finite value within the device's float32 range",
 				ErrInvalidSetpoint, f.name, v)
 		}
 		frames = append(frames, protocol.SetFloat(f.reg, float32(*f.value)))
@@ -471,10 +482,14 @@ func (h *Hub) SetPreset(ctx context.Context, slot int, volts, amps float64) erro
 	return nil
 }
 
-// finiteInRange reports whether v is a finite value that is positive, or
-// non-negative when allowZero is set.
+// finiteInRange reports whether v is positive (or non-negative when
+// allowZero is set) and still finite after the float32 conversion every
+// device write goes through. A float64 that overflows float32 (e.g. 1e39)
+// would otherwise reach the wire as ±Inf, come back +Inf in the next dump,
+// poison the state cache and break JSON encoding of the state (empty
+// GET /api/v1/device bodies, dead WS state stream).
 func finiteInRange(v float64, allowZero bool) bool {
-	if math.IsNaN(v) || math.IsInf(v, 0) {
+	if math.IsNaN(v) || math.IsInf(float64(float32(v)), 0) {
 		return false
 	}
 	if allowZero {

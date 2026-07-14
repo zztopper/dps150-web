@@ -16,6 +16,7 @@ import (
 type DeviceHub interface {
 	Snapshot() device.Snapshot
 	Subscribe(ctx context.Context) <-chan device.Update
+	Broadcast(u device.Update)
 	SetVoltage(ctx context.Context, volts float64) error
 	SetCurrent(ctx context.Context, amps float64) error
 	SetOutput(ctx context.Context, on bool) error

@@ -45,11 +45,11 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	v1.GET("/device/presets", getPresets(hub))
 	v1.PUT("/device/presets/:slot", putPreset(deps.profiles(), hub))
 
-	// routes:protections
+	v1.PUT("/device/protections", putProtections(hub, deps.store))
 
 	v1.GET("/history", getHistory(deps.history))
 
-	// routes:events
+	v1.GET("/events", getEvents(deps.store))
 
 	// routes:notifications
 

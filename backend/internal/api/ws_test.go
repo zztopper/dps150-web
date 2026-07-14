@@ -135,4 +135,21 @@ func TestWebSocketStateThenTelemetry(t *testing.T) {
 		t.Fatalf("fourth message type = %q, want event", msgType)
 	}
 	assertJSON(t, string(data), `{"kind": "protectionTrip", "protection": "ovp", "ts": 1784000000000}`)
+
+	// Journal kinds without a v1 hub equivalent ride the event message too:
+	// the entry payload is merged with the kind/ts envelope.
+	hub.updates <- device.JournalEvent{
+		Kind: "protectionsChanged",
+		Data: map[string]any{"ovp": 31.0, "ocp": 5.2, "opp": 155.0, "otp": 75.0, "lvp": 4.5},
+		TS:   time.UnixMilli(1784000000000),
+	}
+	msgType, data = readMessage(t, ctx, conn)
+	if msgType != "event" {
+		t.Fatalf("fifth message type = %q, want event", msgType)
+	}
+	assertJSON(t, string(data), `{
+		"kind": "protectionsChanged",
+		"ovp": 31.0, "ocp": 5.2, "opp": 155.0, "otp": 75.0, "lvp": 4.5,
+		"ts": 1784000000000
+	}`)
 }
