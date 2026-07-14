@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- In-memory DPS-150 device emulator (F-004): a `transport.Dialer` speaking the
+  real frame protocol — session gating, periodic telemetry, register writes
+  with RX echo, resistive load model with CC/CV transitions, latching
+  protection trips, Ah/Wh metering and full-dump reads
+  (`backend/internal/device/emulator`).
 - Device transports (F-003): `serial://` (go.bug.st/serial, 115200 8N1,
   optional `?baud=N`) and `tcp://` (ser2net, 5s dial timeout, keepalive)
   dialers behind the `transport.Dialer` interface with context-aware Dial
