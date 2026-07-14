@@ -51,7 +51,7 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 
 	v1.GET("/events", getEvents(deps.store))
 
-	// routes:notifications
+	registerNotificationRoutes(v1)
 
 	// routes:metrics
 
