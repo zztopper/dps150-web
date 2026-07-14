@@ -8,3 +8,53 @@ body {
   margin: 0;
   min-height: 100vh;
 }
+
+.dashboard-layout {
+  min-height: 100vh;
+}
+
+.dashboard-header {
+  height: auto;
+  padding: 12px 24px;
+  background: transparent;
+  line-height: normal;
+}
+
+.dashboard-content {
+  padding: 0 24px 24px;
+}
+
+.readings-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 40px;
+  margin-bottom: 16px;
+}
+
+.reading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.reading-value {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2.5rem, 8vw, 4.5rem);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.reading-unit {
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  opacity: 0.65;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.protection-tripped {
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 2px 10px;
+}

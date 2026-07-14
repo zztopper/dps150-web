@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Live dashboard (F-006): single-page React UI with WebSocket telemetry
+  (reconnect + backoff), large V/I/P readings, CC/CV and protection
+  indicators, setpoints form and confirmed output switch via REST
+  (TanStack Query), event/link toasts, ru/en i18n, Vite dev proxy to the
+  backend, vitest coverage for the reducer, form, switch and page smoke.
 - Backend core (F-005): device hub (reconnect loop with exponential backoff,
   state cache, subscriber fan-out with drop policy, serialized time-bounded
   writes, connected reported only once the device answers a full dump),

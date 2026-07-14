@@ -1,10 +1,12 @@
-import { Typography } from 'antd'
-import { useTranslation } from 'react-i18next'
+import { App as AntApp } from 'antd'
+import { Dashboard } from './pages/Dashboard'
 
 function App() {
-  const { t } = useTranslation()
-
-  return <Typography.Title>{t('app.title')}</Typography.Title>
+  return (
+    <AntApp>
+      <Dashboard />
+    </AntApp>
+  )
 }
 
 export default App

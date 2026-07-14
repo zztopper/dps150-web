@@ -1,5 +1,66 @@
 {
   "app": {
     "title": "Управление DPS-150"
+  },
+  "common": {
+    "cancel": "Отмена"
+  },
+  "header": {
+    "online": "На связи",
+    "deviceOffline": "Устройство не на связи",
+    "serverOffline": "Нет связи с сервером"
+  },
+  "units": {
+    "volt": "В",
+    "amp": "А",
+    "watt": "Вт",
+    "celsius": "°C"
+  },
+  "readings": {
+    "inputVoltage": "Вход",
+    "temperature": "Температура"
+  },
+  "mode": {
+    "cc": "CC",
+    "cv": "CV"
+  },
+  "protection": {
+    "unknown": "Защита: нет данных",
+    "ok": "Защиты в норме",
+    "tripped": "Защита: {{protection}}",
+    "ovp": "перенапряжение (OVP)",
+    "ocp": "перегрузка по току (OCP)",
+    "opp": "перегрузка по мощности (OPP)",
+    "otp": "перегрев (OTP)",
+    "lvp": "низкое входное (LVP)",
+    "rep": "обратная полярность (REP)"
+  },
+  "setpoints": {
+    "title": "Уставки и выход",
+    "voltage": "Напряжение, В",
+    "current": "Ток, А",
+    "apply": "Применить",
+    "required": "Укажите значение",
+    "voltageRange": "Напряжение должно быть от 0 до {{max}} В",
+    "currentRange": "Ток должен быть от 0 до {{max}} А"
+  },
+  "output": {
+    "label": "Выход",
+    "on": "ВКЛ",
+    "off": "ВЫКЛ",
+    "confirmTitle": "Включить выход?",
+    "confirmContent": "Напряжение будет подано на клеммы.",
+    "confirmOk": "Включить"
+  },
+  "toasts": {
+    "protectionTrip": "Сработала защита: {{protection}}",
+    "deviceLost": "Связь с устройством потеряна",
+    "deviceRestored": "Связь с устройством восстановлена"
+  },
+  "errors": {
+    "invalidSetpoint": "Уставка вне допустимого диапазона: {{detail}}",
+    "deviceOffline": "Устройство не на связи — команда не выполнена",
+    "requestFailed": "Ошибка запроса: {{detail}}",
+    "network": "Сеть недоступна — запрос не выполнен"
   }
 }
