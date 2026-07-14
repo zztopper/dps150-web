@@ -1,0 +1,104 @@
+# Default values for dps150-web.
+#
+# The defaults target the home Talos cluster (see docs/architecture/design.md
+# section 8); everything site-specific is overridable so the chart stays
+# usable outside that environment.
+
+image:
+  # Registry + project prefix; the chart appends /backend and /frontend.
+  # Matches $CI_REGISTRY_IMAGE of this project.
+  repository: gitlab.zztopper.ru:5005/applications/dps150-web
+  # CI overrides this with the immutable $CI_COMMIT_SHORT_SHA tag on deploy.
+  tag: latest
+  pullPolicy: IfNotPresent
+
+backend:
+  env:
+    # Device transport URI: raw-TCP ser2net bridge on pve
+    # (docs/runbooks/ser2net-pve.md). serial:// and mock:// also work.
+    DPS_TRANSPORT: tcp://10.20.0.5:2150
+    DPS_LOG_LEVEL: info
+  # Pod security: Dockerfile.backend runs as the named user `app` (uid 10001);
+  # runAsUser must be numeric so the kubelet can verify runAsNonRoot.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+frontend:
+  # nginx-unprivileged runs as uid 101.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+# Container-level security context shared by both deployments.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+database:
+  # Frozen DB config contract: DPS_DB_DRIVER + DPS_DB_DSN; in-cluster the
+  # driver is postgres via the CNPG pooler. `.svc` short FQDN resolves through
+  # the pod search domains regardless of the cluster dnsDomain (this cluster
+  # uses k8s.r2bnj.ru, NOT cluster.local).
+  driver: postgres
+  user: dps150
+  host: pg-cluster-pooler-rw.pg-cluster.svc
+  port: 5432
+  name: dps150
+  # K8s Secret with `username`/`password` keys, materialised by VSO below.
+  credsSecret: dps150-db-creds
+
+vaultSecretsOperator:
+  enabled: true
+  # Cluster-wide VaultAuth usable from any namespace.
+  vaultAuthRef: vault-secrets-operator-system/vault-auth
+  mount: secret
+  # KV path with the CNPG-managed role password (key: password), seeded by
+  # the pg-cluster provisioning (I-002).
+  dbSecretPath: pg-cluster/dps150/database
+  # KV path with the .dockerconfigjson pull credentials for the private
+  # GitLab registry (same pattern as cattery's <app>/registry path).
+  # HARD deploy prerequisite (ImagePullBackOff otherwise); seeded with a
+  # read_registry deploy token — see docs/runbooks/registry-pull-secret.md.
+  registrySecretPath: dps150/registry
+
+ingress:
+  enabled: true
+  className: traefik
+  host: dps150.r2bnj.ru
+  # Dedicated per-host certificate (secret created by cert-manager from the
+  # Certificate template, NOT the shared wildcard).
+  tlsSecretName: dps150-tls
+  clusterIssuer: letsencrypt-cloudflare
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Authelia forward-auth guards the whole host (all paths of this Ingress).
+    traefik.ingress.kubernetes.io/router.middlewares: authelia-forwardauth-authelia@kubernetescrd
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

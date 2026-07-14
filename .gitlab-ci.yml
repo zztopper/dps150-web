@@ -13,7 +13,10 @@
 #
 # Tagging (minimal variant of cattery's scheme): on master the build pushes
 # :$CI_COMMIT_SHORT_SHA and :latest; on feature branches the image is only
-# built (no push) to validate the Dockerfile. Deploy stages come with F-009.
+# built (no push) to validate the Dockerfile.
+#
+# Deploy (F-009): master auto-deploys the Helm chart to the prod namespace
+# `dps150` using the immutable :$CI_COMMIT_SHORT_SHA tags pushed by build:*.
 
 workflow:
   rules:
@@ -26,6 +29,7 @@ stages:
   - lint
   - test
   - build
+  - deploy
 
 variables:
   DOCKER_DRIVER: overlay2
@@ -303,3 +307,37 @@ build:frontend-image:
         --build-arg BUILDKIT_INLINE_CACHE=1 \
         $TAG_ARGS \
         -f deploy/docker/Dockerfile.frontend .
+
+# =============================================================================
+# Deploy (F-009) — master → prod, ns dps150 (cattery deploy-job style)
+# =============================================================================
+
+deploy:prod:
+  stage: deploy
+  # Deploy is NOT interruptible (cattery B1): an interrupted `helm upgrade`
+  # mid-rollout leaves a half-updated release. Retry policy stays the
+  # `default:` one (runner infra failures only, never script failures).
+  interruptible: false
+  image: gitlab.zztopper.ru:5005/infrastructure/alpine-terraform:latest
+  environment:
+    name: production
+    url: https://dps150.r2bnj.ru
+  before_script:
+    # KCONFIG is a group-level CI variable inherited by this project.
+    - mkdir -p ~/.kube
+    - echo "$KCONFIG" > ~/.kube/config
+    - chmod 600 ~/.kube/config
+  script:
+    # The namespace is kubectl-managed, NOT Helm-managed: no namespace.yaml
+    # in the chart and no --create-namespace (Helm cannot adopt a
+    # kubectl-created namespace — "invalid ownership metadata").
+    - kubectl create namespace dps150 --dry-run=client -o yaml | kubectl apply -f -
+    - kubectl label namespace dps150 pod-security.kubernetes.io/enforce=baseline --overwrite
+    # Immutable commit-SHA tag pushed by build:*-image on master.
+    - |
+      helm upgrade --install dps150-web deploy/helm/dps150-web \
+        --namespace dps150 \
+        --set image.tag=${CI_COMMIT_SHORT_SHA} \
+        --wait --timeout 5m
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"

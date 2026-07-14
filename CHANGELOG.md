@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Registry pull-secret runbook (`docs/runbooks/registry-pull-secret.md`): the Vault path `secret/dps150/registry` is a hard deploy prerequisite — seeded with a `read_registry` deploy token and verified live (VSS synced, test pod pulled an image) so the first `deploy:prod` does not hit ImagePullBackOff.
+- Helm chart and prod auto-deploy (F-009): `deploy/helm/dps150-web` with a single-replica Recreate backend (single-client device), nginx frontend, path-based Ingress `dps150.r2bnj.ru` behind Authelia with a dedicated cert-manager certificate, Vault-sourced DB/registry credentials via VSO (fail-soft on first deploy), and an auto `deploy:prod` CI job (master → ns `dps150`, image tag `$CI_COMMIT_SHORT_SHA`).
 - Storage layer (F-007): GORM over SQLite (pure-Go, no cgo) or PostgreSQL
   selected by `DPS_DB_DRIVER`/`DPS_DB_DSN`, CLI flags mirroring every
   `DPS_*` variable (`-transport`, `-listen`, `-log-level`, `-db-driver`,

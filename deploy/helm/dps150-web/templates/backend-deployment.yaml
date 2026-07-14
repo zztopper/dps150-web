@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dps150-web.backend.fullname" . }}
+  labels:
+    {{- include "dps150-web.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  # The DPS-150 serial bridge is single-client: two backends must never talk
+  # to the device at once, so exactly 1 replica and Recreate (the old pod is
+  # torn down before the new one dials ser2net).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "dps150-web.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "dps150-web.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      {{- include "dps150-web.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
+      containers:
+        - name: backend
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}/backend:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DPS_LISTEN_ADDR
+              value: ":8080"
+            - name: DPS_TRANSPORT
+              value: {{ .Values.backend.env.DPS_TRANSPORT | quote }}
+            - name: DPS_LOG_LEVEL
+              value: {{ .Values.backend.env.DPS_LOG_LEVEL | quote }}
+            # Frozen DB config contract: DPS_DB_DRIVER + DPS_DB_DSN. An
+            # unreachable database never kills the app — the backend retries
+            # in the background, /healthz stays 200 and storage-backed
+            # features answer 503 storage_unavailable.
+            - name: DPS_DB_DRIVER
+              value: {{ .Values.database.driver | quote }}
+            # optional: true — on the very first deploy the Vault secret may
+            # not be seeded yet (VSO keeps retrying, backend runs fail-soft).
+            # Once VSO syncs it, the Deployment is bounced via
+            # rolloutRestartTargets (see vault-secrets.yaml) and picks the
+            # credentials up.
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.credsSecret }}
+                  key: username
+                  optional: true
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.credsSecret }}
+                  key: password
+                  optional: true
+            # $(VAR) references are expanded by the kubelet from the two env
+            # vars declared above.
+            - name: DPS_DB_DSN
+              value: "postgres://$(DB_USER):$(DB_PASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
