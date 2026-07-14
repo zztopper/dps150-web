@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"dps150-web/backend/internal/device"
 )
 
 // Metering session tracking (F-017).
@@ -120,6 +122,15 @@ func (s *Service) finishSession(ctx context.Context, ts time.Time) {
 			"capacityAh", data.CapacityAh, "energyWh", data.EnergyWh,
 			"durationMs", data.DurationMs)
 	}
+	s.hub.Broadcast(device.JournalEvent{
+		Kind: journalKindMeteringSession,
+		Data: map[string]any{
+			"capacityAh": data.CapacityAh,
+			"energyWh":   data.EnergyWh,
+			"durationMs": data.DurationMs,
+		},
+		TS: ts,
+	})
 	s.notify(ctx, KindMeteringSession, meteringText(data))
 }
 
