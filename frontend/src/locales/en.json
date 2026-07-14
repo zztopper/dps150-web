@@ -1,5 +1,66 @@
 {
   "app": {
     "title": "DPS-150 Control"
+  },
+  "common": {
+    "cancel": "Cancel"
+  },
+  "header": {
+    "online": "Online",
+    "deviceOffline": "Device offline",
+    "serverOffline": "Server unreachable"
+  },
+  "units": {
+    "volt": "V",
+    "amp": "A",
+    "watt": "W",
+    "celsius": "°C"
+  },
+  "readings": {
+    "inputVoltage": "Input",
+    "temperature": "Temperature"
+  },
+  "mode": {
+    "cc": "CC",
+    "cv": "CV"
+  },
+  "protection": {
+    "unknown": "Protection: no data",
+    "ok": "Protections OK",
+    "tripped": "Protection: {{protection}}",
+    "ovp": "over-voltage (OVP)",
+    "ocp": "over-current (OCP)",
+    "opp": "over-power (OPP)",
+    "otp": "over-temperature (OTP)",
+    "lvp": "low input voltage (LVP)",
+    "rep": "reverse polarity (REP)"
+  },
+  "setpoints": {
+    "title": "Setpoints and output",
+    "voltage": "Voltage, V",
+    "current": "Current, A",
+    "apply": "Apply",
+    "required": "Enter a value",
+    "voltageRange": "Voltage must be between 0 and {{max}} V",
+    "currentRange": "Current must be between 0 and {{max}} A"
+  },
+  "output": {
+    "label": "Output",
+    "on": "ON",
+    "off": "OFF",
+    "confirmTitle": "Turn the output on?",
+    "confirmContent": "Voltage will be applied to the terminals.",
+    "confirmOk": "Turn on"
+  },
+  "toasts": {
+    "protectionTrip": "Protection tripped: {{protection}}",
+    "deviceLost": "Device connection lost",
+    "deviceRestored": "Device connection restored"
+  },
+  "errors": {
+    "invalidSetpoint": "Setpoint is out of range: {{detail}}",
+    "deviceOffline": "Device is offline — command not applied",
+    "requestFailed": "Request failed: {{detail}}",
+    "network": "Network unavailable — request not sent"
   }
 }
