@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
@@ -285,10 +286,19 @@ func applyProfile(store profileStore, hub DeviceHub) gin.HandlerFunc {
 			return
 		}
 
+		// Offline dominates validation (contract: apply answers 409
+		// device_offline): without a live device the limits are fallbacks
+		// and a 400 would mislead.
+		snap := hub.Snapshot()
+		if !snap.Connected {
+			writeHubError(c, device.ErrOffline)
+			return
+		}
+
 		// Validate both setpoints against the live device limits upfront
 		// (as PUT /device/setpoints does), so an out-of-range pair never
 		// applies partially.
-		maxV, maxI := hub.Snapshot().Limits()
+		maxV, maxI := snap.Limits()
 		if p.Voltage > maxV {
 			writeError(c, http.StatusBadRequest, "invalid_setpoint",
 				fmt.Sprintf("profile voltage %g V is outside 0..%g V", p.Voltage, maxV))
@@ -319,6 +329,11 @@ func applyProfile(store profileStore, hub DeviceHub) gin.HandlerFunc {
 			profileAppliedEvent{ProfileID: p.ID, Name: p.Name}); err != nil {
 			slog.Warn("profileApplied event dropped", "profileId", p.ID, "error", err)
 		}
+		hub.Broadcast(device.JournalEvent{
+			Kind: "profileApplied",
+			Data: map[string]any{"profileId": p.ID, "name": p.Name},
+			TS:   time.Now(),
+		})
 		c.JSON(http.StatusOK, gin.H{"applied": true})
 	}
 }

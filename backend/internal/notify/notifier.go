@@ -45,6 +45,9 @@ const queueSize = 32
 type DeviceHub interface {
 	Snapshot() device.Snapshot
 	Subscribe(ctx context.Context) <-chan device.Update
+	// Broadcast mirrors journal kinds this service appends (meteringSession)
+	// into the WS update stream per the API contract «WS-дополнения».
+	Broadcast(u device.Update)
 }
 
 // Sender delivers one notification message; *Telegram implements it.
@@ -85,6 +88,11 @@ type Service struct {
 
 	// queue carries ready-to-send texts to the send goroutine.
 	queue chan string
+
+	// sawDisconnect suppresses the deviceLink notification for the initial
+	// connect after startup: only recoveries are announced. Touched only by
+	// the Run goroutine.
+	sawDisconnect bool
 
 	// lastSettings is the last successfully loaded settings, used while the
 	// database is unavailable. Touched only by the Run goroutine.
@@ -154,14 +162,19 @@ func (s *Service) handle(ctx context.Context, u device.Update) {
 }
 
 // handleStatus reacts to a device link transition: it notifies deviceLink
-// and keeps the metering session consistent (see metering.go).
+// and keeps the metering session consistent (see metering.go). The very
+// first connect after startup is expected and not worth a push — only a
+// recovery after a seen disconnect is announced.
 func (s *Service) handleStatus(ctx context.Context, v device.StatusChange) {
 	if v.Connected {
 		s.resumeSessionOnConnect(time.Now())
-		s.notify(ctx, KindDeviceLink,
-			fmt.Sprintf("DPS-150: связь с устройством восстановлена (%s)", v.Transport))
+		if s.sawDisconnect {
+			s.notify(ctx, KindDeviceLink,
+				fmt.Sprintf("DPS-150: связь с устройством восстановлена (%s)", v.Transport))
+		}
 		return
 	}
+	s.sawDisconnect = true
 	s.abortSession()
 	s.notify(ctx, KindDeviceLink,
 		fmt.Sprintf("DPS-150: связь с устройством потеряна (%s)", v.Transport))

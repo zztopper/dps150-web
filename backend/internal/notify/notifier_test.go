@@ -19,9 +19,10 @@ const testTimeout = 5 * time.Second
 
 // fakeHub implements DeviceHub: tests push updates and mutate the snapshot.
 type fakeHub struct {
-	mu   sync.Mutex
-	snap device.Snapshot
-	ch   chan device.Update
+	mu         sync.Mutex
+	snap       device.Snapshot
+	ch         chan device.Update
+	broadcasts []device.Update
 }
 
 func newFakeHub() *fakeHub {
@@ -37,6 +38,13 @@ func (f *fakeHub) Snapshot() device.Snapshot {
 		snap.State = &st
 	}
 	return snap
+}
+
+// Broadcast collects mirrored journal updates for assertions.
+func (f *fakeHub) Broadcast(u device.Update) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.broadcasts = append(f.broadcasts, u)
 }
 
 func (f *fakeHub) Subscribe(context.Context) <-chan device.Update { return f.ch }
@@ -410,11 +418,18 @@ func TestMeteringSessionAbortsOnLinkLoss(t *testing.T) {
 func TestMeteringSessionResumesOnConnectWithOutputOn(t *testing.T) {
 	hub, api, _, journal := startService(t)
 	hub.setState(device.State{CapacityAh: 1.0, EnergyWh: 2.0, OutputOn: true})
+	// The initial connect is intentionally silent (no "восстановлена" for
+	// the first link-up after startup), so make this a real recovery:
+	// disconnect first, then reconnect.
+	hub.push(device.StatusChange{Connected: false, Transport: "mock://dps-150"})
+	if msg := api.waitMessage(t); !strings.Contains(msg.text, "потеряна") {
+		t.Fatalf("first message = %q, want the link-lost notification", msg.text)
+	}
 	hub.push(device.StatusChange{Connected: true, Transport: "mock://dps-150"})
 	// The deviceLink message is the sync point: the connect was processed
 	// and the session baseline captured.
 	if msg := api.waitMessage(t); !strings.Contains(msg.text, "восстановлена") {
-		t.Fatalf("first message = %q, want the link-restored notification", msg.text)
+		t.Fatalf("second message = %q, want the link-restored notification", msg.text)
 	}
 	hub.setState(device.State{CapacityAh: 1.25, EnergyWh: 2.5})
 	hub.push(device.DeviceEvent{Kind: device.EventOutputChange, OutputOn: false, TS: time.Now()})
@@ -426,5 +441,22 @@ func TestMeteringSessionResumesOnConnectWithOutputOn(t *testing.T) {
 	}
 	if got.EnergyWh < 0.49 || got.EnergyWh > 0.51 {
 		t.Errorf("energyWh = %g, want ~0.5", got.EnergyWh)
+	}
+}
+
+// TestFirstConnectIsSilent: the initial link-up after startup must not
+// produce a deviceLink notification — only recoveries are announced.
+func TestFirstConnectIsSilent(t *testing.T) {
+	hub, api, _, _ := startService(t)
+	hub.push(device.StatusChange{Connected: true, Transport: "mock://dps-150"})
+	hub.push(device.DeviceEvent{
+		Kind:       device.EventProtectionTrip,
+		Protection: protocol.ProtectionOCP,
+		TS:         time.Now(),
+	})
+	// The protectionTrip notification is the sync point: had the connect
+	// produced a message, it would have arrived first.
+	if msg := api.waitMessage(t); !strings.Contains(msg.text, "сработала защита") {
+		t.Fatalf("first message = %q, want the protection-trip notification", msg.text)
 	}
 }
