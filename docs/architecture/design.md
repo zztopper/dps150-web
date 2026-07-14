@@ -133,11 +133,11 @@
 
 - **Одно окружение** (ns `dps150`): второй инстанс не смог бы подключиться
   к одноклиентскому ser2net; e2e и разработка — на эмуляторе.
-- GitLab CI (`gitlab.zztopper.ru`, registry `:5005`) по паттерну cattery:
-  lint → test → build → deploy; деплой `helm upgrade --install` c kubeconfig
-  из CI-переменной `KCONFIG`; master → автодеплой в prod.
-- Helm-чарт в `deploy/helm/dps150-web`; namespace создаёт CI через kubectl
-  (НЕ чарт и НЕ --create-namespace — см. известные грабли boilerplate).
+- GitLab CI (`gitlab.zztopper.ru`, registry `:5005`): lint → test → build;
+  CI только собирает и пушит образы (:short-sha + :latest на master).
+- Деплой — GitOps через ArgoCD (ADR-005): чарт живёт в
+  `infrastructure/argocd-platform` `apps/dps150/`, релиз = MR с бампом
+  `image.tag`; ApplicationSet создаёт namespace с PSA-лейблами, selfHeal.
 - Кластерные факты: dnsDomain `k8s.r2bnj.ru` (не cluster.local!), ingress-class
   `traefik`, cert-manager ClusterIssuer `letsencrypt-cloudflare`,
   external-dns → Cloudflare, storage `longhorn` (для БД не нужен — БД в CNPG).
