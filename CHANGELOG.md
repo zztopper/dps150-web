@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- DPS-150 protocol library (F-002): frame codec with checksum, typed register
+  map, TX encoding helpers, streaming RX parser with resynchronization and
+  typed event decoding (`backend/internal/device/protocol`, stdlib-only).
 - Project bootstrap: process boilerplate (lite profile), design doc, ADR-001..004,
   GitLab issue tracker seeded (milestones «Этап 1 PoC» / «Этап 2 MVP» / «Этап 3 v1.0»).
 - Monorepo scaffold (F-001): Go backend skeleton (Gin, `/healthz`, env config,
