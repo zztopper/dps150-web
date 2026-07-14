@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 
 	"dps150-web/backend/internal/api"
 	"dps150-web/backend/internal/config"
+	"dps150-web/backend/internal/device"
+	"dps150-web/backend/internal/transport"
 )
 
 func main() {
@@ -25,15 +28,34 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	gin.SetMode(gin.ReleaseMode)
-	srv := &http.Server{
-		Addr:              cfg.ListenAddr,
-		Handler:           api.NewRouter(),
-		ReadHeaderTimeout: 5 * time.Second,
+	// TODO(F-004): wire the mock:// device emulator here once it lands.
+	if strings.HasPrefix(cfg.TransportURI, "mock://") {
+		slog.Error("mock transport is wired in the integration MR (F-004)",
+			"transport", cfg.TransportURI)
+		os.Exit(1)
+	}
+	dialer, err := transport.NewDialer(cfg.TransportURI)
+	if err != nil {
+		slog.Error("transport setup failed", "error", err)
+		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	hub := device.NewHub(dialer, device.WithLogger(logger))
+	go func() {
+		if err := hub.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("device hub stopped", "error", err)
+		}
+	}()
+
+	gin.SetMode(gin.ReleaseMode)
+	srv := &http.Server{
+		Addr:              cfg.ListenAddr,
+		Handler:           api.NewRouter(hub),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
 	go func() {
 		slog.Info("server starting", "addr", cfg.ListenAddr, "transport", cfg.TransportURI)

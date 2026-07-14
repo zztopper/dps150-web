@@ -3,6 +3,7 @@ module dps150-web/backend
 go 1.25.0
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/gin-gonic/gin v1.12.0
 	go.bug.st/serial v1.7.1
 )
