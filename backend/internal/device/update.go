@@ -7,7 +7,7 @@ import (
 )
 
 // Update is a typed message delivered to hub subscribers. The concrete types
-// are StateSnapshot, Telemetry, StatusChange and DeviceEvent.
+// are StateSnapshot, Telemetry, StatusChange, DeviceEvent and JournalEvent.
 type Update interface {
 	isUpdate()
 }
@@ -65,7 +65,19 @@ type DeviceEvent struct {
 	TS         time.Time
 }
 
+// JournalEvent mirrors an event-journal entry into the update stream:
+// features that append journal kinds the hub itself does not produce
+// (protectionsChanged, profileApplied, meteringSession — see the API
+// contract's «WS-дополнения») publish one via Hub.Broadcast so WS clients
+// receive those kinds without polling GET /api/v1/events.
+type JournalEvent struct {
+	Kind string         // journal entry kind, e.g. "protectionsChanged"
+	Data map[string]any // journal entry payload fields; may be nil
+	TS   time.Time
+}
+
 func (StateSnapshot) isUpdate() {}
 func (Telemetry) isUpdate()     {}
 func (StatusChange) isUpdate()  {}
 func (DeviceEvent) isUpdate()   {}
+func (JournalEvent) isUpdate()  {}

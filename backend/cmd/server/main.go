@@ -20,6 +20,7 @@ import (
 	"dps150-web/backend/internal/device"
 	"dps150-web/backend/internal/device/emulator"
 	"dps150-web/backend/internal/history"
+	"dps150-web/backend/internal/journal"
 	"dps150-web/backend/internal/storage"
 	"dps150-web/backend/internal/transport"
 	"dps150-web/backend/internal/webui"
@@ -94,7 +95,15 @@ func main() {
 		go history.NewJanitor(store, logger).Run(ctx)
 	}
 
-	// wiring:events-journal
+	// Event journal (F-014): a hub subscriber persisting device transitions
+	// (protection trips, connects/disconnects, output switches). Fail-soft:
+	// with the database down entries are dropped with a rare warning and the
+	// hub is never blocked.
+	if store != nil {
+		// Attach subscribes synchronously so the first device connect is
+		// never lost to goroutine scheduling.
+		go journal.New(store, logger).Attach(ctx, hub)()
+	}
 
 	// wiring:notifications
 

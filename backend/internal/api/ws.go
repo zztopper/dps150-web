@@ -103,6 +103,17 @@ func updateMessage(u device.Update) (wsMessage, bool) {
 			data["outputOn"] = v.OutputOn
 		}
 		return wsMessage{Type: "event", Data: data}, true
+	case device.JournalEvent:
+		// Journal kinds without a v1 WS equivalent (protectionsChanged, ...)
+		// ride the "event" message: the journal entry payload plus the
+		// envelope's kind/ts, which always win over payload keys.
+		data := make(map[string]any, len(v.Data)+2)
+		for k, val := range v.Data {
+			data[k] = val
+		}
+		data["kind"] = v.Kind
+		data["ts"] = v.TS.UnixMilli()
+		return wsMessage{Type: "event", Data: data}, true
 	default:
 		return wsMessage{}, false
 	}

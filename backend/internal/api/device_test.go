@@ -34,6 +34,7 @@ type fakeHub struct {
 	outputs     []bool
 	protections []device.ProtectionLimits
 	presets     []presetWrite
+	broadcasts  []device.Update
 }
 
 func (f *fakeHub) Snapshot() device.Snapshot {
@@ -43,6 +44,20 @@ func (f *fakeHub) Snapshot() device.Snapshot {
 }
 
 func (f *fakeHub) Subscribe(context.Context) <-chan device.Update { return f.updates }
+
+// Broadcast records the update and, like the real hub, forwards it to the
+// subscriber channel when one is wired (dropping it when full).
+func (f *fakeHub) Broadcast(u device.Update) {
+	f.mu.Lock()
+	f.broadcasts = append(f.broadcasts, u)
+	f.mu.Unlock()
+	if f.updates != nil {
+		select {
+		case f.updates <- u:
+		default:
+		}
+	}
+}
 
 func (f *fakeHub) SetVoltage(_ context.Context, volts float64) error {
 	f.mu.Lock()
@@ -77,16 +92,6 @@ func (f *fakeHub) SetOutput(_ context.Context, on bool) error {
 		return f.err
 	}
 	f.outputs = append(f.outputs, on)
-	return nil
-}
-
-func (f *fakeHub) SetProtections(_ context.Context, limits device.ProtectionLimits) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.err != nil {
-		return f.err
-	}
-	f.protections = append(f.protections, limits)
 	return nil
 }
 

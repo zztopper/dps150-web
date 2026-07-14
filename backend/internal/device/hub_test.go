@@ -378,6 +378,11 @@ func TestHubSetProtectionsInvalid(t *testing.T) {
 		"NaN opp":      {OPP: fptr(math.NaN())},
 		"Inf otp":      {OTP: fptr(math.Inf(1))},
 		"negative lvp": {LVP: fptr(-0.1)},
+		// Finite in float64 but +Inf after the wire's float32 conversion:
+		// letting it through would poison the state cache with +Inf and
+		// break JSON encoding of GET /api/v1/device and WS state messages.
+		"float32 overflow lvp": {LVP: fptr(1e39)},
+		"float32 overflow ovp": {OVP: fptr(math.MaxFloat64)},
 	}
 	for name, limits := range cases {
 		if err := hub.SetProtections(ctx, limits); !errors.Is(err, device.ErrInvalidSetpoint) {
@@ -389,6 +394,28 @@ func TestHubSetProtectionsInvalid(t *testing.T) {
 	// passes validation and fails with ErrOffline instead.
 	if err := hub.SetProtections(ctx, device.ProtectionLimits{LVP: fptr(0)}); !errors.Is(err, device.ErrOffline) {
 		t.Errorf("SetProtections(lvp=0) = %v, want ErrOffline (value must be valid)", err)
+	}
+}
+
+// TestHubBroadcastReachesSubscribers verifies API-layer journal mirrors
+// published through Broadcast are fanned out to subscribers like any other
+// update.
+func TestHubBroadcastReachesSubscribers(t *testing.T) {
+	hub := device.NewHub(&scriptDialer{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	updates := hub.Subscribe(ctx)
+
+	sent := device.JournalEvent{
+		Kind: "protectionsChanged",
+		Data: map[string]any{"ovp": 30.0, "ocp": 5.2, "opp": 155.0, "otp": 75.0, "lvp": 4.5},
+		TS:   time.UnixMilli(1784000000000),
+	}
+	hub.Broadcast(sent)
+
+	got := waitFor[device.JournalEvent](t, updates)
+	if got.Kind != sent.Kind || !got.TS.Equal(sent.TS) || len(got.Data) != len(sent.Data) {
+		t.Errorf("broadcast journal event = %+v, want %+v", got, sent)
 	}
 }
 
@@ -446,6 +473,9 @@ func TestHubSetPresetInvalid(t *testing.T) {
 	}
 	if err := hub.SetPreset(ctx, 1, 5, -0.5); !errors.Is(err, device.ErrInvalidSetpoint) {
 		t.Errorf("SetPreset(negative amps) = %v, want ErrInvalidSetpoint", err)
+	}
+	if err := hub.SetPreset(ctx, 1, 1e39, 1); !errors.Is(err, device.ErrInvalidSetpoint) {
+		t.Errorf("SetPreset(float32-overflowing volts) = %v, want ErrInvalidSetpoint", err)
 	}
 }
 
