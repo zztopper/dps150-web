@@ -17,15 +17,23 @@ import (
 	"dps150-web/backend/internal/device/protocol"
 )
 
+// presetWrite is one recorded fakeHub.SetPreset call.
+type presetWrite struct {
+	slot        int
+	volts, amps float64
+}
+
 // fakeHub implements DeviceHub for handler tests.
 type fakeHub struct {
-	mu       sync.Mutex
-	snap     device.Snapshot
-	updates  chan device.Update
-	err      error // returned by every command when set
-	voltages []float64
-	currents []float64
-	outputs  []bool
+	mu          sync.Mutex
+	snap        device.Snapshot
+	updates     chan device.Update
+	err         error // returned by every command when set
+	voltages    []float64
+	currents    []float64
+	outputs     []bool
+	protections []device.ProtectionLimits
+	presets     []presetWrite
 }
 
 func (f *fakeHub) Snapshot() device.Snapshot {
@@ -72,6 +80,29 @@ func (f *fakeHub) SetOutput(_ context.Context, on bool) error {
 	return nil
 }
 
+func (f *fakeHub) SetProtections(_ context.Context, limits device.ProtectionLimits) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return f.err
+	}
+	f.protections = append(f.protections, limits)
+	return nil
+}
+
+func (f *fakeHub) SetPreset(_ context.Context, slot int, volts, amps float64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return f.err
+	}
+	f.presets = append(f.presets, presetWrite{slot: slot, volts: volts, amps: amps})
+	if f.snap.State != nil && slot >= 1 && slot <= len(f.snap.State.Presets) {
+		f.snap.State.Presets[slot-1] = device.Preset{Voltage: volts, Current: amps}
+	}
+	return nil
+}
+
 // onlineSnapshot mirrors the example document of the API contract.
 func onlineSnapshot() device.Snapshot {
 	return device.Snapshot{
@@ -108,7 +139,7 @@ func onlineSnapshot() device.Snapshot {
 func doRequest(t *testing.T, hub DeviceHub, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	r := NewRouter(hub, nil)
+	r := NewRouter(hub)
 	w := httptest.NewRecorder()
 	var req *http.Request
 	if body == "" {

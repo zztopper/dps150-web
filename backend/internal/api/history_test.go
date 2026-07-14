@@ -37,7 +37,7 @@ func (f *fakeHistory) Minutes(_ context.Context, from, to int64, limit int) ([]h
 func doHistory(t *testing.T, hist HistoryStore, query string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	r := NewRouter(&fakeHub{}, hist)
+	r := NewRouter(&fakeHub{}, WithHistory(hist))
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/history"+query, nil)
 	r.ServeHTTP(w, req)

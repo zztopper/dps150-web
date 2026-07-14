@@ -41,7 +41,7 @@ func TestWebSocketStateThenTelemetry(t *testing.T) {
 		snap:    onlineSnapshot(),
 		updates: make(chan device.Update, 8),
 	}
-	srv := httptest.NewServer(NewRouter(hub, nil))
+	srv := httptest.NewServer(NewRouter(hub))
 	defer srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
