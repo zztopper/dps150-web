@@ -156,6 +156,7 @@ func startHub(t *testing.T, d transport.Dialer, opts ...device.Option) (*device.
 	t.Cleanup(cancel)
 	opts = append([]device.Option{
 		device.WithBackoff(10*time.Millisecond, 50*time.Millisecond),
+		device.WithWriteGap(0), // pacing is exercised by TestHubWritePacing
 	}, opts...)
 	hub := device.NewHub(d, opts...)
 	updates := hub.Subscribe(ctx)
@@ -521,5 +522,49 @@ func TestHubSilentDeviceStaysDisconnected(t *testing.T) {
 	}
 	if got := d.dials(); got < 2 {
 		t.Errorf("dial count = %d, want at least 2 (silent session dropped)", got)
+	}
+}
+
+func TestHubWritePacing(t *testing.T) {
+	var mu sync.Mutex
+	var times []time.Time
+	d := &scriptDialer{scripts: []func(net.Conn){
+		func(conn net.Conn) {
+			defer func() { _ = conn.Close() }()
+			buf := make([]byte, 256)
+			for i := 0; i < 6; i++ { // the handshake is six paced writes
+				if _, err := conn.Read(buf); err != nil {
+					return
+				}
+				mu.Lock()
+				times = append(times, time.Now())
+				mu.Unlock()
+			}
+		},
+	}}
+	startHub(t, d, device.WithWriteGap(30*time.Millisecond))
+
+	deadline := time.After(testTimeout)
+	for {
+		mu.Lock()
+		n := len(times)
+		mu.Unlock()
+		if n >= 6 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("handshake frames received = %d, want 6", n)
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for i := 1; i < len(times); i++ {
+		// Allow a little scheduling slack below the configured 30 ms.
+		if gap := times[i].Sub(times[i-1]); gap < 25*time.Millisecond {
+			t.Errorf("gap between frame %d and %d = %v, want >= 25ms", i-1, i, gap)
+		}
 	}
 }

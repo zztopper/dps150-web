@@ -34,6 +34,13 @@ const (
 	defaultAnswerTimeout = 5 * time.Second
 )
 
+// defaultWriteGap is the minimum pause between consecutive writes to the
+// device. Real DPS-150 hardware silently drops frames that arrive
+// back-to-back (observed live: a GetAll sent immediately after
+// SessionEnable/SetBaud is never answered); the original dps150tool
+// sleeps 50 ms after every command for the same reason.
+const defaultWriteGap = 50 * time.Millisecond
+
 // subscriberBuffer is the per-subscriber channel capacity; see Subscribe.
 const subscriberBuffer = 64
 
@@ -63,6 +70,13 @@ func WithWriteTimeout(d time.Duration) Option {
 	return func(h *Hub) { h.writeTimeout = d }
 }
 
+// WithWriteGap overrides the minimum pause between consecutive writes to
+// the device (default 50 ms; see defaultWriteGap). Tests use small values
+// to stay fast; 0 disables pacing.
+func WithWriteGap(d time.Duration) Option {
+	return func(h *Hub) { h.writeGap = d }
+}
+
 // WithAnswerTimeout overrides how long a fresh session may stay silent
 // after the handshake before the connection is dropped and redialled
 // (default 5 s).
@@ -79,10 +93,15 @@ type Hub struct {
 	backoffMax    time.Duration
 	writeTimeout  time.Duration
 	answerTimeout time.Duration
+	writeGap      time.Duration
 
 	// writeMu serializes all writes to the device so concurrent commands
 	// (and the connect handshake) never interleave on the wire.
 	writeMu sync.Mutex
+
+	// paceMu guards lastWrite; see pace.
+	paceMu    sync.Mutex
+	lastWrite time.Time
 
 	// mu guards everything below.
 	mu        sync.Mutex
@@ -103,6 +122,7 @@ func NewHub(dialer transport.Dialer, opts ...Option) *Hub {
 		backoffMax:    defaultBackoffMax,
 		writeTimeout:  defaultWriteTimeout,
 		answerTimeout: defaultAnswerTimeout,
+		writeGap:      defaultWriteGap,
 		subs:          make(map[chan Update]struct{}),
 	}
 	for _, opt := range opts {
@@ -376,6 +396,9 @@ func (h *Hub) write(ctx context.Context, frames ...[]byte) error {
 // so follow-up commands fail fast with ErrOffline, and the in-flight write
 // goroutine is abandoned (it exits once the transport aborts the write).
 func (h *Hub) writeConn(ctx context.Context, conn transport.Transport, frame []byte) error {
+	if err := h.pace(ctx); err != nil {
+		return err
+	}
 	result := make(chan error, 1)
 	go func() {
 		_, err := conn.Write(frame)
@@ -385,6 +408,7 @@ func (h *Hub) writeConn(ctx context.Context, conn transport.Transport, frame []b
 	defer t.Stop()
 	select {
 	case err := <-result:
+		h.stampWrite()
 		return err
 	case <-ctx.Done():
 		select {
@@ -407,6 +431,36 @@ func (h *Hub) writeConn(ctx context.Context, conn transport.Transport, frame []b
 		_ = conn.Close()
 		return errors.New("device: write stalled")
 	}
+}
+
+// pace blocks until at least writeGap has passed since the previous device
+// write. Real DPS-150 hardware silently drops frames that arrive
+// back-to-back; see defaultWriteGap.
+func (h *Hub) pace(ctx context.Context) error {
+	if h.writeGap <= 0 {
+		return nil
+	}
+	h.paceMu.Lock()
+	wait := h.writeGap - time.Since(h.lastWrite)
+	h.paceMu.Unlock()
+	if wait <= 0 {
+		return nil
+	}
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// stampWrite records the completion time of a device write for pace.
+func (h *Hub) stampWrite() {
+	h.paceMu.Lock()
+	h.lastWrite = time.Now()
+	h.paceMu.Unlock()
 }
 
 // dropConn detaches conn from the hub if it is still the current
