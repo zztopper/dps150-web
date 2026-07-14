@@ -1,0 +1,26 @@
+# Секреты
+.env
+.env.local
+.env.*.local
+
+# Claude Code локальные настройки
+.claude/settings.local.json
+
+# Serena кэш
+.serena/cache/
+
+# MCP memory store (содержит граф знаний, может быть большим/приватным)
+.claude/memory/mcp-memory.jsonl
+
+# Boilerplate update backups (созданы scripts/boilerplate-update.sh)
+.boilerplate-update/
+.boilerplate-backup/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/enforce-agents-team.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/check-superpowers-task.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

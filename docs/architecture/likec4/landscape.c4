@@ -1,0 +1,39 @@
+// Стартовый шаблон LikeC4 Landscape view.
+// После init-project.sh замените {{PROJECT_NAME}} и описание на свои.
+
+specification {
+  element actor {
+    style {
+      shape person
+    }
+  }
+  element system
+  element externalSystem {
+    style {
+      color secondary
+    }
+  }
+}
+
+model {
+  user = actor 'User' {
+    description 'Конечный пользователь {{PROJECT_NAME}}'
+  }
+
+  system app '{{PROJECT_NAME}}' {
+    description '{{PROJECT_DESCRIPTION}}'
+  }
+
+  // Пример внешней системы — заменить/удалить.
+  // externalSystem identityProvider 'Identity Provider'
+  // user -> app 'Использует через web/CLI'
+  // app -> identityProvider 'OAuth2'
+}
+
+views {
+  view landscape {
+    title 'System Landscape'
+    include *
+    autoLayout
+  }
+}

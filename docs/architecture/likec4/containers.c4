@@ -1,0 +1,38 @@
+// Containers view — top-level контейнеры внутри системы.
+// Заполняйте по мере роста проекта.
+
+specification {
+  element container
+  element database {
+    style {
+      shape storage
+    }
+  }
+}
+
+model {
+  extend app {
+    // Примеры — замените под свой стек:
+    //
+    // container web 'Web Frontend' {
+    //   technology 'React, TypeScript'
+    // }
+    // container api 'API Backend' {
+    //   technology 'Go, REST'
+    // }
+    // database db 'Primary DB' {
+    //   technology 'PostgreSQL 16'
+    // }
+    //
+    // web -> api 'JSON/HTTPS'
+    // api -> db 'SQL/TLS'
+  }
+}
+
+views {
+  view containers of app {
+    title 'Containers'
+    include *
+    autoLayout
+  }
+}

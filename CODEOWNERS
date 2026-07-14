@@ -1,0 +1,4 @@
+# CODEOWNERS — auto-assign reviewers for paths.
+# Solo pet project: single owner for everything.
+
+* @zztop

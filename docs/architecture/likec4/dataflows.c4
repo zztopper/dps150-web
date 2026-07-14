@@ -1,0 +1,16 @@
+// Dataflows — динамические views для ключевых сценариев.
+// Каждая значимая фича добавляет сюда (или в feature-<name>.c4) свой dynamic view.
+
+views {
+  // Пример — раскомментируйте и адаптируйте:
+  //
+  // dynamic view loginFlow {
+  //   title 'Login Flow'
+  //   user -> web 'открывает /login'
+  //   web -> api 'POST /auth/login'
+  //   api -> db 'SELECT user'
+  //   api -> web 'JWT'
+  //   web -> user 'redirect /dashboard'
+  //   autoLayout
+  // }
+}
