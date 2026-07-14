@@ -58,8 +58,12 @@ func handshakeBytes() []byte {
 		protocol.Get(protocol.RegHardwareVersion),
 		protocol.Get(protocol.RegFirmwareVersion),
 		protocol.GetAll(),
+		protocol.SetByte(protocol.RegMeteringEnable, 1),
 	}, nil)
 }
+
+// handshakeWrites is the number of paced writes in the connect handshake.
+const handshakeWrites = 7
 
 // readExact reads len(want) bytes and reports whether they match; mismatches
 // are reported via t.Errorf (safe from non-test goroutines).
@@ -79,6 +83,7 @@ func readExact(t *testing.T, conn net.Conn, want []byte, what string) bool {
 // dumpValues holds the fields encoded into a full dump frame.
 type dumpValues struct {
 	inputVoltage, vset, iset, outV, outI, outP, temp float32
+	presets                                          [protocol.PresetCount]protocol.Preset
 	ovp, ocp, opp, otp, lvp                          float32
 	brightness, volume                               byte
 	capacity, energy                                 float32
@@ -102,7 +107,10 @@ func dumpFrame(v dumpValues) []byte {
 	putF(16, v.outI)
 	putF(20, v.outP)
 	putF(24, v.temp)
-	// presets at 28..75 stay zero
+	for i, preset := range v.presets {
+		putF(28+i*8, preset.Voltage)
+		putF(32+i*8, preset.Current)
+	}
 	putF(76, v.ovp)
 	putF(80, v.ocp)
 	putF(84, v.opp)
@@ -174,10 +182,13 @@ func TestHubTelemetryReachesSubscriber(t *testing.T) {
 			_, _ = conn.Write(protocol.EncodeRX(protocol.GroupRead, protocol.RegModelName, []byte("DPS-150")))
 			_, _ = conn.Write(protocol.EncodeRX(protocol.GroupRead, protocol.RegHardwareVersion, []byte("V1.0")))
 			_, _ = conn.Write(protocol.EncodeRX(protocol.GroupRead, protocol.RegFirmwareVersion, []byte("V1.1")))
-			_, _ = conn.Write(dumpFrame(dumpValues{
+			dump := dumpValues{
 				inputVoltage: 20, vset: 12, iset: 1, temp: 31.5,
 				mode: protocol.ModeCV, maxV: 19.8, maxI: 5.1,
-			}))
+			}
+			dump.presets[0] = protocol.Preset{Voltage: 3.3, Current: 0.5}
+			dump.presets[5] = protocol.Preset{Voltage: 19, Current: 5}
+			_, _ = conn.Write(dumpFrame(dump))
 			_, _ = conn.Write(measurementFrame(11.99, 0.5, 6.0))
 			_, _ = io.Copy(io.Discard, conn) // hold the connection open
 		},
@@ -202,6 +213,13 @@ func TestHubTelemetryReachesSubscriber(t *testing.T) {
 	}
 	if snap.State.MaxVoltage != 19.8 || snap.State.MaxCurrent != 5.1 {
 		t.Errorf("limits = %g/%g, want 19.8/5.1", snap.State.MaxVoltage, snap.State.MaxCurrent)
+	}
+	wantPresets := [protocol.PresetCount]device.Preset{
+		0: {Voltage: 3.3, Current: 0.5},
+		5: {Voltage: 19, Current: 5},
+	}
+	if snap.State.Presets != wantPresets {
+		t.Errorf("presets = %+v, want %+v", snap.State.Presets, wantPresets)
 	}
 
 	tel := waitFor[device.Telemetry](t, updates)
@@ -303,6 +321,134 @@ func TestHubCommandsWriteFrames(t *testing.T) {
 	}
 }
 
+// fptr returns a pointer to v, for ProtectionLimits literals.
+func fptr(v float64) *float64 { return &v }
+
+func TestHubSetProtectionsWritesFrames(t *testing.T) {
+	// Only the given fields are written, in D1..D5 order, as one series
+	// followed by a GetAll refresh.
+	want := bytes.Join([][]byte{
+		protocol.SetFloat(protocol.RegOVP, 31),
+		protocol.SetFloat(protocol.RegOCP, 5.2),
+		protocol.SetFloat(protocol.RegLVP, 4.5),
+		protocol.GetAll(),
+	}, nil)
+
+	d := &scriptDialer{scripts: []func(net.Conn){
+		func(conn net.Conn) {
+			defer func() { _ = conn.Close() }()
+			if !readExact(t, conn, handshakeBytes(), "handshake") {
+				return
+			}
+			_, _ = conn.Write(dumpFrame(dumpValues{maxV: 19.8, maxI: 5.1}))
+			if !readExact(t, conn, want, "SetProtections") {
+				return
+			}
+			_, _ = conn.Write(dumpFrame(dumpValues{
+				ovp: 31, ocp: 5.2, lvp: 4.5, maxV: 19.8, maxI: 5.1,
+			}))
+			_, _ = io.Copy(io.Discard, conn)
+		},
+	}}
+	hub, updates := startHub(t, d)
+
+	waitFor[device.StateSnapshot](t, updates)
+
+	err := hub.SetProtections(context.Background(), device.ProtectionLimits{
+		OVP: fptr(31), OCP: fptr(5.2), LVP: fptr(4.5),
+	})
+	if err != nil {
+		t.Fatalf("SetProtections: %v", err)
+	}
+	snap := waitFor[device.StateSnapshot](t, updates) // refresh after the write
+	if snap.State.OVP != 31 || snap.State.OCP != 5.2 || snap.State.LVP != 4.5 {
+		t.Errorf("refreshed protections = %g/%g/%g, want 31/5.2/4.5",
+			snap.State.OVP, snap.State.OCP, snap.State.LVP)
+	}
+}
+
+func TestHubSetProtectionsInvalid(t *testing.T) {
+	hub := device.NewHub(&scriptDialer{})
+	ctx := context.Background()
+
+	cases := map[string]device.ProtectionLimits{
+		"empty":        {},
+		"zero ovp":     {OVP: fptr(0)},
+		"negative ocp": {OCP: fptr(-1)},
+		"NaN opp":      {OPP: fptr(math.NaN())},
+		"Inf otp":      {OTP: fptr(math.Inf(1))},
+		"negative lvp": {LVP: fptr(-0.1)},
+	}
+	for name, limits := range cases {
+		if err := hub.SetProtections(ctx, limits); !errors.Is(err, device.ErrInvalidSetpoint) {
+			t.Errorf("SetProtections(%s) = %v, want ErrInvalidSetpoint", name, err)
+		}
+	}
+
+	// LVP may be zero per the API contract: on an offline hub a valid value
+	// passes validation and fails with ErrOffline instead.
+	if err := hub.SetProtections(ctx, device.ProtectionLimits{LVP: fptr(0)}); !errors.Is(err, device.ErrOffline) {
+		t.Errorf("SetProtections(lvp=0) = %v, want ErrOffline (value must be valid)", err)
+	}
+}
+
+func TestHubSetPresetWritesFrames(t *testing.T) {
+	vReg, iReg, err := protocol.PresetRegs(3)
+	if err != nil {
+		t.Fatalf("PresetRegs(3): %v", err)
+	}
+	want := bytes.Join([][]byte{
+		protocol.SetFloat(vReg, 5),
+		protocol.SetFloat(iReg, 1.5),
+		protocol.GetAll(),
+	}, nil)
+
+	d := &scriptDialer{scripts: []func(net.Conn){
+		func(conn net.Conn) {
+			defer func() { _ = conn.Close() }()
+			if !readExact(t, conn, handshakeBytes(), "handshake") {
+				return
+			}
+			_, _ = conn.Write(dumpFrame(dumpValues{maxV: 19.8, maxI: 5.1}))
+			if !readExact(t, conn, want, "SetPreset") {
+				return
+			}
+			dump := dumpValues{maxV: 19.8, maxI: 5.1}
+			dump.presets[2] = protocol.Preset{Voltage: 5, Current: 1.5}
+			_, _ = conn.Write(dumpFrame(dump))
+			_, _ = io.Copy(io.Discard, conn)
+		},
+	}}
+	hub, updates := startHub(t, d)
+
+	waitFor[device.StateSnapshot](t, updates)
+
+	if err := hub.SetPreset(context.Background(), 3, 5, 1.5); err != nil {
+		t.Fatalf("SetPreset: %v", err)
+	}
+	snap := waitFor[device.StateSnapshot](t, updates) // refresh after the write
+	if got := snap.State.Presets[2]; got != (device.Preset{Voltage: 5, Current: 1.5}) {
+		t.Errorf("refreshed preset M3 = %+v, want 5 V / 1.5 A", got)
+	}
+}
+
+func TestHubSetPresetInvalid(t *testing.T) {
+	hub := device.NewHub(&scriptDialer{})
+	ctx := context.Background()
+
+	for _, slot := range []int{-1, 0, 7} {
+		if err := hub.SetPreset(ctx, slot, 5, 1); !errors.Is(err, device.ErrInvalidSetpoint) {
+			t.Errorf("SetPreset(slot=%d) = %v, want ErrInvalidSetpoint", slot, err)
+		}
+	}
+	if err := hub.SetPreset(ctx, 1, math.NaN(), 1); !errors.Is(err, device.ErrInvalidSetpoint) {
+		t.Errorf("SetPreset(NaN volts) = %v, want ErrInvalidSetpoint", err)
+	}
+	if err := hub.SetPreset(ctx, 1, 5, -0.5); !errors.Is(err, device.ErrInvalidSetpoint) {
+		t.Errorf("SetPreset(negative amps) = %v, want ErrInvalidSetpoint", err)
+	}
+}
+
 func TestHubInvalidSetpoint(t *testing.T) {
 	hub := device.NewHub(&scriptDialer{}) // no state: fallback limits 30 V / 5 A
 	ctx := context.Background()
@@ -330,6 +476,12 @@ func TestHubOfflineCommands(t *testing.T) {
 	}
 	if err := hub.SetOutput(ctx, true); !errors.Is(err, device.ErrOffline) {
 		t.Errorf("SetOutput = %v, want ErrOffline", err)
+	}
+	if err := hub.SetProtections(ctx, device.ProtectionLimits{OVP: fptr(31)}); !errors.Is(err, device.ErrOffline) {
+		t.Errorf("SetProtections = %v, want ErrOffline", err)
+	}
+	if err := hub.SetPreset(ctx, 1, 5, 1); !errors.Is(err, device.ErrOffline) {
+		t.Errorf("SetPreset = %v, want ErrOffline", err)
 	}
 
 	snap := hub.Snapshot()
@@ -532,7 +684,7 @@ func TestHubWritePacing(t *testing.T) {
 		func(conn net.Conn) {
 			defer func() { _ = conn.Close() }()
 			buf := make([]byte, 256)
-			for i := 0; i < 6; i++ { // the handshake is six paced writes
+			for i := 0; i < handshakeWrites; i++ { // every handshake write is paced
 				if _, err := conn.Read(buf); err != nil {
 					return
 				}
@@ -549,12 +701,12 @@ func TestHubWritePacing(t *testing.T) {
 		mu.Lock()
 		n := len(times)
 		mu.Unlock()
-		if n >= 6 {
+		if n >= handshakeWrites {
 			break
 		}
 		select {
 		case <-deadline:
-			t.Fatalf("handshake frames received = %d, want 6", n)
+			t.Fatalf("handshake frames received = %d, want %d", n, handshakeWrites)
 		case <-time.After(5 * time.Millisecond):
 		}
 	}

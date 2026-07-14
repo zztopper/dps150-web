@@ -17,11 +17,11 @@ type Setting struct {
 	UpdatedAt int64 `gorm:"autoUpdateTime:milli"`
 }
 
-// foundationModels are the models owned by the storage package itself.
-// Feature tables (profiles, history, events, ...) are added by their
-// features via Config.Models.
+// foundationModels are the models owned by the storage package itself
+// (settings and the event journal). Feature tables (profiles, history, ...)
+// are added by their features via Config.Models.
 func foundationModels() []any {
-	return []any{&Setting{}}
+	return []any{&Setting{}, &Event{}}
 }
 
 // GetSetting returns the value stored under key. It returns ErrNotFound for

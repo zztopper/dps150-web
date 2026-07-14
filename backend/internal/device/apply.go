@@ -141,6 +141,9 @@ func (h *Hub) applyDumpLocked(d protocol.FullDump, now time.Time) {
 
 		UpdatedAt: now,
 	}
+	for i, p := range d.Presets {
+		h.state.Presets[i] = Preset{Voltage: f64(p.Voltage), Current: f64(p.Current)}
+	}
 	if !h.connected {
 		h.connected = true
 		h.broadcastLocked(StatusChange{Connected: true, Transport: h.dialer.String()})

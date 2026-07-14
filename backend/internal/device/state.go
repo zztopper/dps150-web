@@ -21,6 +21,12 @@ type Info struct {
 	Firmware string
 }
 
+// Preset is one hardware preset slot (M1..M6) as cached in State.
+type Preset struct {
+	Voltage float64 // V
+	Current float64 // A
+}
+
 // State is the cached device state assembled from telemetry and full dumps.
 // Electrical values are volts/amps/watts, temperature is °C, metering is
 // Ah/Wh.
@@ -50,6 +56,8 @@ type State struct {
 	OPP float64
 	OTP float64
 	LVP float64
+
+	Presets [protocol.PresetCount]Preset // hardware presets M1..M6
 
 	Brightness byte
 	Volume     byte

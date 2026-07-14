@@ -5,6 +5,29 @@
   "common": {
     "cancel": "Cancel"
   },
+  "nav": {
+    "dashboard": "Dashboard",
+    "history": "History",
+    "profiles": "Profiles",
+    "events": "Events",
+    "settings": "Settings"
+  },
+  "history": {
+    "title": "Measurement history",
+    "empty": "Under construction: charts over a time range will appear here"
+  },
+  "profiles": {
+    "title": "Profiles",
+    "empty": "Under construction: profiles and M1–M6 presets will appear here"
+  },
+  "events": {
+    "title": "Event log",
+    "empty": "Under construction: the event log will appear here"
+  },
+  "settings": {
+    "title": "Settings",
+    "empty": "Under construction: notification settings will appear here"
+  },
   "header": {
     "online": "Online",
     "deviceOffline": "Device offline",

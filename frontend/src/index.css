@@ -9,18 +9,25 @@ body {
   min-height: 100vh;
 }
 
-.dashboard-layout {
+.app-layout {
   min-height: 100vh;
 }
 
-.dashboard-header {
+.app-header {
   height: auto;
   padding: 12px 24px;
   background: transparent;
   line-height: normal;
 }
 
-.dashboard-content {
+.app-header .app-nav {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border-bottom: none;
+}
+
+.app-content {
   padding: 0 24px 24px;
 }
 

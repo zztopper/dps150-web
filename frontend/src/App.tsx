@@ -1,10 +1,28 @@
 import { App as AntApp } from 'antd'
-import { Dashboard } from './pages/Dashboard'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { DeviceStateProvider } from './state/DeviceStateProvider'
+import { AppLayout } from './components/AppLayout'
+import { DashboardPage } from './pages/DashboardPage'
+import { HistoryPage } from './pages/HistoryPage'
+import { ProfilesPage } from './pages/ProfilesPage'
+import { EventsPage } from './pages/EventsPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 function App() {
   return (
     <AntApp>
-      <Dashboard />
+      <DeviceStateProvider>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="history" element={<HistoryPage />} />
+            <Route path="profiles" element={<ProfilesPage />} />
+            <Route path="events" element={<EventsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </DeviceStateProvider>
     </AntApp>
   )
 }

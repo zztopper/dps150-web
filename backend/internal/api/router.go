@@ -8,7 +8,9 @@ import (
 )
 
 // NewRouter builds the HTTP router with all API routes registered.
-func NewRouter(hub DeviceHub) *gin.Engine {
+// hist backs GET /api/v1/history (F-012); a nil hist answers
+// 503 storage_unavailable there.
+func NewRouter(hub DeviceHub, hist HistoryStore) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
@@ -21,6 +23,24 @@ func NewRouter(hub DeviceHub) *gin.Engine {
 	v1.PUT("/device/setpoints", putSetpoints(hub))
 	v1.PUT("/device/output", putOutput(hub))
 	v1.GET("/ws", handleWS(hub))
+
+	// Stage-2 assembly anchors. Each parallel track replaces EXACTLY its own
+	// anchor line below with its route registrations (r and v1 are in scope)
+	// and must not touch the other anchors.
+
+	// routes:profiles
+
+	// routes:presets
+
+	// routes:protections
+
+	v1.GET("/history", getHistory(hist))
+
+	// routes:events
+
+	// routes:notifications
+
+	// routes:metrics
 
 	return r
 }

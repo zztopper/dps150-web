@@ -2,15 +2,11 @@ import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { renderWithProviders } from '../test/render'
 import { FakeWebSocket } from '../test/fakeWebSocket'
-import { Dashboard } from './Dashboard'
+import { DashboardPage } from './DashboardPage'
 
-describe('Dashboard', () => {
+describe('DashboardPage', () => {
   it('renders with a null state (device never seen, WS not connected)', () => {
-    renderWithProviders(<Dashboard />)
-
-    // Header with the app title and the connection badge.
-    expect(screen.getByText('Управление DPS-150')).toBeInTheDocument()
-    expect(screen.getByText('Нет связи с сервером')).toBeInTheDocument()
+    renderWithProviders(<DashboardPage />)
 
     // Readings show placeholders instead of numbers.
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3)

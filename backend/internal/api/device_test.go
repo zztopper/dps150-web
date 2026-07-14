@@ -108,7 +108,7 @@ func onlineSnapshot() device.Snapshot {
 func doRequest(t *testing.T, hub DeviceHub, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	r := NewRouter(hub)
+	r := NewRouter(hub, nil)
 	w := httptest.NewRecorder()
 	var req *http.Request
 	if body == "" {
