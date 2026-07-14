@@ -106,8 +106,12 @@
   (Vault: `secret/pg-cluster/dps150/database`); подключение через
   `pg-cluster-pooler-rw.pg-cluster.svc:5432`, миграции — через
   `pg-cluster-direct` (мимо пулера).
-- **Локально**: SQLite (pure-Go драйвер `modernc.org/sqlite`, без cgo) —
-  один бинарь без зависимостей.
+- **Локально**: SQLite (pure-Go, без cgo: GORM-драйвер `glebarez/sqlite`
+  поверх `modernc.org/sqlite`) — один бинарь без зависимостей.
+- Конфигурация хранилища (контракт): `DPS_DB_DRIVER` = `sqlite` (default) |
+  `postgres`; `DPS_DB_DSN` = путь к файлу (default `dps150.db`) | postgres-DSN.
+  Недоступная БД не валит приложение: фоновый reconnect, storage-фичи
+  отвечают 503, управление устройством работает.
 - Схема переносимая: время — unix millis (integer), без диалектных функций;
   агрегация по времени — целочисленным делением timestamp.
 - Данные: `samples` (2 Гц, ретенция 30 дней), `samples_1m` (минутные агрегаты
