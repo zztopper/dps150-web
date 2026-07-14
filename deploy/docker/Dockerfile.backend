@@ -1,0 +1,31 @@
+# dps150-web backend image.
+# Build context: repository root.
+#   docker build -f deploy/docker/Dockerfile.backend .
+#
+# Builder Go version MUST match the major.minor in backend/go.mod (go 1.25).
+
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /src
+
+# Cache module downloads separately from source changes.
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+COPY backend/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+    -o /out/dps150-server ./cmd/server
+
+FROM alpine:3.22
+
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates tzdata \
+    && adduser -D -H -u 10001 app
+
+COPY --from=builder /out/dps150-server /usr/local/bin/dps150-server
+
+USER app
+
+EXPOSE 8080
+
+ENTRYPOINT ["dps150-server"]

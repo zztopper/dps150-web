@@ -1,0 +1,17 @@
+# Keep the Docker build context (repo root) small.
+.git
+.gitlab
+.claude
+.serena
+docs
+scripts
+templates
+backend/bin
+frontend/node_modules
+frontend/dist
+frontend/coverage
+.go
+.npm
+*.md
+.env
+.env.*
