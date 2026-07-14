@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Device transports (F-003): `serial://` (go.bug.st/serial, 115200 8N1,
+  optional `?baud=N`) and `tcp://` (ser2net, 5s dial timeout, keepalive)
+  dialers behind the `transport.Dialer` interface with context-aware Dial
+  and Close-unblocks-Read semantics (`backend/internal/transport`).
 - DPS-150 protocol library (F-002): frame codec with checksum, typed register
   map, TX encoding helpers, streaming RX parser with resynchronization and
   typed event decoding (`backend/internal/device/protocol`, stdlib-only).
