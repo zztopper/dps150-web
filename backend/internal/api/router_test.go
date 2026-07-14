@@ -10,7 +10,7 @@ import (
 
 func TestHealthz(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	r := NewRouter()
+	r := NewRouter(&fakeHub{})
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)

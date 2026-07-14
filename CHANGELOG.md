@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Backend core (F-005): device hub (reconnect loop with exponential backoff,
+  state cache, subscriber fan-out with drop policy, serialized time-bounded
+  writes, connected reported only once the device answers a full dump),
+  REST API (`GET /api/v1/device`, `PUT /api/v1/device/setpoints`,
+  `PUT /api/v1/device/output`) and WebSocket `/api/v1/ws` streaming
+  state/telemetry/status/event messages per the frozen API contract.
 - In-memory DPS-150 device emulator (F-004): a `transport.Dialer` speaking the
   real frame protocol — session gating, periodic telemetry, register writes
   with RX echo, resistive load model with CC/CV transitions, latching
