@@ -21,6 +21,7 @@ import (
 	"dps150-web/backend/internal/device/emulator"
 	"dps150-web/backend/internal/history"
 	"dps150-web/backend/internal/journal"
+	"dps150-web/backend/internal/metrics"
 	"dps150-web/backend/internal/notify"
 	"dps150-web/backend/internal/storage"
 	"dps150-web/backend/internal/transport"
@@ -121,10 +122,19 @@ func main() {
 	go notifier.Run(ctx)
 	api.WireNotifications(settingsStore, telegram.Configured())
 
-	// wiring:metrics
+	// Prometheus domain metrics (TD-001) on the default registry, served by
+	// GET /metrics in the API router. The hub stays uninstrumented: a
+	// subscriber follows link/protection state and a thin wrapper around the
+	// hub handed to the router times commands and counts WS clients.
+	appMetrics := metrics.New(nil)
+	appMetrics.WatchHub(ctx, hub)
+	if store != nil {
+		appMetrics.SetStorageReadyFunc(store.Ready)
+	}
 
 	gin.SetMode(gin.ReleaseMode)
-	router := api.NewRouter(hub, api.WithStore(store), api.WithHistory(hist))
+	router := api.NewRouter(appMetrics.InstrumentHub(hub),
+		api.WithStore(store), api.WithHistory(hist))
 	// Serve the embedded frontend bundle (single-binary mode); a backend
 	// built without the bundle logs it and serves the API only.
 	webui.Register(router, logger)

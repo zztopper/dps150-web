@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // NewRouter builds the HTTP router with all API routes registered.
@@ -53,7 +54,11 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 
 	registerNotificationRoutes(v1)
 
-	// routes:metrics
+	// Prometheus scrape endpoint (TD-001), serving the default registry the
+	// domain metrics are registered on (see internal/metrics). It lives
+	// outside /api/v1 and is deliberately not routed through the Ingress:
+	// it is scraped in-cluster via the ServiceMonitor on the backend Service.
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	return r
 }
