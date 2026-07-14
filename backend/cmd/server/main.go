@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,11 +19,20 @@ import (
 	"dps150-web/backend/internal/config"
 	"dps150-web/backend/internal/device"
 	"dps150-web/backend/internal/device/emulator"
+	"dps150-web/backend/internal/storage"
 	"dps150-web/backend/internal/transport"
+	"dps150-web/backend/internal/webui"
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load(os.Args[1:])
+	if err != nil {
+		// The flag package already printed the problem and usage to stderr.
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(0)
+		}
+		os.Exit(2)
+	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: parseLogLevel(cfg.LogLevel),
@@ -45,6 +55,21 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Storage is fail-soft: it reconnects in the background with backoff
+	// and never blocks startup — device control works without a database,
+	// storage-backed features answer 503 storage_unavailable meanwhile.
+	store, err := storage.Open(storage.Config{
+		Driver: cfg.DBDriver,
+		DSN:    cfg.DBDSN,
+		Logger: logger,
+	})
+	if err != nil {
+		slog.Error("storage disabled: invalid configuration", "error", err)
+	} else {
+		defer store.Close()
+		slog.Info("storage configured", "driver", cfg.DBDriver, "ready", store.Ready())
+	}
+
 	hub := device.NewHub(dialer, device.WithLogger(logger))
 	go func() {
 		if err := hub.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
@@ -53,9 +78,13 @@ func main() {
 	}()
 
 	gin.SetMode(gin.ReleaseMode)
+	router := api.NewRouter(hub)
+	// Serve the embedded frontend bundle (single-binary mode); a backend
+	// built without the bundle logs it and serves the API only.
+	webui.Register(router, logger)
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
-		Handler:           api.NewRouter(hub),
+		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

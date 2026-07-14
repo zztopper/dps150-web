@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Storage layer (F-007): GORM over SQLite (pure-Go, no cgo) or PostgreSQL
+  selected by `DPS_DB_DRIVER`/`DPS_DB_DSN`, CLI flags mirroring every
+  `DPS_*` variable (`-transport`, `-listen`, `-log-level`, `-db-driver`,
+  `-db-dsn`; flags win, unknown flags abort startup instead of silently
+  running the emulator), fail-soft background reconnect
+  with backoff (app runs and controls the device with the DB down),
+  `settings` foundation model with Get/Set and AutoMigrate hooks for
+  feature models; single-binary serving of the embedded frontend bundle
+  (`go:embed`, `make build-backend`/`make release-binaries` for
+  darwin/arm64 + linux/amd64 + linux/arm64) and a root `docker-compose.yml`
+  (backend + nginx frontend with WS-aware `/api` proxy + postgres:17,
+  `serial` profile for real hardware).
 - Playwright e2e tests for the dashboard against the real backend with the
   built-in device emulator (`frontend/e2e/`, `npm run e2e`, CI job `e2e`):
   live telemetry over WS, setpoint apply, confirmed output toggle with the
