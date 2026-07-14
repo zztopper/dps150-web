@@ -63,7 +63,8 @@ func main() {
 		Driver: cfg.DBDriver,
 		DSN:    cfg.DBDSN,
 		Logger: logger,
-		Models: history.Models(), // F-012: samples, samples_1m
+		// Feature-owned models, auto-migrated with the foundation ones.
+		Models: append(history.Models(), &storage.Profile{}),
 	})
 	if err != nil {
 		slog.Error("storage disabled: invalid configuration", "error", err)
@@ -100,7 +101,7 @@ func main() {
 	// wiring:metrics
 
 	gin.SetMode(gin.ReleaseMode)
-	router := api.NewRouter(hub, hist)
+	router := api.NewRouter(hub, api.WithStore(store), api.WithHistory(hist))
 	// Serve the embedded frontend bundle (single-binary mode); a backend
 	// built without the bundle logs it and serves the API only.
 	webui.Register(router, logger)

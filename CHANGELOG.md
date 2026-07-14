@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
 
 ### Added
+- Profiles and hardware presets API (F-010, F-011): `profiles` table with
+  CRUD at `/api/v1/profiles` (name unique, device-envelope validation) and
+  `POST /profiles/{id}/apply` writing the setpoints plus the full protection
+  set — never the output relay — and journaling `profileApplied` (fail-soft);
+  hardware preset slots M1–M6 via `GET/PUT /api/v1/device/presets` (by
+  profileId or explicit voltage+current, V+I only) fed from the cached dump.
 - Telemetry history (F-012): 2 Hz samples batched into storage every 5 s (loss-tolerant — drops with a throttled warn while the DB is down), hourly minute aggregation catching up after downtime plus retention jobs (raw 30 days, 1m aggregates 365 days), and `GET /api/v1/history` with raw/1m/auto resolutions capped at 20000 points per the API contract v2.
 - App shell for stage 2: client-side routing (react-router-dom v7), AntD
   layout with top navigation (Dashboard / History / Profiles / Events /

@@ -207,6 +207,10 @@ func (s *Storage) connect(ctx context.Context) (*gorm.DB, error) {
 
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+		// Translate dialect errors into gorm.Err* sentinels (both drivers
+		// implement the translator), so unique-constraint violations are
+		// detectable portably; see CreateProfile.
+		TranslateError: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)

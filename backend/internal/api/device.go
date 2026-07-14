@@ -19,6 +19,8 @@ type DeviceHub interface {
 	SetVoltage(ctx context.Context, volts float64) error
 	SetCurrent(ctx context.Context, amps float64) error
 	SetOutput(ctx context.Context, on bool) error
+	SetProtections(ctx context.Context, limits device.ProtectionLimits) error
+	SetPreset(ctx context.Context, slot int, volts, amps float64) error
 }
 
 // getDevice handles GET /api/v1/device: the cached device state, served
