@@ -21,6 +21,7 @@ import (
 	"dps150-web/backend/internal/device/emulator"
 	"dps150-web/backend/internal/history"
 	"dps150-web/backend/internal/journal"
+	"dps150-web/backend/internal/notify"
 	"dps150-web/backend/internal/storage"
 	"dps150-web/backend/internal/transport"
 	"dps150-web/backend/internal/webui"
@@ -105,7 +106,20 @@ func main() {
 		go journal.New(store, logger).Attach(ctx, hub)()
 	}
 
-	// wiring:notifications
+	// Telegram notifications (F-015) and metering session journal (F-017).
+	// The typed-nil guard matters: a nil *storage.Storage inside a non-nil
+	// interface would panic on use.
+	telegram := notify.NewTelegramFromEnv()
+	var settingsStore notify.SettingsStore
+	var eventJournal notify.EventJournal
+	if store != nil {
+		settingsStore = store
+		eventJournal = store
+	}
+	notifier := notify.New(hub, settingsStore, eventJournal, telegram,
+		notify.WithLogger(logger))
+	go notifier.Run(ctx)
+	api.WireNotifications(settingsStore, telegram.Configured())
 
 	// wiring:metrics
 
