@@ -1,0 +1,13 @@
+apiVersion: v2
+name: dps150-web
+description: Web control panel for the FNIRSI DPS-150 programmable power supply
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - dps150
+  - power-supply
+  - lab-bench
+
+home: https://gitlab.zztopper.ru/applications/dps150-web

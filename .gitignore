@@ -35,3 +35,6 @@ backend/internal/webui/dist/*
 frontend/node_modules/
 frontend/coverage/
 *.db
+
+# Claude worktrees
+.claude/worktrees/
