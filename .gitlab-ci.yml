@@ -1,0 +1,244 @@
+# dps150-web CI pipeline (F-008).
+#
+# Build infrastructure follows the cattery project on this GitLab instance:
+#   * branch pipelines only (MR-triggered pipelines suppressed via workflow rules);
+#   * interruptible by default + retry on runner infra failures only
+#     (runner_system_failure / stuck_or_timeout_failure), never on script failures;
+#   * image builds: docker:25-cli + docker:25-dind service, buildx single-platform
+#     linux/amd64, docker login with CI_REGISTRY_USER/CI_REGISTRY_PASSWORD,
+#     BuildKit inline cache with --cache-from :latest;
+#   * no runner `tags:` — jobs run on the instance default runners;
+#   * two-tier caches (exact lock-file key pull-push + fallback pull-only)
+#     with unprotect: true so master and feature branches share cache.
+#
+# Tagging (minimal variant of cattery's scheme): on master the build pushes
+# :$CI_COMMIT_SHORT_SHA and :latest; on feature branches the image is only
+# built (no push) to validate the Dockerfile. Deploy stages come with F-009.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - lint
+  - test
+  - build
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  REGISTRY_IMAGE: $CI_REGISTRY_IMAGE
+  GO_IMAGE: golang:1.25-alpine   # MUST match major.minor of backend/go.mod
+  NODE_IMAGE: node:22-alpine
+
+default:
+  interruptible: true
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+# =============================================================================
+# Cache templates
+# =============================================================================
+
+# Go modules cache — keyed by go.sum hash, fallback to shared pull-only cache.
+.go-cache: &go-cache
+  variables:
+    GOPATH: ${CI_PROJECT_DIR}/.go
+    GOMODCACHE: ${CI_PROJECT_DIR}/.go/pkg/mod
+    CGO_ENABLED: "0"
+  cache:
+    - key:
+        files:
+          - backend/go.sum
+        prefix: go-mod
+      unprotect: true
+      paths:
+        - .go/pkg/mod/
+      policy: pull-push
+    - key: go-mod-fallback
+      unprotect: true
+      paths:
+        - .go/pkg/mod/
+      policy: pull
+
+# npm tarball cache (.npm) — npm ci recreates node_modules, caching it is useless.
+.node-cache: &node-cache
+  variables:
+    npm_config_cache: ${CI_PROJECT_DIR}/.npm
+  cache:
+    - key:
+        files:
+          - frontend/package-lock.json
+        prefix: npm-cache
+      unprotect: true
+      paths:
+        - .npm/
+      policy: pull-push
+    - key: npm-cache-fallback
+      unprotect: true
+      paths:
+        - .npm/
+      policy: pull
+
+# =============================================================================
+# Lint
+# =============================================================================
+
+lint:backend:
+  stage: lint
+  image: $GO_IMAGE
+  <<: *go-cache
+  before_script:
+    - mkdir -p ${GOMODCACHE}
+    # golangci/golangci-lint image lags behind Go releases — install the
+    # linter into a plain golang image via the official script instead.
+    - apk add --no-cache git curl
+    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b ${GOPATH}/bin
+    - export PATH=${PATH}:${GOPATH}/bin
+  script:
+    - cd backend
+    - test -z "$(gofmt -l .)" || { echo "gofmt violations:"; gofmt -l .; exit 1; }
+    - go vet ./...
+    - golangci-lint run --timeout 5m ./...
+
+lint:frontend:
+  stage: lint
+  image: $NODE_IMAGE
+  <<: *node-cache
+  script:
+    - cd frontend
+    - npm ci
+    - npm run lint
+    - npx tsc -b
+
+# MR must touch CHANGELOG.md unless the commit message carries [skip changelog].
+lint:changelog:
+  stage: lint
+  image:
+    # alpine/git has ENTRYPOINT=git — override so scripts run under sh.
+    name: alpine/git:latest
+    entrypoint: [""]
+  script:
+    - |
+      if echo "${CI_COMMIT_MESSAGE:-}" | grep -qF '[skip changelog]'; then
+        echo "changelog check skipped ([skip changelog] marker)"
+        exit 0
+      fi
+      git fetch origin master --depth=1 --quiet
+      CHANGED=$(git diff --name-only origin/master HEAD -- CHANGELOG.md)
+      if [ -z "$CHANGED" ]; then
+        echo "ERROR: CHANGELOG.md was not updated (update it or add [skip changelog] to the commit message)"
+        exit 1
+      fi
+      echo "CHANGELOG.md was updated"
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "master"
+
+# Conventional Commits gate — validates every commit on the branch against
+# commitlint.config.js from the repo root.
+lint:commits:
+  stage: lint
+  image: $NODE_IMAGE
+  before_script:
+    - apk add --no-cache git
+    - npm install -g @commitlint/cli @commitlint/config-conventional
+  script:
+    - |
+      if [ ! -f commitlint.config.js ]; then
+        echo "ERROR: commitlint.config.js not found in repo root"
+        exit 1
+      fi
+    - git fetch origin master --depth=50
+    - |
+      BASE_SHA="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-origin/master}"
+      echo "Validating commits in ${BASE_SHA}..HEAD"
+      commitlint --from "$BASE_SHA" --to HEAD
+  rules:
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "master"
+
+# =============================================================================
+# Test
+# =============================================================================
+
+test:backend:
+  stage: test
+  image: $GO_IMAGE
+  <<: *go-cache
+  before_script:
+    - mkdir -p ${GOMODCACHE}
+  script:
+    - cd backend
+    - go test -cover ./...
+
+test:frontend:
+  stage: test
+  image: $NODE_IMAGE
+  <<: *node-cache
+  script:
+    - cd frontend
+    - npm ci
+    - npm run test
+
+# =============================================================================
+# Build (Docker images) — amd64-only, buildx over dind (cattery pattern)
+# =============================================================================
+
+.docker-build: &docker-build
+  stage: build
+  image: docker:25-cli
+  services:
+    - docker:25-dind
+  variables:
+    DOCKER_BUILDKIT: "1"
+    BUILD_PLATFORMS: "linux/amd64"
+  before_script:
+    - apk add --no-cache docker-cli-buildx || echo "buildx plugin already present"
+    - docker buildx version
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+build:backend-image:
+  <<: *docker-build
+  script:
+    # Pull :latest as layer-cache source (ignore errors if it doesn't exist).
+    - docker pull ${REGISTRY_IMAGE}/backend:latest || true
+    - |
+      PUSH_ARG=""
+      TAG_ARGS="-t ${REGISTRY_IMAGE}/backend:${CI_COMMIT_SHORT_SHA}"
+      if [ "$CI_COMMIT_BRANCH" = "master" ]; then
+        PUSH_ARG="--push"
+        TAG_ARGS="$TAG_ARGS -t ${REGISTRY_IMAGE}/backend:latest"
+      fi
+      docker buildx build \
+        --platform ${BUILD_PLATFORMS} \
+        $PUSH_ARG \
+        --cache-from ${REGISTRY_IMAGE}/backend:latest \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        $TAG_ARGS \
+        -f deploy/docker/Dockerfile.backend .
+
+build:frontend-image:
+  <<: *docker-build
+  script:
+    - docker pull ${REGISTRY_IMAGE}/frontend:latest || true
+    - |
+      PUSH_ARG=""
+      TAG_ARGS="-t ${REGISTRY_IMAGE}/frontend:${CI_COMMIT_SHORT_SHA}"
+      if [ "$CI_COMMIT_BRANCH" = "master" ]; then
+        PUSH_ARG="--push"
+        TAG_ARGS="$TAG_ARGS -t ${REGISTRY_IMAGE}/frontend:latest"
+      fi
+      docker buildx build \
+        --platform ${BUILD_PLATFORMS} \
+        $PUSH_ARG \
+        --cache-from ${REGISTRY_IMAGE}/frontend:latest \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        $TAG_ARGS \
+        -f deploy/docker/Dockerfile.frontend .

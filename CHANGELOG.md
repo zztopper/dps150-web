@@ -14,3 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   graceful shutdown, slog), React frontend (Vite, TypeScript, Ant Design,
   TanStack Query, i18n ru/en, vitest smoke test), `Makefile`
   (build/lint/test/run), `.editorconfig`, English README.
+- GitLab CI pipeline (F-008): lint/test/build stages (gofmt + go vet +
+  golangci-lint, oxlint + tsc, commitlint, changelog gate, `go test -cover`,
+  vitest), two-tier Go/npm caches, buildx-over-dind Docker image builds
+  (`deploy/docker/Dockerfile.backend`, `deploy/docker/Dockerfile.frontend`)
+  pushing `:<short-sha>` and `:latest` to the registry on master.
