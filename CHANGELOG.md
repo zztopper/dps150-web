@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Deploys moved to GitOps: the Helm chart lives in argocd-platform
+  (`apps/dps150`), releases are image-tag bumps there; the CI deploy stage
+  is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
+
 ### Added
 - Registry pull-secret runbook (`docs/runbooks/registry-pull-secret.md`): the Vault path `secret/dps150/registry` is a hard deploy prerequisite — seeded with a `read_registry` deploy token and verified live (VSS synced, test pod pulled an image) so the first `deploy:prod` does not hit ImagePullBackOff.
 - Helm chart and prod auto-deploy (F-009): `deploy/helm/dps150-web` with a single-replica Recreate backend (single-client device), nginx frontend, path-based Ingress `dps150.r2bnj.ru` behind Authelia with a dedicated cert-manager certificate, Vault-sourced DB/registry credentials via VSO (fail-soft on first deploy), and an auto `deploy:prod` CI job (master → ns `dps150`, image tag `$CI_COMMIT_SHORT_SHA`).
