@@ -5,7 +5,7 @@ export type RangePreset = (typeof RANGE_PRESETS)[number]
 
 /**
  * Mirrors the backend's `resolution=1m` response cap (API contract v2,
- * "История (F-012)"; `historyMaxPoints` in
+ * "History (F-012)"; `historyMaxPoints` in
  * `backend/internal/api/history.go`) — a `to-from` span longer than this
  * many minutes answers `400 range_too_dense` with no coarser resolution
  * to fall back to (1m is already the coarsest tier). A calendar month

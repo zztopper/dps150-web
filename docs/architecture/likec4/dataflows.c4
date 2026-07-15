@@ -1,12 +1,12 @@
-// Dataflows — динамические views для ключевых сценариев.
-// Каждая значимая фича добавляет сюда (или в feature-<name>.c4) свой dynamic view.
+// Dataflows — dynamic views for key scenarios.
+// Every significant feature adds its own dynamic view here (or in feature-<name>.c4).
 
 views {
-  // Пример — раскомментируйте и адаптируйте:
+  // Example — uncomment and adapt:
   //
   // dynamic view loginFlow {
   //   title 'Login Flow'
-  //   user -> web 'открывает /login'
+  //   user -> web 'opens /login'
   //   web -> api 'POST /auth/login'
   //   api -> db 'SELECT user'
   //   api -> web 'JWT'

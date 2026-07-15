@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
 
 ### Added
+- Open-source cleanup: removed process/tooling scaffolding not part of the
+  project (`.claude/`, `CLAUDE.md`, `.serena/`, boilerplate process docs,
+  helper scripts and issue/MR templates); added a header language switcher
+  (RU/EN, persisted) and routed the last hardcoded string in the tokens
+  hint through i18n.
 - Test hardening (TD-004): storage-ready waits in backend test helpers
   raised from 5s to 20s to stop flakes when the shared CI runner is
   contended.
@@ -42,7 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a `CONTRIBUTING.md`, and genericized deployment specifics — private
   domains replaced with `example.com` placeholders in docs and godoc, and
   the ser2net runbook's device serial replaced with a `XXXXXXXX`
-  placeholder — ahead of publishing a public GitHub mirror.
+  placeholder — ahead of publishing a public GitHub mirror; the remaining
+  project documentation (design doc, API contract, runbooks, LikeC4 views)
+  was translated from Russian to English.
 - CSV export UI (F-019): "Export CSV" buttons on the History and Events
   pages (`src/api/export.ts`) build the `GET /api/v1/history.csv`
   (current viewed `[from, to]` and `resolution=auto`) / `GET
@@ -93,7 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the device is offline, and the initial device connect no longer sends a
   "link restored" Telegram notification.
 - Prometheus metrics (TD-001): `GET /metrics` (promhttp, outside `/api/v1` and not exposed through the Ingress) with domain series — device link and reconnects, protection state by enum, hub command duration histogram, WS clients, storage readiness, dropped updates — wired non-invasively (hub subscriber + command wrapper), plus a Helm `ServiceMonitor` on the backend Service (30s interval, enabled by default via `serviceMonitor.*` values).
-- Telegram notifications and metering sessions (F-015, F-017): a hub-fed notifier pushes protection trips, device link loss/recovery, output switching and metering-session summaries to the Telegram Bot API (credentials only from `DPS_TELEGRAM_TOKEN`/`DPS_TELEGRAM_CHAT_ID`, per-type 30 s cooldown with "повторилось N раз" aggregation, bounded non-blocking queue), `GET/PUT /api/v1/settings/notifications` persisted in the settings KV (`configured: false` when the env is empty), and a `meteringSession {capacityAh, energyWh, durationMs}` journal event recorded as the counter delta of each output-on..off session.
+- Telegram notifications and metering sessions (F-015, F-017): a hub-fed notifier pushes protection trips, device link loss/recovery, output switching and metering-session summaries to the Telegram Bot API (credentials only from `DPS_TELEGRAM_TOKEN`/`DPS_TELEGRAM_CHAT_ID`, per-type 30 s cooldown with "repeated N times" aggregation, bounded non-blocking queue), `GET/PUT /api/v1/settings/notifications` persisted in the settings KV (`configured: false` when the env is empty), and a `meteringSession {capacityAh, energyWh, durationMs}` journal event recorded as the counter delta of each output-on..off session.
 - Protection limits API and device event journal (F-014): `PUT /api/v1/device/protections` accepts any subset of ovp/ocp/opp/otp/lvp, validates the contract bounds and float32 representability (the device wire format; values like lvp=1e39 are rejected instead of reaching the wire as +Inf), returns all five effective values, journals a `protectionsChanged` entry and mirrors it onto the WS `event` stream; a hub-subscriber journal service records `protectionTrip` (with a V/I/P snapshot at the moment of the trip), `deviceConnected`/`deviceDisconnected` and `outputOn`/`outputOff` into the `events` table (fail-soft: a dead database only drops entries with a rate-limited warning, never blocks the hub); `GET /api/v1/events` serves the journal newest-first with kind/time filters and limit/offset paging (default 50, max 500) plus the unpaged total.
 - Protection limits API and device event journal (F-014): `PUT /api/v1/device/protections` accepts any subset of ovp/ocp/opp/otp/lvp, validates the contract bounds, returns all five effective values and journals a `protectionsChanged` entry; a hub-subscriber journal service records `protectionTrip` (with a V/I/P snapshot at the moment of the trip), `deviceConnected`/`deviceDisconnected` and `outputOn`/`outputOff` into the `events` table (fail-soft: a dead database only drops entries with a rate-limited warning, never blocks the hub); `GET /api/v1/events` serves the journal newest-first with kind/time filters and limit/offset paging (default 50, max 500) plus the unpaged total.
 - Profiles and hardware presets API (F-010, F-011): `profiles` table with
@@ -155,7 +162,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   map, TX encoding helpers, streaming RX parser with resynchronization and
   typed event decoding (`backend/internal/device/protocol`, stdlib-only).
 - Project bootstrap: process boilerplate (lite profile), design doc, ADR-001..004,
-  GitLab issue tracker seeded (milestones «Этап 1 PoC» / «Этап 2 MVP» / «Этап 3 v1.0»).
+  GitLab issue tracker seeded (milestones "Stage 1 PoC" / "Stage 2 MVP" / "Stage 3 v1.0").
 - Monorepo scaffold (F-001): Go backend skeleton (Gin, `/healthz`, env config,
   graceful shutdown, slog), React frontend (Vite, TypeScript, Ant Design,
   TanStack Query, i18n ru/en, vitest smoke test), `Makefile`

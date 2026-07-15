@@ -1,5 +1,5 @@
-// Стартовый шаблон LikeC4 Landscape view.
-// После init-project.sh замените {{PROJECT_NAME}} и описание на свои.
+// Starter template for the LikeC4 Landscape view.
+// After init-project.sh, replace {{PROJECT_NAME}} and the description with your own.
 
 specification {
   element actor {
@@ -17,16 +17,16 @@ specification {
 
 model {
   user = actor 'User' {
-    description 'Конечный пользователь {{PROJECT_NAME}}'
+    description 'End user of {{PROJECT_NAME}}'
   }
 
   system app '{{PROJECT_NAME}}' {
     description '{{PROJECT_DESCRIPTION}}'
   }
 
-  // Пример внешней системы — заменить/удалить.
+  // Example external system — replace/remove.
   // externalSystem identityProvider 'Identity Provider'
-  // user -> app 'Использует через web/CLI'
+  // user -> app 'Uses via web/CLI'
   // app -> identityProvider 'OAuth2'
 }
 

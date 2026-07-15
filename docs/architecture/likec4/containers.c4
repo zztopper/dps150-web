@@ -1,5 +1,5 @@
-// Containers view — top-level контейнеры внутри системы.
-// Заполняйте по мере роста проекта.
+// Containers view — top-level containers inside the system.
+// Fill in as the project grows.
 
 specification {
   element container
@@ -12,7 +12,7 @@ specification {
 
 model {
   extend app {
-    // Примеры — замените под свой стек:
+    // Examples — replace with your own stack:
     //
     // container web 'Web Frontend' {
     //   technology 'React, TypeScript'

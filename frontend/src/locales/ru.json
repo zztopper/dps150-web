@@ -2,429 +2,433 @@
   "app": {
     "title": "Управление DPS-150"
   },
-  "common": {
-    "cancel": "Отмена"
-  },
-  "nav": {
-    "dashboard": "Дашборд",
-    "history": "История",
-    "profiles": "Профили",
-    "events": "События",
-    "automation": "Автоматика",
-    "settings": "Настройки",
-    "menu": "Меню"
-  },
-  "theme": {
-    "light": "Светлая",
-    "dark": "Тёмная",
-    "toggleLabel": "Переключить тему"
-  },
-  "history": {
-    "title": "История измерений",
-    "empty": "Нет данных за выбранный период",
-    "loading": "Загрузка…",
-    "resetZoom": "Сбросить масштаб",
-    "customFrom": "С",
-    "customTo": "По",
-    "pointCount": "{{count}} точек ({{resolution}})",
-    "resolutionRaw": "сырые",
-    "resolutionMinute": "минутные агрегаты",
-    "preset": {
-      "hour": "Час",
-      "day": "Сутки",
-      "week": "Неделя",
-      "month": "13 дней"
+  "automation": {
+    "action": {
+      "outputOff": "Выключить выход"
     },
-    "error": {
-      "rangeTooDense": "Слишком много точек для выбранного диапазона — сузьте период",
-      "invalidRange": "Некорректный диапазон дат",
-      "storageUnavailable": "Хранилище истории недоступно, попробуйте позже"
+    "actions": {
+      "delete": "Удалить",
+      "edit": "Изменить"
+    },
+    "addButton": "Новое правило",
+    "condition": {
+      "capacityAbove": "Накопленная ёмкость > {{ah}} Ач",
+      "currentBelow": "Ток < {{amps}} А в течение {{forSeconds}} с",
+      "elapsedAbove": "Прошло времени > {{seconds}} с",
+      "energyAbove": "Накопленная энергия > {{wh}} Втч",
+      "unknown": "Неизвестное условие"
+    },
+    "conditionTypes": {
+      "capacityAbove": "Ёмкость выше порога",
+      "currentBelow": "Ток ниже порога",
+      "elapsedAbove": "Время выше порога",
+      "energyAbove": "Энергия выше порога"
+    },
+    "created": "Правило создано",
+    "deleteConfirm": {
+      "content": "Действие необратимо.",
+      "ok": "Да, удалить",
+      "title": "Удалить правило «{{name}}»?"
+    },
+    "deleted": "Правило удалено",
+    "disclaimer": {
+      "content": "Автостоп вычисляется в кластере по потоку телеметрии. При потере связи с устройством правила приостанавливаются: срабатывания не копятся, и автостоп в этот момент не гарантирован. Подстраховка — аппаратные защиты устройства (OVP/OCP/OPP/OTP/LVP).",
+      "title": "Правила исполняются на сервере, а не в устройстве"
+    },
+    "empty": "Правил пока нет — добавьте первое, чтобы автоматически выключать выход",
+    "enabledOff": "выключено",
+    "enabledOn": "включено",
+    "errors": {
+      "invalid": "Некорректные данные правила: {{detail}}",
+      "notFound": "Правило не найдено",
+      "storageUnavailable": "База данных недоступна — правила автоматики временно недоступны",
+      "storageUnavailableTitle": "Хранилище недоступно"
+    },
+    "form": {
+      "ah": "Порог ёмкости, Ач",
+      "amps": "Порог тока, А",
+      "conditionType": "Тип условия",
+      "enabled": "Правило активно",
+      "forSeconds": "Держать не менее, с",
+      "name": "Название",
+      "nameMax": "Не более 64 символов",
+      "nameRequired": "Укажите название",
+      "positiveError": "Значение должно быть больше 0",
+      "required": "Укажите значение",
+      "save": "Сохранить",
+      "scope": "Область действия",
+      "seconds": "Порог времени, с",
+      "titleCreate": "Новое правило",
+      "titleEdit": "Изменить правило",
+      "wh": "Порог энергии, Втч"
+    },
+    "neverTriggered": "ещё не срабатывало",
+    "saved": "Правило сохранено",
+    "scope": {
+      "always": "Всегда",
+      "session": "Текущая сессия"
+    },
+    "table": {
+      "action": "Действие",
+      "actions": "Действия",
+      "condition": "Условие",
+      "enabled": "Активно",
+      "lastTriggered": "Последнее срабатывание",
+      "name": "Название",
+      "scope": "Область"
+    },
+    "title": "Автоматика",
+    "toggled": "Правило «{{name}}»: {{state}}",
+    "triggers": {
+      "empty": "Срабатываний пока не было",
+      "pagination": {
+        "total": "Всего: {{total}}"
+      },
+      "table": {
+        "reason": "Причина",
+        "rule": "Правило",
+        "time": "Время"
+      },
+      "title": "История срабатываний"
     }
   },
   "chart": {
+    "events": {
+      "autoStop": "Автостоп",
+      "deviceConnected": "Устройство подключено",
+      "deviceDisconnected": "Устройство отключено",
+      "meteringSession": "Сессия учёта: {{capacityAh}} Ач, {{energyWh}} Втч",
+      "outputOff": "Выход выключен",
+      "outputOn": "Выход включён",
+      "profileApplied": "Применён профиль: {{name}}",
+      "protectionTrip": "Сработала защита: {{protection}}",
+      "protectionsChanged": "Изменены уставки защит"
+    },
     "live": {
       "title": "Телеметрия",
       "windowLabel": "{{count}} мин"
     },
     "series": {
-      "voltage": "Напряжение",
       "current": "Ток",
+      "max": "{{series}} (макс)",
+      "min": "{{series}} (мин)",
       "power": "Мощность",
       "temperature": "Температура",
-      "min": "{{series}} (мин)",
-      "max": "{{series}} (макс)"
-    },
-    "events": {
-      "protectionTrip": "Сработала защита: {{protection}}",
-      "deviceConnected": "Устройство подключено",
-      "deviceDisconnected": "Устройство отключено",
-      "outputOn": "Выход включён",
-      "outputOff": "Выход выключен",
-      "profileApplied": "Применён профиль: {{name}}",
-      "protectionsChanged": "Изменены уставки защит",
-      "meteringSession": "Сессия учёта: {{capacityAh}} Ач, {{energyWh}} Втч",
-      "autoStop": "Автостоп"
+      "voltage": "Напряжение"
     }
   },
-  "profiles": {
-    "title": "Профили",
-    "empty": "Профилей пока нет — создайте первый, чтобы применять его одним кликом",
-    "addButton": "Новый профиль",
-    "table": {
-      "name": "Название",
-      "voltage": "Напряжение",
-      "current": "Ток",
-      "protections": "Защиты",
-      "actions": "Действия"
-    },
-    "actions": {
-      "apply": "Применить",
-      "assign": "В ячейку",
-      "edit": "Изменить",
-      "delete": "Удалить"
-    },
-    "applyConfirm": {
-      "title": "Применить профиль «{{name}}»?",
-      "content": "Уставки V/I и защиты будут записаны на устройство. Выход НЕ включается и не выключается.",
-      "ok": "Да, применить"
-    },
-    "applied": "Профиль «{{name}}» применён",
-    "deleteConfirm": {
-      "title": "Удалить профиль «{{name}}»?",
-      "content": "Действие необратимо.",
-      "ok": "Да, удалить"
-    },
-    "deleted": "Профиль удалён",
-    "assigned": "Профиль назначен в ячейку M{{slot}}",
-    "saved": "Профиль сохранён",
-    "created": "Профиль создан",
-    "presets": {
-      "title": "Аппаратные пресеты M1–M6",
-      "slotShort": "M{{slot}}"
-    },
-    "form": {
-      "titleCreate": "Новый профиль",
-      "titleEdit": "Изменить профиль",
-      "name": "Название",
-      "nameRequired": "Укажите название",
-      "nameMax": "Не более 64 символов",
-      "voltage": "Напряжение, В",
-      "voltageHint": "0 < V ≤ {{max}} В",
-      "current": "Ток, А",
-      "currentHint": "0 < I ≤ {{max}} А",
-      "protectionsTitle": "Уставки защит",
-      "ovpHint": "0 < OVP ≤ {{max}} {{unit}}",
-      "ocpHint": "0 < OCP ≤ {{max}} {{unit}}",
-      "oppHint": "0 < OPP ≤ {{max}} {{unit}}",
-      "otpHint": "0 < OTP ≤ {{max}} {{unit}}",
-      "lvpHint": "LVP ≥ 0 {{unit}} (0 — выключено)",
-      "required": "Укажите значение",
-      "rangeError": "Значение должно быть от {{min}} до {{max}} {{unit}}",
-      "lvpRangeError": "LVP должно быть не меньше 0",
-      "save": "Сохранить"
-    },
-    "quick": {
-      "title": "Быстрые профили",
-      "empty": "Профили ещё не созданы — добавьте их на странице «Профили»",
-      "applied": "Применено: {{name}}",
-      "offlineHint": "Устройство не на связи"
-    },
-    "errors": {
-      "nameTaken": "Профиль с таким названием уже существует",
-      "notFound": "Профиль не найден",
-      "invalid": "Некорректные данные профиля: {{detail}}",
-      "invalidSetpoint": "Уставка профиля выходит за пределы устройства: {{detail}}",
-      "invalidSlot": "Некорректный номер ячейки: {{detail}}",
-      "storageUnavailableTitle": "Хранилище недоступно",
-      "storageUnavailable": "База данных недоступна — профили временно нельзя изменить"
-    }
+  "common": {
+    "cancel": "Отмена"
+  },
+  "errors": {
+    "deviceOffline": "Устройство не на связи — команда не выполнена",
+    "invalidSetpoint": "Уставка вне допустимого диапазона: {{detail}}",
+    "network": "Сеть недоступна — запрос не выполнен",
+    "requestFailed": "Ошибка запроса: {{detail}}"
   },
   "events": {
-    "title": "Журнал событий",
     "empty": "Событий пока нет",
+    "errors": {
+      "storageUnavailable": "База данных недоступна — журнал событий временно недоступен",
+      "storageUnavailableTitle": "Хранилище недоступно"
+    },
     "filter": {
       "placeholder": "Тип события"
     },
-    "table": {
-      "time": "Время",
-      "kind": "Событие",
-      "summary": "Подробности"
-    },
     "kinds": {
-      "protectionTrip": "Сработала защита",
+      "autoStop": "Автостоп",
       "deviceConnected": "Устройство подключено",
       "deviceDisconnected": "Устройство отключено",
-      "outputOn": "Выход включён",
-      "outputOff": "Выход выключен",
-      "profileApplied": "Профиль применён",
-      "protectionsChanged": "Изменены уставки защит",
       "meteringSession": "Сессия учёта завершена",
-      "autoStop": "Автостоп"
-    },
-    "summary": {
-      "protectionTrip": "{{protection}} при {{voltage}} В / {{current}} А / {{power}} Вт",
-      "profileApplied": "«{{name}}»",
-      "meteringSession": "{{capacity}} Ач, {{energy}} Втч за {{durationMin}} мин"
+      "outputOff": "Выход выключен",
+      "outputOn": "Выход включён",
+      "profileApplied": "Профиль применён",
+      "protectionTrip": "Сработала защита",
+      "protectionsChanged": "Изменены уставки защит"
     },
     "pagination": {
       "total": "Всего: {{total}}"
     },
-    "errors": {
-      "storageUnavailableTitle": "Хранилище недоступно",
-      "storageUnavailable": "База данных недоступна — журнал событий временно недоступен"
-    }
-  },
-  "automation": {
-    "title": "Автоматика",
-    "addButton": "Новое правило",
-    "empty": "Правил пока нет — добавьте первое, чтобы автоматически выключать выход",
-    "disclaimer": {
-      "title": "Правила исполняются на сервере, а не в устройстве",
-      "content": "Автостоп вычисляется в кластере по потоку телеметрии. При потере связи с устройством правила приостанавливаются: срабатывания не копятся, и автостоп в этот момент не гарантирован. Подстраховка — аппаратные защиты устройства (OVP/OCP/OPP/OTP/LVP)."
+    "summary": {
+      "meteringSession": "{{capacity}} Ач, {{energy}} Втч за {{durationMin}} мин",
+      "profileApplied": "«{{name}}»",
+      "protectionTrip": "{{protection}} при {{voltage}} В / {{current}} А / {{power}} Вт"
     },
     "table": {
-      "name": "Название",
-      "condition": "Условие",
-      "action": "Действие",
-      "scope": "Область",
-      "enabled": "Активно",
-      "lastTriggered": "Последнее срабатывание",
-      "actions": "Действия"
+      "kind": "Событие",
+      "summary": "Подробности",
+      "time": "Время"
     },
-    "action": {
-      "outputOff": "Выключить выход"
-    },
-    "scope": {
-      "session": "Текущая сессия",
-      "always": "Всегда"
-    },
-    "neverTriggered": "ещё не срабатывало",
-    "actions": {
-      "edit": "Изменить",
-      "delete": "Удалить"
-    },
-    "deleteConfirm": {
-      "title": "Удалить правило «{{name}}»?",
-      "content": "Действие необратимо.",
-      "ok": "Да, удалить"
-    },
-    "deleted": "Правило удалено",
-    "saved": "Правило сохранено",
-    "created": "Правило создано",
-    "toggled": "Правило «{{name}}»: {{state}}",
-    "enabledOn": "включено",
-    "enabledOff": "выключено",
-    "condition": {
-      "currentBelow": "Ток < {{amps}} А в течение {{forSeconds}} с",
-      "capacityAbove": "Накопленная ёмкость > {{ah}} Ач",
-      "energyAbove": "Накопленная энергия > {{wh}} Втч",
-      "elapsedAbove": "Прошло времени > {{seconds}} с",
-      "unknown": "Неизвестное условие"
-    },
-    "conditionTypes": {
-      "currentBelow": "Ток ниже порога",
-      "capacityAbove": "Ёмкость выше порога",
-      "energyAbove": "Энергия выше порога",
-      "elapsedAbove": "Время выше порога"
-    },
-    "form": {
-      "titleCreate": "Новое правило",
-      "titleEdit": "Изменить правило",
-      "name": "Название",
-      "nameRequired": "Укажите название",
-      "nameMax": "Не более 64 символов",
-      "conditionType": "Тип условия",
-      "amps": "Порог тока, А",
-      "forSeconds": "Держать не менее, с",
-      "ah": "Порог ёмкости, Ач",
-      "wh": "Порог энергии, Втч",
-      "seconds": "Порог времени, с",
-      "scope": "Область действия",
-      "enabled": "Правило активно",
-      "required": "Укажите значение",
-      "positiveError": "Значение должно быть больше 0",
-      "save": "Сохранить"
-    },
-    "triggers": {
-      "title": "История срабатываний",
-      "empty": "Срабатываний пока не было",
-      "table": {
-        "time": "Время",
-        "rule": "Правило",
-        "reason": "Причина"
-      },
-      "pagination": {
-        "total": "Всего: {{total}}"
-      }
-    },
-    "errors": {
-      "storageUnavailableTitle": "Хранилище недоступно",
-      "storageUnavailable": "База данных недоступна — правила автоматики временно недоступны",
-      "invalid": "Некорректные данные правила: {{detail}}",
-      "notFound": "Правило не найдено"
-    }
+    "title": "Журнал событий"
   },
   "export": {
     "button": "Экспорт CSV",
-    "range": "Диапазон экспорта",
     "customFrom": "С",
-    "customTo": "По"
-  },
-  "protections": {
-    "title": "Уставки защит",
-    "ovp": "OVP",
-    "ocp": "OCP",
-    "opp": "OPP",
-    "otp": "OTP",
-    "lvp": "LVP",
-    "trippedBadge": "сработала",
-    "required": "Укажите значение",
-    "range": "Значение должно быть от {{min}} до {{max}}",
-    "rangeMin": "Значение должно быть не меньше {{min}}",
-    "save": "Сохранить",
-    "saved": "Уставки защит сохранены",
-    "errors": {
-      "invalid": "Недопустимая уставка защиты: {{detail}}"
-    }
-  },
-  "settings": {
-    "title": "Настройки",
-    "telegramTitle": "Уведомления в Telegram",
-    "telegramEnabled": "Отправлять уведомления в Telegram",
-    "eventsTitle": "Типы событий",
-    "events": {
-      "protectionTrip": "Сработка защиты",
-      "deviceLink": "Связь с устройством потеряна/восстановлена",
-      "output": "Включение/выключение выхода",
-      "meteringSession": "Итог сессии метеринга"
-    },
-    "notConfiguredTitle": "Telegram не настроен (env)",
-    "notConfiguredDescription": "Токен бота и chat id заданы только через переменные окружения сервера (DPS_TELEGRAM_TOKEN, DPS_TELEGRAM_CHAT_ID). Пока они не заданы, уведомления недоступны.",
-    "saved": "Настройки сохранены",
-    "saveError": "Не удалось сохранить настройки: {{detail}}",
-    "loadError": "Не удалось загрузить настройки"
-  },
-  "tokens": {
-    "title": "API-токены",
-    "addButton": "Новый токен",
-    "hint": "Токены — для скриптового доступа к API на отдельном хосте ({{host}}). Браузерный интерфейс использует единый вход (SSO) и токен не требует.",
-    "empty": "Токенов пока нет",
-    "deleted": "Токен отозван",
-    "table": {
-      "name": "Название",
-      "scope": "Область доступа",
-      "createdAt": "Создан",
-      "lastUsedAt": "Последнее использование",
-      "actions": "Действия"
-    },
-    "scope": {
-      "read": "Чтение",
-      "control": "Управление"
-    },
-    "actions": {
-      "delete": "Отозвать",
-      "copy": "Скопировать"
-    },
-    "deleteConfirm": {
-      "title": "Отозвать токен «{{name}}»?",
-      "content": "Действие необратимо — скрипты, использующие этот токен, немедленно потеряют доступ.",
-      "ok": "Да, отозвать"
-    },
-    "form": {
-      "title": "Новый API-токен",
-      "name": "Название",
-      "namePlaceholder": "например, lab script",
-      "nameRequired": "Укажите название",
-      "nameMax": "Не более {{max}} символов",
-      "scope": "Область доступа",
-      "scopeRequired": "Выберите область доступа",
-      "create": "Создать"
-    },
-    "secretModal": {
-      "title": "Токен создан",
-      "warningTitle": "Секрет показывается только один раз",
-      "warning": "Скопируйте токен сейчас — после закрытия этого окна повторно увидеть его будет нельзя. Сервер хранит только хэш.",
-      "name": "Токен «{{name}}»",
-      "close": "Понятно, закрыть",
-      "copiedButton": "Скопировано",
-      "copied": "Токен скопирован в буфер обмена",
-      "copyFailed": "Не удалось скопировать — выделите и скопируйте вручную"
-    },
-    "errors": {
-      "storageUnavailableTitle": "Хранилище недоступно",
-      "storageUnavailable": "База данных недоступна — токены временно нельзя изменить",
-      "invalid": "Некорректные данные токена: {{detail}}",
-      "notFound": "Токен не найден"
-    }
+    "customTo": "По",
+    "range": "Диапазон экспорта"
   },
   "header": {
-    "online": "На связи",
     "deviceOffline": "Устройство не на связи",
+    "online": "На связи",
     "serverOffline": "Нет связи с сервером"
   },
-  "units": {
-    "volt": "В",
-    "amp": "А",
-    "watt": "Вт",
-    "celsius": "°C",
-    "ampHour": "Ач",
-    "wattHour": "Втч"
+  "history": {
+    "customFrom": "С",
+    "customTo": "По",
+    "empty": "Нет данных за выбранный период",
+    "error": {
+      "invalidRange": "Некорректный диапазон дат",
+      "rangeTooDense": "Слишком много точек для выбранного диапазона — сузьте период",
+      "storageUnavailable": "Хранилище истории недоступно, попробуйте позже"
+    },
+    "loading": "Загрузка…",
+    "pointCount": "{{count}} точек ({{resolution}})",
+    "preset": {
+      "day": "Сутки",
+      "hour": "Час",
+      "month": "13 дней",
+      "week": "Неделя"
+    },
+    "resetZoom": "Сбросить масштаб",
+    "resolutionMinute": "минутные агрегаты",
+    "resolutionRaw": "сырые",
+    "title": "История измерений"
+  },
+  "lang": {
+    "switchLabel": "Язык интерфейса"
   },
   "metering": {
-    "title": "Метеринг",
     "capacity": "Ёмкость",
     "energy": "Энергия",
-    "sessionDuration": "Текущая сессия",
-    "outputOff": "выход выключен",
     "lastSession": "Последняя сессия",
+    "lastSessionSummary": "{{ah}} Ач, {{wh}} Втч за {{duration}}",
     "noLastSession": "Завершённых сессий пока нет",
-    "lastSessionSummary": "{{ah}} Ач, {{wh}} Втч за {{duration}}"
-  },
-  "readings": {
-    "inputVoltage": "Вход",
-    "temperature": "Температура"
+    "outputOff": "выход выключен",
+    "sessionDuration": "Текущая сессия",
+    "title": "Метеринг"
   },
   "mode": {
     "cc": "CC",
     "cv": "CV"
   },
-  "protection": {
-    "unknown": "Защита: нет данных",
-    "ok": "Защиты в норме",
-    "tripped": "Защита: {{protection}}",
-    "ovp": "перенапряжение (OVP)",
-    "ocp": "перегрузка по току (OCP)",
-    "opp": "перегрузка по мощности (OPP)",
-    "otp": "перегрев (OTP)",
-    "lvp": "низкое входное (LVP)",
-    "rep": "обратная полярность (REP)"
-  },
-  "setpoints": {
-    "title": "Уставки и выход",
-    "voltage": "Напряжение, В",
-    "current": "Ток, А",
-    "apply": "Применить",
-    "required": "Укажите значение",
-    "voltageRange": "Напряжение должно быть от 0 до {{max}} В",
-    "currentRange": "Ток должен быть от 0 до {{max}} А"
+  "nav": {
+    "automation": "Автоматика",
+    "dashboard": "Дашборд",
+    "events": "События",
+    "history": "История",
+    "menu": "Меню",
+    "profiles": "Профили",
+    "settings": "Настройки"
   },
   "output": {
-    "label": "Выход",
-    "on": "ВКЛ",
-    "off": "ВЫКЛ",
-    "confirmTitle": "Включить выход?",
     "confirmContent": "Напряжение будет подано на клеммы.",
-    "confirmOk": "Включить"
+    "confirmOk": "Включить",
+    "confirmTitle": "Включить выход?",
+    "label": "Выход",
+    "off": "ВЫКЛ",
+    "on": "ВКЛ"
+  },
+  "profiles": {
+    "actions": {
+      "apply": "Применить",
+      "assign": "В ячейку",
+      "delete": "Удалить",
+      "edit": "Изменить"
+    },
+    "addButton": "Новый профиль",
+    "applied": "Профиль «{{name}}» применён",
+    "applyConfirm": {
+      "content": "Уставки V/I и защиты будут записаны на устройство. Выход НЕ включается и не выключается.",
+      "ok": "Да, применить",
+      "title": "Применить профиль «{{name}}»?"
+    },
+    "assigned": "Профиль назначен в ячейку M{{slot}}",
+    "created": "Профиль создан",
+    "deleteConfirm": {
+      "content": "Действие необратимо.",
+      "ok": "Да, удалить",
+      "title": "Удалить профиль «{{name}}»?"
+    },
+    "deleted": "Профиль удалён",
+    "empty": "Профилей пока нет — создайте первый, чтобы применять его одним кликом",
+    "errors": {
+      "invalid": "Некорректные данные профиля: {{detail}}",
+      "invalidSetpoint": "Уставка профиля выходит за пределы устройства: {{detail}}",
+      "invalidSlot": "Некорректный номер ячейки: {{detail}}",
+      "nameTaken": "Профиль с таким названием уже существует",
+      "notFound": "Профиль не найден",
+      "storageUnavailable": "База данных недоступна — профили временно нельзя изменить",
+      "storageUnavailableTitle": "Хранилище недоступно"
+    },
+    "form": {
+      "current": "Ток, А",
+      "currentHint": "0 < I ≤ {{max}} А",
+      "lvpHint": "LVP ≥ 0 {{unit}} (0 — выключено)",
+      "lvpRangeError": "LVP должно быть не меньше 0",
+      "name": "Название",
+      "nameMax": "Не более 64 символов",
+      "nameRequired": "Укажите название",
+      "ocpHint": "0 < OCP ≤ {{max}} {{unit}}",
+      "oppHint": "0 < OPP ≤ {{max}} {{unit}}",
+      "otpHint": "0 < OTP ≤ {{max}} {{unit}}",
+      "ovpHint": "0 < OVP ≤ {{max}} {{unit}}",
+      "protectionsTitle": "Уставки защит",
+      "rangeError": "Значение должно быть от {{min}} до {{max}} {{unit}}",
+      "required": "Укажите значение",
+      "save": "Сохранить",
+      "titleCreate": "Новый профиль",
+      "titleEdit": "Изменить профиль",
+      "voltage": "Напряжение, В",
+      "voltageHint": "0 < V ≤ {{max}} В"
+    },
+    "presets": {
+      "slotShort": "M{{slot}}",
+      "title": "Аппаратные пресеты M1–M6"
+    },
+    "quick": {
+      "applied": "Применено: {{name}}",
+      "empty": "Профили ещё не созданы — добавьте их на странице «Профили»",
+      "offlineHint": "Устройство не на связи",
+      "title": "Быстрые профили"
+    },
+    "saved": "Профиль сохранён",
+    "table": {
+      "actions": "Действия",
+      "current": "Ток",
+      "name": "Название",
+      "protections": "Защиты",
+      "voltage": "Напряжение"
+    },
+    "title": "Профили"
+  },
+  "protection": {
+    "lvp": "низкое входное (LVP)",
+    "ocp": "перегрузка по току (OCP)",
+    "ok": "Защиты в норме",
+    "opp": "перегрузка по мощности (OPP)",
+    "otp": "перегрев (OTP)",
+    "ovp": "перенапряжение (OVP)",
+    "rep": "обратная полярность (REP)",
+    "tripped": "Защита: {{protection}}",
+    "unknown": "Защита: нет данных"
+  },
+  "protections": {
+    "errors": {
+      "invalid": "Недопустимая уставка защиты: {{detail}}"
+    },
+    "lvp": "LVP",
+    "ocp": "OCP",
+    "opp": "OPP",
+    "otp": "OTP",
+    "ovp": "OVP",
+    "range": "Значение должно быть от {{min}} до {{max}}",
+    "rangeMin": "Значение должно быть не меньше {{min}}",
+    "required": "Укажите значение",
+    "save": "Сохранить",
+    "saved": "Уставки защит сохранены",
+    "title": "Уставки защит",
+    "trippedBadge": "сработала"
+  },
+  "readings": {
+    "inputVoltage": "Вход",
+    "temperature": "Температура"
+  },
+  "setpoints": {
+    "apply": "Применить",
+    "current": "Ток, А",
+    "currentRange": "Ток должен быть от 0 до {{max}} А",
+    "required": "Укажите значение",
+    "title": "Уставки и выход",
+    "voltage": "Напряжение, В",
+    "voltageRange": "Напряжение должно быть от 0 до {{max}} В"
+  },
+  "settings": {
+    "events": {
+      "deviceLink": "Связь с устройством потеряна/восстановлена",
+      "meteringSession": "Итог сессии метеринга",
+      "output": "Включение/выключение выхода",
+      "protectionTrip": "Сработка защиты"
+    },
+    "eventsTitle": "Типы событий",
+    "loadError": "Не удалось загрузить настройки",
+    "notConfiguredDescription": "Токен бота и chat id заданы только через переменные окружения сервера (DPS_TELEGRAM_TOKEN, DPS_TELEGRAM_CHAT_ID). Пока они не заданы, уведомления недоступны.",
+    "notConfiguredTitle": "Telegram не настроен (env)",
+    "saveError": "Не удалось сохранить настройки: {{detail}}",
+    "saved": "Настройки сохранены",
+    "telegramEnabled": "Отправлять уведомления в Telegram",
+    "telegramTitle": "Уведомления в Telegram",
+    "title": "Настройки"
+  },
+  "theme": {
+    "dark": "Тёмная",
+    "light": "Светлая",
+    "toggleLabel": "Переключить тему"
   },
   "toasts": {
-    "protectionTrip": "Сработала защита: {{protection}}",
     "deviceLost": "Связь с устройством потеряна",
-    "deviceRestored": "Связь с устройством восстановлена"
+    "deviceRestored": "Связь с устройством восстановлена",
+    "protectionTrip": "Сработала защита: {{protection}}"
   },
-  "errors": {
-    "invalidSetpoint": "Уставка вне допустимого диапазона: {{detail}}",
-    "deviceOffline": "Устройство не на связи — команда не выполнена",
-    "requestFailed": "Ошибка запроса: {{detail}}",
-    "network": "Сеть недоступна — запрос не выполнен"
+  "tokens": {
+    "actions": {
+      "copy": "Скопировать",
+      "delete": "Отозвать"
+    },
+    "addButton": "Новый токен",
+    "apiHostFallback": "dps150-api.<ваш-домен>",
+    "deleteConfirm": {
+      "content": "Действие необратимо — скрипты, использующие этот токен, немедленно потеряют доступ.",
+      "ok": "Да, отозвать",
+      "title": "Отозвать токен «{{name}}»?"
+    },
+    "deleted": "Токен отозван",
+    "empty": "Токенов пока нет",
+    "errors": {
+      "invalid": "Некорректные данные токена: {{detail}}",
+      "notFound": "Токен не найден",
+      "storageUnavailable": "База данных недоступна — токены временно нельзя изменить",
+      "storageUnavailableTitle": "Хранилище недоступно"
+    },
+    "form": {
+      "create": "Создать",
+      "name": "Название",
+      "nameMax": "Не более {{max}} символов",
+      "namePlaceholder": "например, lab script",
+      "nameRequired": "Укажите название",
+      "scope": "Область доступа",
+      "scopeRequired": "Выберите область доступа",
+      "title": "Новый API-токен"
+    },
+    "hint": "Токены — для скриптового доступа к API на отдельном хосте ({{host}}). Браузерный интерфейс использует единый вход (SSO) и токен не требует.",
+    "scope": {
+      "control": "Управление",
+      "read": "Чтение"
+    },
+    "secretModal": {
+      "close": "Понятно, закрыть",
+      "copied": "Токен скопирован в буфер обмена",
+      "copiedButton": "Скопировано",
+      "copyFailed": "Не удалось скопировать — выделите и скопируйте вручную",
+      "name": "Токен «{{name}}»",
+      "title": "Токен создан",
+      "warning": "Скопируйте токен сейчас — после закрытия этого окна повторно увидеть его будет нельзя. Сервер хранит только хэш.",
+      "warningTitle": "Секрет показывается только один раз"
+    },
+    "table": {
+      "actions": "Действия",
+      "createdAt": "Создан",
+      "lastUsedAt": "Последнее использование",
+      "name": "Название",
+      "scope": "Область доступа"
+    },
+    "title": "API-токены"
+  },
+  "units": {
+    "amp": "А",
+    "ampHour": "Ач",
+    "celsius": "°C",
+    "volt": "В",
+    "watt": "Вт",
+    "wattHour": "Втч"
   }
 }

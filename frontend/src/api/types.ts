@@ -114,7 +114,7 @@ export interface OutputRequest {
 export const FALLBACK_MAX_VOLTAGE = 30.0
 export const FALLBACK_MAX_CURRENT = 5.0
 
-// -- History (F-012/F-013), mirrors "API contract v2", "История" --
+// -- History (F-012/F-013), mirrors "API contract v2", "History" --
 
 export type HistoryResolution = 'raw' | '1m' | 'auto'
 
@@ -156,7 +156,7 @@ export interface History1mResponse {
 
 export type HistoryResponse = HistoryRawResponse | History1mResponse
 
-// -- Journal events (F-014), mirrors "API contract v2", "Журнал событий" --
+// -- Journal events (F-014), mirrors "API contract v2", "Event journal" --
 // Kept as a separate (closed-union) shape from `JournalEvent`/`JournalKind`
 // in `./events.ts`: this one backs the history chart's own `GET /events`
 // call (a plain [from, to] window fetch, no kind filter/pagination), so
