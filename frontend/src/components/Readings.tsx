@@ -36,12 +36,14 @@ export function Readings({ state }: ReadingsProps) {
         </div>
       </div>
       <Space size="middle" wrap>
-        <Tag color={state?.mode === 'cc' ? 'orange' : undefined}>
-          {t('mode.cc')}
-        </Tag>
-        <Tag color={state?.mode === 'cv' ? 'blue' : undefined}>
-          {t('mode.cv')}
-        </Tag>
+        {/* Show only the active mode as a single tag: the presence of the
+            tag (not just its color) signals CC vs CV, so the cue survives
+            for colorblind users. No tag while state is null/offline. */}
+        {state?.mode === 'cc' ? (
+          <Tag color="orange">{t('mode.cc')}</Tag>
+        ) : state?.mode === 'cv' ? (
+          <Tag color="blue">{t('mode.cv')}</Tag>
+        ) : null}
         <Tag
           color={tripped ? 'red' : 'green'}
           className={tripped ? 'protection-tripped' : undefined}

@@ -253,6 +253,17 @@ export function AutomationPage() {
           showIcon
           message={t('automation.errors.storageUnavailableTitle')}
           description={t('automation.errors.storageUnavailable')}
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                void rulesQuery.refetch()
+                void triggersQuery.refetch()
+              }}
+            >
+              {t('common.retry')}
+            </Button>
+          }
         />
       )}
 

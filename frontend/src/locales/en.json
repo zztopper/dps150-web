@@ -104,7 +104,11 @@
       "protectionTrip": "Protection tripped: {{protection}}",
       "protectionsChanged": "Protection setpoints changed"
     },
+    "history": {
+      "ariaLabel": "Measurement history chart. Series: {{series}}."
+    },
     "live": {
+      "ariaLabel": "Live telemetry chart: voltage, current, power.",
       "title": "Telemetry",
       "windowLabel": "{{count}} min"
     },
@@ -118,7 +122,8 @@
     }
   },
   "common": {
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "retry": "Retry"
   },
   "errors": {
     "deviceOffline": "Device is offline — command not applied",

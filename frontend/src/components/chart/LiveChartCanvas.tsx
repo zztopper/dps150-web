@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { theme } from 'antd'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useTranslation } from 'react-i18next'
@@ -22,12 +23,20 @@ const HEIGHT = 200
  */
 export function LiveChartCanvas({ samples, paused }: LiveChartCanvasProps) {
   const { t } = useTranslation()
+  const { token } = theme.useToken()
+  // Axis/grid/tick colors from the active AntD theme so the chart is
+  // legible on the dark surface. uPlot captures them at instance-creation
+  // time; the parent (LiveChart) remounts this component via a theme+
+  // locale key so a theme switch re-creates the chart with fresh colors.
+  const axisLabel = token.colorText
+  const gridStroke = token.colorSplit
+  const ticksStroke = token.colorBorderSecondary
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<uPlot | null>(null)
   const size = useContainerSize(containerRef)
 
-  // Create the uPlot instance once; it is destroyed and never rebuilt
-  // (labels are static — locale switches are out of this track's scope).
+  // Create the uPlot instance once; it is destroyed and never rebuilt.
+  // Theme/locale changes are handled by remounting from the parent.
   useEffect(() => {
     const el = containerRef.current
     if (el === null || !isCanvas2DSupported()) {
@@ -65,17 +74,26 @@ export function LiveChartCanvas({ samples, paused }: LiveChartCanvasProps) {
         },
       ],
       axes: [
-        {},
+        {
+          stroke: axisLabel,
+          grid: { stroke: gridStroke },
+          ticks: { stroke: ticksStroke },
+        },
         {
           scale: 'V',
           size: 46,
+          stroke: axisLabel,
+          grid: { stroke: gridStroke },
+          ticks: { stroke: ticksStroke },
           values: (_u, ticks) => ticks.map((v) => v.toFixed(1)),
         },
         {
           scale: 'A',
           side: 1,
           size: 46,
+          stroke: axisLabel,
           grid: { show: false },
+          ticks: { stroke: ticksStroke },
           values: (_u, ticks) => ticks.map((v) => v.toFixed(2)),
         },
       ],
@@ -109,7 +127,11 @@ export function LiveChartCanvas({ samples, paused }: LiveChartCanvasProps) {
   }, [samples, paused])
 
   return (
-    <div className="dps-live-chart">
+    <div
+      className="dps-live-chart"
+      role="img"
+      aria-label={t('chart.live.ariaLabel')}
+    >
       <style>{`
         .dps-live-chart .u-legend, .dps-live-chart .u-legend .u-value {
           font-variant-numeric: tabular-nums;

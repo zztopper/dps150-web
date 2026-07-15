@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Card, Segmented } from 'antd'
+import { Card, Segmented, theme } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useDevice } from '../state/useDevice'
 import {
@@ -21,9 +21,17 @@ import { usePageVisible } from './chart/usePageVisible'
  * (stops buffering and redrawing) while the tab is hidden.
  */
 export function LiveChart() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const { token } = theme.useToken()
   const { state } = useDevice()
   const visible = usePageVisible()
+  // Remount the canvas on theme or locale change: uPlot captures its
+  // axis colors and series labels once at creation. Keying it re-runs
+  // all effects (including the sample-push) so the chart re-seeds
+  // immediately with no blank frame — unlike adding these to the build
+  // effect's deps, which would leave the sample buffer un-pushed.
+  // colorBgContainer differs by theme, a stable proxy for the mode.
+  const chartKey = `${token.colorBgContainer}-${i18n.language}`
   const [windowMinutes, setWindowMinutes] = useState<LiveWindowMinutes>(
     DEFAULT_LIVE_WINDOW_MINUTES,
   )
@@ -83,7 +91,7 @@ export function LiveChart() {
         />
       }
     >
-      <LiveChartCanvas samples={samples} paused={!visible} />
+      <LiveChartCanvas key={chartKey} samples={samples} paused={!visible} />
     </Card>
   )
 }

@@ -94,6 +94,28 @@ describe('EventsPage', () => {
     )
   })
 
+  // F-004: a chart event marker deep-links to /events?kind=… — the page
+  // seeds its kind filter from the query param(s) on mount.
+  it('initializes the kind filter from the ?kind query param', async () => {
+    const { calls } = stubFetchRoutes([
+      {
+        method: 'GET',
+        match: (u) => u.startsWith('/api/v1/events'),
+        respond: () => ({ status: 200, body: { items: [], total: 0 } }),
+      },
+    ])
+
+    renderWithProviders(<EventsPage />, { route: '/events?kind=protectionTrip' })
+
+    // The selected kind shows as a tag in the multi-select…
+    expect(await screen.findByText('Сработала защита')).toBeInTheDocument()
+    // …and the events query carries it as a filter.
+    await waitFor(
+      () => expect(calls.some((c) => c.url.includes('kind=protectionTrip'))).toBe(true),
+      { timeout: 5000 },
+    )
+  })
+
   it('shows a persistent Alert when storage is unavailable', async () => {
     stubFetchRoutes([
       {

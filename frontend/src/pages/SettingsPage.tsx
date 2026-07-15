@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, App as AntApp, Card, Flex, Skeleton, Switch, Typography } from 'antd'
+import { Alert, App as AntApp, Button, Card, Flex, Skeleton, Switch, Typography } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client'
@@ -69,7 +69,7 @@ export function SettingsPage() {
   const queryClient = useQueryClient()
   const [pendingKey, setPendingKey] = useState<string | null>(null)
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: SETTINGS_QUERY_KEY,
     queryFn: () => requestSettings(),
   })
@@ -131,7 +131,16 @@ export function SettingsPage() {
           <Skeleton active paragraph={{ rows: 4 }} />
         </Card>
       ) : isError ? (
-        <Alert type="error" showIcon title={t('settings.loadError')} />
+        <Alert
+          type="error"
+          showIcon
+          title={t('settings.loadError')}
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              {t('common.retry')}
+            </Button>
+          }
+        />
       ) : (
         <Card title={t('settings.telegramTitle')}>
           <Flex vertical gap="middle">

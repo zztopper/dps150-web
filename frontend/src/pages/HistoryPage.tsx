@@ -11,6 +11,7 @@ import {
   Segmented,
   Space,
   Spin,
+  theme,
   Typography,
 } from 'antd'
 import type { Dayjs } from 'dayjs'
@@ -52,7 +53,8 @@ function apiErrorMessage(
 
 /** Measurement history over a time range (F-012/F-013). */
 export function HistoryPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const { token } = theme.useToken()
 
   const [preset, setPreset] = useState<RangePreset | 'custom'>('day')
   const [customRange, setCustomRange] = useState<[Dayjs, Dayjs] | null>(null)
@@ -160,7 +162,22 @@ export function HistoryPage() {
       </Card>
 
       {error !== null && (
-        <Alert type="error" showIcon title={apiErrorMessage(t, error)} />
+        <Alert
+          type="error"
+          showIcon
+          title={apiErrorMessage(t, error)}
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                void historyQuery.refetch()
+                void eventsQuery.refetch()
+              }}
+            >
+              {t('common.retry')}
+            </Button>
+          }
+        />
       )}
 
       <Card size="small">
@@ -216,6 +233,10 @@ export function HistoryPage() {
           <Spin spinning={historyQuery.isFetching}>
             {chartData !== null && historyQuery.data !== undefined && pointCount > 0 ? (
               <HistoryChart
+                // Remount on theme/locale change so uPlot rebuilds with
+                // fresh axis colors and re-localized labels (see the
+                // component; colors/labels are captured once at creation).
+                key={`${token.colorBgContainer}-${i18n.language}`}
                 data={chartData}
                 resolution={historyQuery.data.resolution}
                 visibleSeries={visibleSeries}
