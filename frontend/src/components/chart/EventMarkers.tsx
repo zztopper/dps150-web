@@ -106,9 +106,11 @@ export function EventMarkers({ chart, events, viewRange }: EventMarkersProps) {
 
     return (
       <Tooltip key={ev.id} title={`${time} — ${describeEvent(t, ev)}`}>
-        {/* Invisible 20px-wide hit area centered on the 2px visual line so
-            the marker is comfortably tappable on touch. The Events table
-            has no from/to filter, so the deep-link carries only ?kind. */}
+        {/* 2px marker line. Deep-links to /events?kind — the Events table
+            has no from/to filter, so no time range is carried. (A wider
+            touch hit-area was tried but overlapped adjacent markers sharing
+            a timestamp and intercepted their clicks; keyboard/touch access
+            to events is covered by the Events table.) */}
         <div
           role="button"
           aria-label={describeEvent(t, ev)}
@@ -118,26 +120,14 @@ export function EventMarkers({ chart, events, viewRange }: EventMarkersProps) {
             left,
             top: 0,
             bottom: 0,
-            width: 20,
-            marginLeft: -10,
-            display: 'flex',
-            justifyContent: 'center',
-            background: 'transparent',
+            width: 2,
+            marginLeft: -1,
+            background: MARKER_COLOR[severity],
+            opacity: 0.55,
             cursor: 'pointer',
-            pointerEvents: 'auto',
             zIndex: 5,
           }}
-        >
-          <div
-            style={{
-              width: 2,
-              height: '100%',
-              background: MARKER_COLOR[severity],
-              opacity: 0.55,
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
+        />
       </Tooltip>
     )
   })
