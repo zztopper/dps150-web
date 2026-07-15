@@ -94,28 +94,11 @@ func getHistory(hist HistoryStore) gin.HandlerFunc {
 		if !ok {
 			return
 		}
-		if from >= to {
-			writeError(c, http.StatusBadRequest, "invalid_range",
-				"from must be earlier than to")
+		if !validateRange(c, from, to) {
 			return
 		}
-		if to-from > historyMaxRange.Milliseconds() {
-			writeError(c, http.StatusBadRequest, "invalid_range",
-				"range must not exceed 400 days")
-			return
-		}
-		resolution := c.DefaultQuery("resolution", "auto")
-		switch resolution {
-		case "raw", "1m":
-		case "auto":
-			if to-from <= historyAutoRawWindow.Milliseconds() {
-				resolution = "raw"
-			} else {
-				resolution = "1m"
-			}
-		default:
-			writeError(c, http.StatusBadRequest, "bad_request",
-				"resolution must be raw, 1m or auto")
+		resolution, ok := resolveResolution(c, from, to)
+		if !ok {
 			return
 		}
 
@@ -163,6 +146,47 @@ func queryMillis(c *gin.Context, name string) (int64, bool) {
 		return 0, false
 	}
 	return v, true
+}
+
+// validateRange checks the from/to bounds shared by the /history family
+// (API contract v2/v3): from must be earlier than to and the span must not
+// exceed 400 days. It writes 400 invalid_range itself on failure; ok
+// reports whether the range is usable. Also used by the CSV export
+// endpoints (F-019), which reuse the exact same rule minus the point cap.
+func validateRange(c *gin.Context, from, to int64) bool {
+	if from >= to {
+		writeError(c, http.StatusBadRequest, "invalid_range",
+			"from must be earlier than to")
+		return false
+	}
+	if to-from > historyMaxRange.Milliseconds() {
+		writeError(c, http.StatusBadRequest, "invalid_range",
+			"range must not exceed 400 days")
+		return false
+	}
+	return true
+}
+
+// resolveResolution parses the resolution query parameter (raw|1m|auto,
+// default auto) and, for auto, resolves it against the from/to span using
+// the same threshold as GET /history. It writes 400 bad_request itself on
+// an unrecognized value; ok reports whether resolution is usable. Also used
+// by GET /api/v1/history.csv (F-019).
+func resolveResolution(c *gin.Context, from, to int64) (string, bool) {
+	resolution := c.DefaultQuery("resolution", "auto")
+	switch resolution {
+	case "raw", "1m":
+		return resolution, true
+	case "auto":
+		if to-from <= historyAutoRawWindow.Milliseconds() {
+			return "raw", true
+		}
+		return "1m", true
+	default:
+		writeError(c, http.StatusBadRequest, "bad_request",
+			"resolution must be raw, 1m or auto")
+		return "", false
+	}
 }
 
 // writeStorageError maps storage-layer errors onto the contract's

@@ -37,6 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - API tokens and bearer/forward-auth gate (F-020, ADR-006): `api_tokens(id, name, scope, token_hash, created_at, last_used_at)` storing only the SHA-256 hash of a `dps_<base64url>` secret shown once at creation; `GET/POST /api/v1/tokens` and `DELETE /api/v1/tokens/{id}` for management, reachable only through the browser UI behind Authelia (`Remote-User`), never by a bearer token even scope `control`; a real `authGate` on `/api/v1/*` now requires either a valid `Authorization: Bearer <token>` with sufficient scope (`control` for mutations, `read` or above for reads) or a trusted `Remote-User` header, otherwise 401 `unauthorized` (403 `forbidden` for insufficient scope); a down or unconfigured token store fails a bearer attempt closed (401), never 503 — a database outage must never bypass auth. `/healthz` and `/metrics` stay outside the gate.
 - Auto-stop rules engine and API (F-018): `automation_rules`/`automation_triggers` tables (condition stored as JSON); CRUD at `GET/POST/PUT/DELETE /api/v1/automation/rules(/{id})` (404 `rule_not_found`) plus `GET /api/v1/automation/triggers` (paginated firing history), all 503 `storage_unavailable` while the database is down; a hub-subscribing `internal/automation` engine evaluates enabled rules against the live telemetry stream (`currentBelow`/`capacityAbove`/`energyAbove`/`elapsedAbove`) with duration/hysteresis (a single telemetry spike never fires a rule — the condition must hold for `forSeconds`), `scope: session` resetting a rule's progress when the output turns off vs. `scope: always` carrying it across on/off cycles; on firing it switches the output off, journals an `autoStop` entry (mirrored to WS `event`), records the trigger history and optionally notifies via the existing Telegram sender; every rule is suspended (not evaluated, no accumulated progress) while the device link is down.
+- CSV export (F-019): streaming `GET /api/v1/history.csv` (columns
+  `timestamp,voltage,current,power,temperature,output_on` for `resolution=raw`,
+  `timestamp,v_min,v_avg,v_max,i_min,i_avg,i_max,p_min,p_avg,p_max,t_avg,samples`
+  for `1m`) and `GET /api/v1/events.csv` (`timestamp,kind,data`, oldest-first,
+  filterable by `kind`), both with `Content-Disposition: attachment` and
+  ISO 8601 UTC timestamps. Range validation matches `GET /api/v1/history`
+  (`400 invalid_range`) but without the 20000-point cap: rows are read from
+  the store in fixed-size pages and flushed to the response as they arrive,
+  so an export never buffers the whole range in memory. `503
+  storage_unavailable` while the database is down.
 - Charts (F-013): a Dashboard `LiveChart` (uPlot) streaming a 5/15/30 min
   sliding V/I/P window straight from the live WS state (no extra network
   traffic), paused while the tab is hidden; a `HistoryPage` with

@@ -114,6 +114,54 @@ func runEventsSuite(t *testing.T, s *Storage) {
 	if items, total, err = s.QueryEvents(ctx, after+1, 0, nil, 0, 0); err != nil || total != 0 || len(items) != 0 {
 		t.Errorf("QueryEvents(future) = %d items, total %d, %v; want empty", len(items), total, err)
 	}
+
+	// QueryEventsPage (F-019, CSV export): keyset pagination walks the same
+	// rows oldest-first (the opposite order from QueryEvents), with no
+	// COUNT() and no OFFSET.
+	var paged []Event
+	afterTS, afterID := int64(-1), int64(-1)
+	for {
+		page, err := s.QueryEventsPage(ctx, 0, 0, nil, afterTS, afterID, 2)
+		if err != nil {
+			t.Fatalf("QueryEventsPage: %v", err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		paged = append(paged, page...)
+		last := page[len(page)-1]
+		afterTS, afterID = last.TS, last.ID
+		if len(page) < 2 {
+			break
+		}
+	}
+	if len(paged) != len(appends) {
+		t.Fatalf("QueryEventsPage walked %d rows, want %d", len(paged), len(appends))
+	}
+	for i := 1; i < len(paged); i++ {
+		prev, cur := paged[i-1], paged[i]
+		if prev.TS > cur.TS || (prev.TS == cur.TS && prev.ID >= cur.ID) {
+			t.Errorf("QueryEventsPage not oldest-first at %d: %+v then %+v", i, prev, cur)
+		}
+	}
+	if paged[0].Kind != "outputOn" {
+		t.Errorf("QueryEventsPage[0].Kind = %q, want outputOn (first appended)", paged[0].Kind)
+	}
+
+	// The kind filter narrows the walk the same way it narrows QueryEvents.
+	filtered, err := s.QueryEventsPage(ctx, 0, 0, []string{"protectionTrip"}, -1, -1, 10)
+	if err != nil {
+		t.Fatalf("QueryEventsPage(kind filter): %v", err)
+	}
+	if len(filtered) != 2 {
+		t.Errorf("QueryEventsPage(protectionTrip) = %d rows, want 2", len(filtered))
+	}
+
+	// A cursor at the last row reports the walk is done.
+	lastRow := paged[len(paged)-1]
+	if empty, err := s.QueryEventsPage(ctx, 0, 0, nil, lastRow.TS, lastRow.ID, 10); err != nil || len(empty) != 0 {
+		t.Errorf("QueryEventsPage past the end = %d rows, %v; want empty, nil", len(empty), err)
+	}
 }
 
 func TestSQLiteEvents(t *testing.T) {
@@ -155,6 +203,9 @@ func TestEventsUnavailable(t *testing.T) {
 	}
 	if _, _, err := s.QueryEvents(ctx, 0, 0, nil, 0, 0); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("QueryEvents error = %v, want ErrUnavailable", err)
+	}
+	if _, err := s.QueryEventsPage(ctx, 0, 0, nil, -1, -1, 0); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("QueryEventsPage error = %v, want ErrUnavailable", err)
 	}
 }
 
