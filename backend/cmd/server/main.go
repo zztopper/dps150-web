@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"dps150-web/backend/internal/api"
+	"dps150-web/backend/internal/automation"
 	"dps150-web/backend/internal/config"
 	"dps150-web/backend/internal/device"
 	"dps150-web/backend/internal/device/emulator"
@@ -67,7 +68,7 @@ func main() {
 	// model(s) at its anchor (`models = append(models, &pkg.Type{})`) and
 	// must not touch the other anchors.
 	models := append(history.Models(), &storage.Profile{})
-	// models:automation
+	models = append(models, &storage.AutomationRule{}, &storage.AutomationTrigger{})
 	models = append(models, &storage.ApiToken{})
 
 	store, err := storage.Open(storage.Config{
@@ -143,7 +144,19 @@ func main() {
 	// dependency construction (hub and store are in scope) at its anchor and
 	// must not touch the other anchor.
 
-	// wiring:automation
+	// Auto-stop rules engine (F-018): a hub subscriber that evaluates
+	// enabled rules against the telemetry stream and switches the output
+	// off when one fires (journaled as autoStop, mirrored to WS, optional
+	// Telegram). Fail-soft like every other storage-backed feature: it only
+	// runs when storage is configured, since rules live in the database.
+	// Subscribes to the raw hub, not the metrics.InstrumentHub wrapper: that
+	// wrapper's Subscribe counts dps150_ws_clients, which must stay a count
+	// of actual WebSocket clients.
+	if store != nil {
+		engine := automation.New(hub, store,
+			automation.WithLogger(logger), automation.WithSender(telegram))
+		go engine.Run(ctx)
+	}
 
 	// API tokens (F-020): CreateToken/LookupToken/ListTokens/DeleteToken run
 	// against the same storage.Storage already wired below via

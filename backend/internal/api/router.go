@@ -58,7 +58,11 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	// Stage-3 assembly anchors. Each parallel track replaces EXACTLY its own
 	// anchor line below with its route registrations (r, v1 and deps are in
 	// scope) and must not touch the other anchors.
-	// routes:automation
+
+	// Auto-stop rules (F-018): CRUD + trigger history, evaluated by the
+	// internal/automation engine (see wiring:automation in cmd/server).
+	registerAutomationRoutes(v1, deps.store)
+
 	// routes:export
 
 	// API tokens (F-020). Management is restricted to the browser UI behind
