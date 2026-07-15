@@ -1,7 +1,12 @@
 # Local / homelab deployment: backend + frontend (nginx) + PostgreSQL.
 #
-#   docker compose up -d          # emulator-backed stack (DPS_TRANSPORT=mock://)
-#   open http://localhost:8081    # UI via nginx; /api and WS are proxied
+# Pulls the prebuilt images published to Docker Hub by CI (backend + frontend);
+# `docker compose pull` grabs the latest. To build from source instead, use the
+# Dockerfiles in deploy/docker/ directly, or `make build` for the single binary.
+# For a PostgreSQL-free run see deploy/docker/Dockerfile.standalone (SQLite).
+#
+#   docker compose pull && docker compose up -d   # emulator-backed stack
+#   open http://localhost:8081                     # UI via nginx; /api + WS proxied
 #
 # Real PSU attached to the docker host ("serial" profile — starts an extra
 # backend wired to /dev/ttyUSB0 and points nginx at it):
@@ -14,9 +19,7 @@
 
 services:
   backend:
-    build:
-      context: .
-      dockerfile: deploy/docker/Dockerfile.backend
+    image: zztopper/dps150-web-backend:latest
     environment:
       DPS_TRANSPORT: ${DPS_TRANSPORT:-mock://}
       DPS_DB_DRIVER: postgres
@@ -30,9 +33,7 @@ services:
   # so the frontend proxies to this instance.
   backend-serial:
     profiles: ["serial"]
-    build:
-      context: .
-      dockerfile: deploy/docker/Dockerfile.backend
+    image: zztopper/dps150-web-backend:latest
     environment:
       DPS_TRANSPORT: serial:///dev/ttyUSB0
       DPS_DB_DRIVER: postgres
@@ -44,9 +45,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: .
-      dockerfile: deploy/docker/Dockerfile.frontend
+    image: zztopper/dps150-web-frontend:latest
     environment:
       # nginx proxies /api (REST + WebSocket) to this upstream, preserving
       # the Host header — required by the backend's WS origin check.

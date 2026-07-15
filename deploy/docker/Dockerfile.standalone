@@ -1,0 +1,61 @@
+# dps150-web all-in-one image: a single container serving the web UI and the
+# REST API from one Go binary (the frontend is embedded via go:embed), backed
+# by pure-Go SQLite — no PostgreSQL, no separate nginx. Ideal for a laptop, a
+# NAS or Portainer/OrbStack.
+#
+# Build context: repository root.
+#   docker build -f deploy/docker/Dockerfile.standalone -t dps150-web .
+#   docker run --rm -p 8080:8080 -v dps150-data:/data dps150-web
+#   # open http://localhost:8080  (emulator by default)
+#
+# Real PSU attached over USB:
+#   docker run --rm -p 8080:8080 -v dps150-data:/data \
+#     --device /dev/ttyUSB0 -e DPS_TRANSPORT=serial:///dev/ttyUSB0 dps150-web
+#
+# Builder Go version MUST match the major.minor in backend/go.mod (go 1.25).
+
+# --- frontend bundle ---
+FROM node:22-alpine AS frontend
+
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# --- backend binary with the UI embedded ---
+FROM golang:1.25-alpine AS backend
+
+WORKDIR /src
+# Cache module downloads separately from source changes.
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+COPY backend/ ./
+# go:embed reads backend/internal/webui/dist; drop the freshly built SPA in so
+# the compiled binary serves the UI itself (pure-Go SQLite keeps CGO off).
+COPY --from=frontend /app/dist/ ./internal/webui/dist/
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+    -o /out/dps150-server ./cmd/server
+
+# --- runtime ---
+FROM alpine:3.22
+
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates tzdata \
+    && adduser -D -H -u 10001 app \
+    && mkdir -p /data && chown app:app /data
+
+COPY --from=backend /out/dps150-server /usr/local/bin/dps150-server
+
+USER app
+
+# SQLite database lives in the /data volume; emulator transport by default.
+ENV DPS_TRANSPORT=mock:// \
+    DPS_DB_DRIVER=sqlite \
+    DPS_DB_DSN=/data/dps150.db
+VOLUME ["/data"]
+
+EXPOSE 8080
+
+ENTRYPOINT ["dps150-server"]
