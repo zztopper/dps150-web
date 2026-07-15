@@ -175,7 +175,94 @@
     }
   },
   "automation": {
-    "title": "Automation"
+    "title": "Automation",
+    "addButton": "New rule",
+    "empty": "No rules yet — add one to automatically turn the output off",
+    "disclaimer": {
+      "title": "Rules run on the server, not on the device",
+      "content": "Auto-stop is evaluated in the cluster from the live telemetry stream. If the connection to the device is lost, rules are suspended: firings do not accumulate, and auto-stop is not guaranteed while disconnected. The device's own hardware protections (OVP/OCP/OPP/OTP/LVP) are the fallback."
+    },
+    "table": {
+      "name": "Name",
+      "condition": "Condition",
+      "action": "Action",
+      "scope": "Scope",
+      "enabled": "Enabled",
+      "lastTriggered": "Last triggered",
+      "actions": "Actions"
+    },
+    "action": {
+      "outputOff": "Turn output off"
+    },
+    "scope": {
+      "session": "Current session",
+      "always": "Always"
+    },
+    "neverTriggered": "never triggered",
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "deleteConfirm": {
+      "title": "Delete rule \"{{name}}\"?",
+      "content": "This cannot be undone.",
+      "ok": "Yes, delete"
+    },
+    "deleted": "Rule deleted",
+    "saved": "Rule saved",
+    "created": "Rule created",
+    "toggled": "Rule \"{{name}}\": {{state}}",
+    "enabledOn": "enabled",
+    "enabledOff": "disabled",
+    "condition": {
+      "currentBelow": "Current < {{amps}} A held for {{forSeconds}} s",
+      "capacityAbove": "Accumulated capacity > {{ah}} Ah",
+      "energyAbove": "Accumulated energy > {{wh}} Wh",
+      "elapsedAbove": "Elapsed time > {{seconds}} s",
+      "unknown": "Unknown condition"
+    },
+    "conditionTypes": {
+      "currentBelow": "Current below threshold",
+      "capacityAbove": "Capacity above threshold",
+      "energyAbove": "Energy above threshold",
+      "elapsedAbove": "Elapsed time above threshold"
+    },
+    "form": {
+      "titleCreate": "New rule",
+      "titleEdit": "Edit rule",
+      "name": "Name",
+      "nameRequired": "Enter a name",
+      "nameMax": "At most 64 characters",
+      "conditionType": "Condition type",
+      "amps": "Current threshold, A",
+      "forSeconds": "Hold for at least, s",
+      "ah": "Capacity threshold, Ah",
+      "wh": "Energy threshold, Wh",
+      "seconds": "Time threshold, s",
+      "scope": "Scope",
+      "enabled": "Rule enabled",
+      "required": "Enter a value",
+      "positiveError": "Value must be greater than 0",
+      "save": "Save"
+    },
+    "triggers": {
+      "title": "Trigger history",
+      "empty": "No firings yet",
+      "table": {
+        "time": "Time",
+        "rule": "Rule",
+        "reason": "Reason"
+      },
+      "pagination": {
+        "total": "Total: {{total}}"
+      }
+    },
+    "errors": {
+      "storageUnavailableTitle": "Storage unavailable",
+      "storageUnavailable": "The database is unavailable — automation rules are temporarily unavailable",
+      "invalid": "Invalid rule data: {{detail}}",
+      "notFound": "Rule not found"
+    }
   },
   "export": {
     "button": "Export CSV",
