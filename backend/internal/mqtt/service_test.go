@@ -16,6 +16,7 @@ type fakeBroker struct {
 	mu        sync.Mutex
 	published map[string][]byte // last retained payload per topic
 	pubCount  map[string]int
+	syncCount map[string]int // publishes made via PublishSync
 	subs      map[string]func(string, []byte)
 }
 
@@ -23,17 +24,30 @@ func newFakeBroker() *fakeBroker {
 	return &fakeBroker{
 		published: map[string][]byte{},
 		pubCount:  map[string]int{},
+		syncCount: map[string]int{},
 		subs:      map[string]func(string, []byte){},
 	}
+}
+
+func (b *fakeBroker) record(topic string, payload []byte) {
+	cp := make([]byte, len(payload))
+	copy(cp, payload)
+	b.published[topic] = cp
+	b.pubCount[topic]++
 }
 
 func (b *fakeBroker) Publish(topic string, _ byte, _ bool, payload []byte) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	cp := make([]byte, len(payload))
-	copy(cp, payload)
-	b.published[topic] = cp
-	b.pubCount[topic]++
+	b.record(topic, payload)
+	return nil
+}
+
+func (b *fakeBroker) PublishSync(topic string, _ byte, _ bool, payload []byte) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.record(topic, payload)
+	b.syncCount[topic]++
 	return nil
 }
 
@@ -50,6 +64,24 @@ func (b *fakeBroker) last(topic string) []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.published[topic]
+}
+
+func (b *fakeBroker) count(topic string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.pubCount[topic]
+}
+
+func (b *fakeBroker) syncCountOf(topic string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.syncCount[topic]
+}
+
+func (b *fakeBroker) subscription(topic string) func(string, []byte) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.subs[topic]
 }
 
 type fakeHub struct {
@@ -155,6 +187,55 @@ func TestOnConnectPublishesDiscoveryOnlineAndState(t *testing.T) {
 	}
 	if broker.last(s.cfg.stateTopic()) == nil {
 		t.Error("state topic not seeded")
+	}
+}
+
+func TestOnConnectPublishesDiscoverySynchronously(t *testing.T) {
+	broker := newFakeBroker()
+	s := New(&fakeHub{snap: device.Snapshot{Connected: true}}, testConfig(false), WithBroker(broker))
+
+	s.onConnect()
+
+	// Every discovery config must be published exactly once, via PublishSync
+	// (the reliability fix), so a dropped publish surfaces instead of vanishing.
+	topic := s.cfg.discoveryTopic("sensor", "voltage")
+	if got := broker.syncCountOf(topic); got != 1 {
+		t.Errorf("voltage discovery synchronous publishes = %d, want 1", got)
+	}
+	if got := broker.count(topic); got != 1 {
+		t.Errorf("voltage discovery total publishes = %d, want 1", got)
+	}
+	// The birth topic must be subscribed regardless of control mode.
+	if broker.subscription(s.cfg.birthTopic()) == nil {
+		t.Error("HA birth topic not subscribed")
+	}
+}
+
+func TestBirthOnlineRepublishesDiscovery(t *testing.T) {
+	broker := newFakeBroker()
+	s := New(&fakeHub{snap: device.Snapshot{Connected: true}}, testConfig(false), WithBroker(broker))
+
+	s.onConnect()
+	topic := s.cfg.discoveryTopic("sensor", "voltage")
+	if got := broker.count(topic); got != 1 {
+		t.Fatalf("discovery publishes after connect = %d, want 1", got)
+	}
+
+	birth := broker.subscription(s.cfg.birthTopic())
+	if birth == nil {
+		t.Fatal("HA birth topic not subscribed")
+	}
+
+	// HA restart re-announces "online" (case-insensitive) -> discovery republish.
+	birth(s.cfg.birthTopic(), []byte("online"))
+	if got := broker.count(topic); got != 2 {
+		t.Errorf("discovery publishes after birth online = %d, want 2 (republished)", got)
+	}
+
+	// A non-online birth payload (e.g. HA going offline) must not republish.
+	birth(s.cfg.birthTopic(), []byte("offline"))
+	if got := broker.count(topic); got != 2 {
+		t.Errorf("discovery publishes after birth offline = %d, want 2 (unchanged)", got)
 	}
 }
 

@@ -182,6 +182,15 @@ func WithSender(s Sender) Option {
 	return func(e *Engine) { e.sender = s }
 }
 
+// WithActiveSuppressor installs a predicate that, while it returns true,
+// suspends rule evaluation entirely — no rule fires and no progress
+// accumulates. It is used to yield the device to a programmable-sequence run
+// (F-022): the sequence owns the output for its whole life, so the auto-stop
+// engine must not fight it. Default nil = never suppress.
+func WithActiveSuppressor(fn func() bool) Option {
+	return func(e *Engine) { e.suppress = fn }
+}
+
 // Engine evaluates automation rules against the hub's telemetry stream and
 // switches the output off when one fires. Create it with New and drive it
 // with Run.
@@ -191,6 +200,10 @@ type Engine struct {
 	log   *slog.Logger
 
 	sender Sender
+
+	// suppress, when non-nil and returning true, suspends rule evaluation
+	// (see WithActiveSuppressor).
+	suppress func() bool
 
 	reloadInterval time.Duration
 
@@ -324,6 +337,11 @@ func (e *Engine) handleStatus(v device.StatusChange) {
 // handleTelemetry evaluates every enabled rule against one telemetry tick.
 func (e *Engine) handleTelemetry(ctx context.Context, t device.Telemetry) {
 	if !e.linkUp {
+		return
+	}
+	// A programmable-sequence run owns the device: suspend evaluation so no
+	// rule fires or accumulates progress while it is active (F-022).
+	if e.suppress != nil && e.suppress() {
 		return
 	}
 	for id, rule := range e.rules {

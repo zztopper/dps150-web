@@ -36,6 +36,12 @@ type HubReader interface {
 // implementation is newPahoBroker; tests inject a fake.
 type Broker interface {
 	Publish(topic string, qos byte, retained bool, payload []byte) error
+	// PublishSync publishes and waits for the broker to acknowledge the
+	// message (bounded by a timeout), returning any error. Used for the HA
+	// discovery configs so a silently-dropped publish (the F-021 prod
+	// regression: HA never received discovery) surfaces as a WARN instead of
+	// vanishing.
+	PublishSync(topic string, qos byte, retained bool, payload []byte) error
 	Subscribe(topic string, qos byte, cb func(topic string, payload []byte)) error
 	Disconnect()
 }
@@ -137,27 +143,44 @@ func (s *Service) Run(ctx context.Context) {
 	}
 }
 
-// onConnect runs on every (re)connect: republish retained discovery, mark
-// online, resubscribe commands, and seed the state topic from a snapshot.
+// onConnect runs on every (re)connect: republish retained discovery
+// (synchronously, so a failed publish is logged instead of silently lost),
+// mark online, resubscribe commands, subscribe the HA birth topic, and seed
+// the state topic from a snapshot.
 func (s *Service) onConnect() {
-	s.publishDiscovery()
+	published := s.publishDiscovery()
 	_ = s.broker.Publish(s.cfg.statusTopic(), qosAtLeastOnce, true, []byte("online"))
 	if s.cfg.Control {
 		s.subscribeCommands()
 	}
+	// Subscribe the HA birth topic regardless of control mode: an HA restart
+	// re-announces "online" there, and we must re-seed discovery even for a
+	// read-only integration.
+	s.subscribeBirth()
 	s.applySnapshot(s.hub.Snapshot())
 	s.publishState()
+	s.log.Info("mqtt: connected; published HA discovery",
+		"entities", published, "control", s.cfg.Control)
 }
 
-func (s *Service) publishDiscovery() {
+// publishDiscovery publishes each retained HA Discovery config synchronously
+// (waiting for the broker ack), returning how many succeeded. A failed publish
+// is logged at WARN and skipped rather than aborting the rest.
+func (s *Service) publishDiscovery() int {
+	published := 0
 	for _, m := range s.cfg.discoveryMessages() {
 		payload, err := json.Marshal(m.payload)
 		if err != nil {
 			s.log.Error("mqtt: marshal discovery config", "topic", m.topic, "error", err)
 			continue
 		}
-		_ = s.broker.Publish(m.topic, qosAtLeastOnce, true, payload)
+		if err := s.broker.PublishSync(m.topic, qosAtLeastOnce, true, payload); err != nil {
+			s.log.Warn("mqtt: discovery publish failed", "topic", m.topic, "error", err)
+			continue
+		}
+		published++
 	}
+	return published
 }
 
 func (s *Service) subscribeCommands() {
@@ -167,6 +190,30 @@ func (s *Service) subscribeCommands() {
 			s.log.Error("mqtt: subscribe command topic", "topic", topic, "error", err)
 		}
 	}
+}
+
+// subscribeBirth subscribes the HA birth topic so an HA restart triggers a
+// discovery + state republish (see handleBirth).
+func (s *Service) subscribeBirth() {
+	topic := s.cfg.birthTopic()
+	if err := s.broker.Subscribe(topic, qosAtLeastOnce, s.handleBirth); err != nil {
+		s.log.Error("mqtt: subscribe birth topic", "topic", topic, "error", err)
+	}
+}
+
+// handleBirth reacts to an HA birth message: on "online" (case-insensitive) it
+// republishes the retained discovery configs and re-seeds availability + state,
+// so entities reappear after an HA restart. Any other payload is ignored.
+func (s *Service) handleBirth(_ string, payload []byte) {
+	if !strings.EqualFold(strings.TrimSpace(string(payload)), "online") {
+		return
+	}
+	s.log.Info("mqtt: HA online (birth); republishing discovery + state")
+	published := s.publishDiscovery()
+	_ = s.broker.Publish(s.cfg.statusTopic(), qosAtLeastOnce, true, []byte("online"))
+	s.applySnapshot(s.hub.Snapshot())
+	s.publishState()
+	s.log.Info("mqtt: HA online (birth); republished discovery", "entities", published)
 }
 
 // handleCommand turns a command message into a hub call. It runs on the

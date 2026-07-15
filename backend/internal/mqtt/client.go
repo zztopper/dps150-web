@@ -1,6 +1,7 @@
 package mqtt
 
 import (
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -11,6 +12,10 @@ import (
 // paho client keeps retrying in the background afterwards, so a broker that is
 // briefly down does not fail startup.
 const connectWait = 10 * time.Second
+
+// publishSyncTimeout bounds a synchronous publish (PublishSync) so a wedged
+// broker cannot block the connect/birth handlers indefinitely.
+const publishSyncTimeout = 5 * time.Second
 
 // pahoBroker adapts the eclipse paho client to the Broker interface.
 type pahoBroker struct {
@@ -63,6 +68,14 @@ func (b *pahoBroker) Publish(topic string, qos byte, retained bool, payload []by
 		}
 	}()
 	return nil
+}
+
+func (b *pahoBroker) PublishSync(topic string, qos byte, retained bool, payload []byte) error {
+	tok := b.client.Publish(topic, qos, retained, payload)
+	if !tok.WaitTimeout(publishSyncTimeout) {
+		return fmt.Errorf("mqtt: publish %q timed out after %s", topic, publishSyncTimeout)
+	}
+	return tok.Error()
 }
 
 func (b *pahoBroker) Subscribe(topic string, qos byte, cb func(topic string, payload []byte)) error {
