@@ -46,7 +46,7 @@
               │     │  ├ REST API + WebSocket             │           │
               │     │  └ Telegram-уведомления             │           │
               │  frontend (React SPA, nginx)              │           │
-              │  Ingress: dps150.r2bnj.ru (Traefik,       │           │
+              │  Ingress: dps150.example.com (Traefik,    │           │
               │    cert-manager letsencrypt-cloudflare,   │           │
               │    Authelia forward-auth на весь хост)    │           │
               └────────│───────────────────────────────────┘          │
@@ -121,7 +121,7 @@
 
 ### 3.5 Безопасность
 
-- Ingress `dps150.r2bnj.ru` целиком за Authelia forward-auth
+- Ingress `dps150.example.com` целиком за Authelia forward-auth
   (middleware `authelia-forwardauth-authelia@kubernetescrd`), SSO кластера.
 - ser2net на pve: слушает только для подсети кластера (файрвол/bind).
 - Секреты (PG, Telegram token) — Vault → VaultStaticSecret → k8s Secret.
@@ -133,12 +133,12 @@
 
 - **Одно окружение** (ns `dps150`): второй инстанс не смог бы подключиться
   к одноклиентскому ser2net; e2e и разработка — на эмуляторе.
-- GitLab CI (`gitlab.zztopper.ru`, registry `:5005`): lint → test → build;
+- GitLab CI (`git.example.com`, registry `:5005`): lint → test → build;
   CI только собирает и пушит образы (:short-sha + :latest на master).
 - Деплой — GitOps через ArgoCD (ADR-005): чарт живёт в
   `infrastructure/argocd-platform` `apps/dps150/`, релиз = MR с бампом
   `image.tag`; ApplicationSet создаёт namespace с PSA-лейблами, selfHeal.
-- Кластерные факты: dnsDomain `k8s.r2bnj.ru` (не cluster.local!), ingress-class
+- Кластерные факты: dnsDomain `k8s.example.com` (не cluster.local!), ingress-class
   `traefik`, cert-manager ClusterIssuer `letsencrypt-cloudflare`,
   external-dns → Cloudflare, storage `longhorn` (для БД не нужен — БД в CNPG).
 - Локальный запуск: бинарь (serial+SQLite), docker-compose
