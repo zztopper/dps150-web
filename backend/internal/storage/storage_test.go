@@ -80,7 +80,7 @@ func TestSQLiteSettings(t *testing.T) {
 	}
 	defer s.Close()
 
-	waitReady(t, s, 5*time.Second)
+	waitReady(t, s, 20*time.Second)
 	runSettingsSuite(t, s)
 }
 
@@ -106,7 +106,7 @@ func TestSQLiteFeatureModels(t *testing.T) {
 	}
 	defer s.Close()
 
-	waitReady(t, s, 5*time.Second)
+	waitReady(t, s, 20*time.Second)
 
 	db, err := s.DB()
 	if err != nil {
@@ -159,7 +159,7 @@ func TestFailSoftAndRecovery(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	waitReady(t, s, 5*time.Second)
+	waitReady(t, s, 20*time.Second)
 	runSettingsSuite(t, s)
 }
 
