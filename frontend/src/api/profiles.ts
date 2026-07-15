@@ -1,7 +1,7 @@
 // Saved profiles (F-010) and hardware presets M1-M6 (F-011).
 // Mirrors docs/architecture/api-contract.md, "API contract v2" section.
 import type { Protections } from './types'
-import { apiRequest } from './http'
+import { apiRequest } from './client'
 
 export interface Profile {
   id: number

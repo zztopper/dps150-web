@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type uPlot from 'uplot'
 import { renderWithProviders } from '../../test/render'
-import type { HistoryEvent } from './historyTypes'
+import type { HistoryEvent } from '../../api/types'
 import { EventMarkers } from './EventMarkers'
 
 const PLOT_WIDTH = 300

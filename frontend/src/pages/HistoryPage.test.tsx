@@ -66,6 +66,7 @@ function historyCalls(fetchMock: ReturnType<typeof vi.fn>): string[] {
 describe('HistoryPage', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('fetches the "day" preset range with resolution=auto on mount', async () => {
@@ -156,5 +157,58 @@ describe('HistoryPage', () => {
     expect(
       await screen.findByText('Хранилище истории недоступно, попробуйте позже'),
     ).toBeInTheDocument()
+  })
+
+  // F-019: the "Export CSV" button downloads /api/v1/history.csv with
+  // the currently viewed [from, to] and resolution=auto (the button
+  // does not go through fetch/TanStack Query at all — it triggers a
+  // native browser download via a transient <a> element).
+  it('exports the currently viewed range as history.csv', async () => {
+    const fetchMock = stubFetch()
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(historyCalls(fetchMock).length).toBeGreaterThan(0))
+
+    let capturedHref: string | undefined
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      capturedHref = this.href
+    })
+
+    screen.getByRole('button', { name: 'Экспорт CSV' }).click()
+
+    expect(capturedHref).toBeDefined()
+    const url = new URL(capturedHref!)
+    expect(url.pathname).toBe('/api/v1/history.csv')
+    expect(url.searchParams.get('resolution')).toBe('auto')
+
+    const from = Number(url.searchParams.get('from'))
+    const to = Number(url.searchParams.get('to'))
+    expect(to - from).toBeCloseTo(24 * 60 * 60 * 1000, -3)
+  })
+
+  it('exports the zoomed-in range (not the base preset range) after a preset switch', async () => {
+    const fetchMock = stubFetch()
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(historyCalls(fetchMock).length).toBeGreaterThan(0))
+
+    const presetGroup = screen.getByText('Час').closest('div')
+    expect(presetGroup).not.toBeNull()
+    within(presetGroup!).getByText('Час').click()
+    await waitFor(() => expect(historyCalls(fetchMock).length).toBeGreaterThan(1))
+
+    let capturedHref: string | undefined
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      capturedHref = this.href
+    })
+
+    screen.getByRole('button', { name: 'Экспорт CSV' }).click()
+
+    const url = new URL(capturedHref!)
+    const from = Number(url.searchParams.get('from'))
+    const to = Number(url.searchParams.get('to'))
+    expect(to - from).toBeCloseTo(60 * 60 * 1000, -3)
   })
 })

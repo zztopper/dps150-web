@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { History1mResponse, HistoryRawResponse } from './historyTypes'
+import type { History1mResponse, HistoryRawResponse } from '../../api/types'
 import {
   MINUTE_SERIES_INDEX,
   RAW_SERIES_INDEX,

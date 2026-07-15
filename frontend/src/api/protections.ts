@@ -1,7 +1,7 @@
 // Protection thresholds (F-014). Mirrors
 // docs/architecture/api-contract.md, "Уставки защит (F-014)".
 import type { Protections } from './types'
-import { apiRequest } from './http'
+import { apiRequest } from './client'
 
 /** Body of PUT /api/v1/device/protections — any non-empty subset. */
 export type ProtectionsInput = Partial<Protections>

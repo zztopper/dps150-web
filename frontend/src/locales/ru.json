@@ -10,6 +10,7 @@
     "history": "История",
     "profiles": "Профили",
     "events": "События",
+    "automation": "Автоматика",
     "settings": "Настройки",
     "menu": "Меню"
   },
@@ -172,6 +173,15 @@
       "storageUnavailableTitle": "Хранилище недоступно",
       "storageUnavailable": "База данных недоступна — журнал событий временно недоступен"
     }
+  },
+  "automation": {
+    "title": "Автоматика"
+  },
+  "export": {
+    "button": "Экспорт CSV",
+    "range": "Диапазон экспорта",
+    "customFrom": "С",
+    "customTo": "По"
   },
   "protections": {
     "title": "Уставки защит",

@@ -35,6 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
 
 ### Added
+- CSV export UI (F-019): "Export CSV" buttons on the History and Events
+  pages (`src/api/export.ts`) build the `GET /api/v1/history.csv`
+  (current viewed `[from, to]` and `resolution=auto`) / `GET
+  /api/v1/events.csv` (current kind filter plus a dedicated export date
+  range, defaulting to the last 24 h) URLs and hand them to the browser
+  via a transient `<a download>` element — the backend's own
+  `Content-Disposition: attachment` does the rest, so there is no
+  fetch/blob buffering of the exported file in page memory.
 - API tokens and bearer/forward-auth gate (F-020, ADR-006): `api_tokens(id, name, scope, token_hash, created_at, last_used_at)` storing only the SHA-256 hash of a `dps_<base64url>` secret shown once at creation; `GET/POST /api/v1/tokens` and `DELETE /api/v1/tokens/{id}` for management, reachable only through the browser UI behind Authelia (`Remote-User`), never by a bearer token even scope `control`; a real `authGate` on `/api/v1/*` now requires either a valid `Authorization: Bearer <token>` with sufficient scope (`control` for mutations, `read` or above for reads) or a trusted `Remote-User` header, otherwise 401 `unauthorized` (403 `forbidden` for insufficient scope); a down or unconfigured token store fails a bearer attempt closed (401), never 503 — a database outage must never bypass auth. `/healthz` and `/metrics` stay outside the gate.
 - Auto-stop rules engine and API (F-018): `automation_rules`/`automation_triggers` tables (condition stored as JSON); CRUD at `GET/POST/PUT/DELETE /api/v1/automation/rules(/{id})` (404 `rule_not_found`) plus `GET /api/v1/automation/triggers` (paginated firing history), all 503 `storage_unavailable` while the database is down; a hub-subscribing `internal/automation` engine evaluates enabled rules against the live telemetry stream (`currentBelow`/`capacityAbove`/`energyAbove`/`elapsedAbove`) with duration/hysteresis (a single telemetry spike never fires a rule — the condition must hold for `forSeconds`), `scope: session` resetting a rule's progress when the output turns off vs. `scope: always` carrying it across on/off cycles; on firing it switches the output off, journals an `autoStop` entry (mirrored to WS `event`), records the trigger history and optionally notifies via the existing Telegram sender; every rule is suspended (not evaluated, no accumulated progress) while the device link is down.
 - CSV export (F-019): streaming `GET /api/v1/history.csv` (columns
