@@ -129,6 +129,36 @@ enabled by config.
   Enabling the output is only an explicit action with confirmation in the UI.
 - (Stage 3) API tokens for scripted access.
 
+### 3.6 Home Assistant / MQTT + Prometheus telemetry (ADR-007)
+
+Decision: expose the supply to Home Assistant over MQTT Discovery, and export
+the live telemetry as Prometheus gauges for a Grafana dashboard.
+
+- **MQTT** — a new independent hub subscriber (`internal/mqtt`, alongside the
+  journal/automation/metrics subscribers), enabled only when `DPS_MQTT_BROKER`
+  is set (silent-off otherwise, mirroring the Telegram credential gate). It
+  publishes a retained JSON state topic (`<prefix>/state`), an availability
+  topic with an MQTT Last-Will (`<prefix>/status`), and retained HA Discovery
+  configs so the entities (voltage/current/power/temperature/input-voltage/
+  Ah/Wh sensors, CC-CV and protection sensors, a device-link connectivity
+  binary sensor) appear automatically.
+- **Control** is opt-in via `DPS_MQTT_CONTROL` (default off, mirroring
+  `DPS_AUTH_REQUIRED`). When on, an output `switch` and voltage/current
+  `number` entities are published and their command topics call the hub's
+  `SetOutput`/`SetVoltage`/`SetCurrent`. **Trust model:** MQTT commands do
+  **not** pass through Authelia or the token gate — the broker's own
+  authentication/ACLs are the trust boundary, so control must only be enabled
+  against a broker the owner controls. As at the hub level, energizing the
+  output over MQTT has no confirmation interlock: `SetOutput(true)` applies
+  immediately. Applying power over MQTT is therefore a deliberate, ACL-gated
+  capability, kept off by default.
+- **Prometheus** — the existing metrics hub-watcher additionally sets
+  `dps150_{voltage_volts,current_amps,power_watts,temperature_celsius,
+  input_voltage_volts,capacity_amp_hours,energy_watt_hours,output_enabled,
+  setpoint_voltage_volts,setpoint_current_amps}` from the same telemetry
+  stream. `deploy/grafana/dashboard.json` renders them plus the existing
+  link/protection/latency series.
+
 ## 4. Deploy and environments
 
 - **Single environment** (ns `dps150`): a second instance could not connect

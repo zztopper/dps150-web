@@ -1,0 +1,191 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus data source scraping the dps150-web /metrics endpoint",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "state-timeline", "name": "State timeline", "version": "" }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["dps150", "power-supply"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1,
+        "regex": ""
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "5s",
+  "title": "DPS-150 power supply",
+  "uid": "dps150-web",
+  "version": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Voltage",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "volt", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "yellow" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "expr": "dps150_voltage_volts", "datasource": { "type": "prometheus", "uid": "${datasource}" } } ]
+    },
+    {
+      "type": "stat",
+      "title": "Current",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "amp", "decimals": 3, "color": { "mode": "fixed", "fixedColor": "orange" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "expr": "dps150_current_amps", "datasource": { "type": "prometheus", "uid": "${datasource}" } } ]
+    },
+    {
+      "type": "stat",
+      "title": "Power",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "watt", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "expr": "dps150_power_watts", "datasource": { "type": "prometheus", "uid": "${datasource}" } } ]
+    },
+    {
+      "type": "stat",
+      "title": "Temperature",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "celsius", "decimals": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 50 }, { "color": "red", "value": 70 } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "expr": "dps150_temperature_celsius", "datasource": { "type": "prometheus", "uid": "${datasource}" } } ]
+    },
+    {
+      "type": "stat",
+      "title": "Output",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "OFF", "color": "red" }, "1": { "text": "ON", "color": "green" } } } ], "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "expr": "dps150_output_enabled", "datasource": { "type": "prometheus", "uid": "${datasource}" } } ]
+    },
+    {
+      "type": "stat",
+      "title": "Device link",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ], "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "expr": "dps150_device_connected", "datasource": { "type": "prometheus", "uid": "${datasource}" } } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Voltage — measured vs setpoint",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "volt", "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [ { "matcher": { "id": "byName", "options": "setpoint" }, "properties": [ { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [ 8, 6 ] } }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "semi-dark-blue" } } ] } ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "dps150_voltage_volts", "legendFormat": "measured", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "refId": "B", "expr": "dps150_setpoint_voltage_volts", "legendFormat": "setpoint", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Current — measured vs setpoint",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "amp", "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [ { "matcher": { "id": "byName", "options": "setpoint" }, "properties": [ { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [ 8, 6 ] } }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "semi-dark-orange" } } ] } ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "dps150_current_amps", "legendFormat": "measured", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "refId": "B", "expr": "dps150_setpoint_current_amps", "legendFormat": "setpoint", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Power",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "watt", "custom": { "drawStyle": "line", "fillOpacity": 20, "showPoints": "never" }, "color": { "mode": "fixed", "fixedColor": "red" } } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [ { "refId": "A", "expr": "dps150_power_watts", "legendFormat": "power", "datasource": { "type": "prometheus", "uid": "${datasource}" } } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Temperature & input voltage",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 12 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "showPoints": "never" } }, "overrides": [ { "matcher": { "id": "byName", "options": "temperature" }, "properties": [ { "id": "unit", "value": "celsius" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }, { "matcher": { "id": "byName", "options": "input voltage" }, "properties": [ { "id": "unit", "value": "volt" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] } ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "dps150_temperature_celsius", "legendFormat": "temperature", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "refId": "B", "expr": "dps150_input_voltage_volts", "legendFormat": "input voltage", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Energy — charge (Ah) & energy (Wh)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 12 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "showPoints": "never" } }, "overrides": [ { "matcher": { "id": "byName", "options": "charge" }, "properties": [ { "id": "unit", "value": "none" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] }, { "matcher": { "id": "byName", "options": "energy" }, "properties": [ { "id": "unit", "value": "watth" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } } ] } ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "dps150_capacity_amp_hours", "legendFormat": "charge", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "refId": "B", "expr": "dps150_energy_watt_hours", "legendFormat": "energy", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+      ]
+    },
+    {
+      "type": "state-timeline",
+      "title": "Active protection",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 19 },
+      "description": "One-hot per protection label (OVP/OCP/OPP/OTP/LVP/REP); a colored segment means that protection is active.",
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 80 }, "mappings": [ { "type": "value", "options": { "0": { "text": "", "color": "transparent" }, "1": { "text": "TRIP", "color": "red" } } } ], "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "transparent", "value": null }, { "color": "red", "value": 1 } ] } } },
+      "options": { "mergeValues": true, "showValue": "never", "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [ { "refId": "A", "expr": "dps150_protection_state{protection!=\"ok\"}", "legendFormat": "{{protection}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Command latency (p50 / p95)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 19 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "showPoints": "never" } } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le, command) (rate(dps150_command_duration_seconds_bucket[5m])))", "legendFormat": "p50 {{command}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le, command) (rate(dps150_command_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{command}}", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Reliability — reconnects, dropped events, WS clients",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 26 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "showPoints": "never" } } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "rate(dps150_device_reconnects_total[5m])", "legendFormat": "reconnects/s", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "refId": "B", "expr": "rate(dps150_events_dropped_total[5m])", "legendFormat": "dropped events/s", "datasource": { "type": "prometheus", "uid": "${datasource}" } },
+        { "refId": "C", "expr": "dps150_ws_clients", "legendFormat": "WS clients", "datasource": { "type": "prometheus", "uid": "${datasource}" } }
+      ]
+    }
+  ]
+}

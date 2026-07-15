@@ -39,6 +39,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docker/*` v4/v6/v7) to clear the Node.js 20 deprecation warning.
 
 ### Added
+- Home Assistant integration over MQTT Discovery (F-021, `internal/mqtt`):
+  a retained JSON state topic, an availability topic with an MQTT Last-Will,
+  and auto-published discovery configs so the supply shows up in HA as
+  sensors (V/I/P, temperature, input voltage, Ah/Wh, CC-CV mode, active
+  protection, device-link connectivity). Control is opt-in via
+  `DPS_MQTT_CONTROL` (default off): when enabled, an output `switch` and
+  voltage/current `number` entities become available. MQTT commands bypass the
+  Authelia/token gate by design — the broker's own auth/ACLs are the trust
+  boundary (ADR-007).
+- Prometheus telemetry gauges (F-021): `dps150_voltage_volts`,
+  `dps150_current_amps`, `dps150_power_watts`, `dps150_temperature_celsius`,
+  `dps150_input_voltage_volts`, `dps150_capacity_amp_hours`,
+  `dps150_energy_watt_hours`, `dps150_output_enabled`, and the voltage/current
+  setpoint gauges — plus `deploy/grafana/dashboard.json`, a ready Grafana
+  dashboard over them and the existing link/protection/latency series.
 - README screenshots (dashboard, history, automation, profiles, events,
   settings) captured from the running app with the device emulator.
 - GitHub Actions workflow that builds and publishes the backend and
