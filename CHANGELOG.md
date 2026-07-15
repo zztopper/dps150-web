@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
 
 ### Added
+- Test hardening (TD-004): storage-ready waits in backend test helpers
+  raised from 5s to 20s to stop flakes when the shared CI runner is
+  contended.
 - Open-source preparation (D-001): MIT `LICENSE`, an English `README.md`,
   a `CONTRIBUTING.md`, and genericized deployment specifics — private
   domains replaced with `example.com` placeholders in docs and godoc, and
