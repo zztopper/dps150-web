@@ -3,6 +3,7 @@ import { Alert, App as AntApp, Card, Flex, Skeleton, Switch, Typography } from '
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client'
+import { ApiTokensSection } from '../components/ApiTokensSection'
 
 // Notification settings (F-015): GET/PUT /api/v1/settings/notifications.
 // Not modeled in api/types.ts (owned by another track) — kept local to
@@ -158,6 +159,11 @@ export function SettingsPage() {
           </Flex>
         </Card>
       )}
+
+      {/* API tokens (F-020): independent of the notification settings
+          above — its own query/error state, never disabled by the
+          Telegram-not-configured banner. */}
+      <ApiTokensSection />
     </Flex>
   )
 }
