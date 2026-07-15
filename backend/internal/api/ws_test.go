@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
@@ -47,7 +48,9 @@ func TestWebSocketStateThenTelemetry(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := websocket.Dial(ctx, srv.URL+"/api/v1/ws", nil)
+	conn, _, err := websocket.Dial(ctx, srv.URL+"/api/v1/ws", &websocket.DialOptions{
+		HTTPHeader: http.Header{"Remote-User": {testRemoteUser}},
+	})
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
 	}

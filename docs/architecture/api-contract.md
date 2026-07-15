@@ -203,3 +203,86 @@ dashboard), `HistoryPage.tsx` (F-013), `ProfilesPage.tsx` (F-010/011),
 (F-010), `src/components/MeteringCard.tsx` (F-017). Каждый трек добавляет ТОЛЬКО
 свои файлы + одну строку подключения слота в DashboardPage (место помечено
 комментариями-якорями `{/* slot:... */}`). i18n-ключи — с префиксом страницы.
+
+---
+
+# API contract v3: Этап 3 (v1.0)
+
+Зафиксировано для параллельной разработки F-018/F-019/F-020. Правила v1/v2
+действуют. Аутентификация — ADR-006: браузерный UI за Authelia (хост
+`dps150.r2bnj.ru`), скриптовый доступ — Bearer-токен на отдельном хосте
+`dps150-api.r2bnj.ru`. Backend-middleware на `/api/*`: пропускает запрос,
+если есть валидный `Authorization: Bearer <token>` (с нужным scope) ИЛИ
+доверенный заголовок `Remote-User` от Authelia; иначе 401 `unauthorized`.
+Мутации (PUT/POST/DELETE) требуют scope `control`; GET — `read` или выше.
+
+Гейт включается флагом `DPS_AUTH_REQUIRED` (env, default `false`). Локальный
+однопользовательский запуск, docker-compose, e2e и mock работают с открытым
+API (auth off); в кластере чарт выставляет `DPS_AUTH_REQUIRED=true`.
+
+## Правила автостопа (F-018)
+
+`AutomationRule`:
+```json
+{
+  "id": 1, "name": "Заряд АКБ до отсечки", "enabled": true,
+  "condition": {"type": "currentBelow", "amps": 0.05, "forSeconds": 300},
+  "action": "outputOff",
+  "scope": "session",
+  "createdAt": <ms>, "updatedAt": <ms>,
+  "lastTriggeredAt": <ms|null>
+}
+```
+- `condition.type`: `currentBelow {amps, forSeconds}` | `capacityAbove {ah}` |
+  `energyAbove {wh}` | `elapsedAbove {seconds}`. Длительность/гистерезис —
+  на стороне движка (единичный выброс не срабатывает).
+- `action`: пока только `outputOff` (зарезервировано на расширение).
+- `scope`: `session` (действует только в рамках текущей сессии выхода, сбрасывается при выключении) | `always`.
+- Эндпоинты: `GET /api/v1/automation/rules` → `{"items":[...]}`;
+  `POST`/`PUT /api/v1/automation/rules/{id}`/`DELETE ...` (CRUD, 404 `rule_not_found`);
+  `GET /api/v1/automation/triggers?limit&offset` → история срабатываний
+  `{"items":[{"id","ruleId","ruleName","ts","reason"}],"total"}`.
+- При срабатывании: выключить выход + событие журнала `autoStop
+  {ruleId, ruleName, reason}` + Telegram. При потере связи с устройством
+  правило переходит в `suspended` (не оценивается, срабатывания не копятся);
+  движок исполняется в кластере — при обрыве автостоп НЕ гарантирован
+  (подстраховка — аппаратные защиты). Состояние правила в WS-сообщении
+  `event` kind `autoStop` при срабатывании.
+- Хранение: таблица `automation_rules(id PK, name, enabled, condition JSON,
+  action, scope, created_at, updated_at, last_triggered_at)`;
+  `automation_triggers(id PK, rule_id INDEX, rule_name, ts INDEX, reason)`.
+
+## Экспорт CSV (F-019)
+
+- `GET /api/v1/history.csv?from&to&resolution` — стриминговый text/csv,
+  `Content-Disposition: attachment; filename="dps150-history-<from>-<to>.csv"`.
+  Колонки raw: `timestamp,voltage,current,power,temperature,output_on`
+  (timestamp — ISO 8601 UTC). Для 1m: `timestamp,v_min,v_avg,v_max,i_min,
+  i_avg,i_max,p_min,p_avg,p_max,t_avg,samples`. Ограничения диапазона — как
+  у `/history` (invalid_range), но без лимита 20000 (стриминг). 503 при
+  недоступной БД.
+- `GET /api/v1/events.csv?from&to&kind` — стриминговый, колонки
+  `timestamp,kind,data` (data — JSON-строка).
+- Стриминг: строки пишутся по мере чтения из БД (курсор/пагинация), без
+  сборки всего в память.
+
+## API-токены (F-020)
+
+`ApiToken` (метаданные, без секрета): `{"id":1, "name":"lab script",
+"scope":"control", "createdAt":<ms>, "lastUsedAt":<ms|null>}`.
+- `GET /api/v1/tokens` → `{"items":[ApiToken...]}` (только метаданные).
+- `POST /api/v1/tokens` тело `{"name":"...", "scope":"read"|"control"}` →
+  `201 {"token":"dps_<base64url>", ...ApiToken}` — СЕКРЕТ показывается
+  единожды; в БД хранится только SHA-256 хэш.
+- `DELETE /api/v1/tokens/{id}` → `204`; отозванный токен перестаёт
+  работать немедленно (проверка хэша по БД, без кэша дольше запроса).
+- Управление токенами доступно ТОЛЬКО через UI за Authelia (не по токену).
+- Токены НИКОГДА не логируются (ни секрет, ни заголовок Authorization).
+
+## Файловая структура фронтенда (Этап 3)
+
+Новые страницы/компоненты в своих файлах: `src/pages/AutomationPage.tsx`
+(F-018, маршрут /automation + пункт меню), кнопки экспорта на HistoryPage и
+EventsPage (F-019), секция токенов в SettingsPage (F-020). i18n-префиксы:
+`automation.*`, `export.*`, `tokens.*`. TD-002: консолидация history/events
+типов из components/chart/* в `src/api/`.

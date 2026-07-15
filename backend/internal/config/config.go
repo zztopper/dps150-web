@@ -22,6 +22,10 @@ type Config struct {
 	// DBDSN is the database DSN: a file path for sqlite,
 	// postgres://user:pass@host:port/db for postgres.
 	DBDSN string
+	// AuthRequired enables the ADR-006 API auth gate (Bearer token or
+	// trusted Remote-User). Off by default for local single-user runs;
+	// the cluster deployment sets it behind Authelia.
+	AuthRequired bool
 }
 
 // Load reads configuration from command-line flags and DPS_* environment
@@ -43,6 +47,8 @@ func Load(args []string) (Config, error) {
 		"storage backend: sqlite or postgres (env DPS_DB_DRIVER)")
 	fs.StringVar(&cfg.DBDSN, "db-dsn", getenv("DPS_DB_DSN", "dps150.db"),
 		"database DSN: file path for sqlite, postgres://user:pass@host:port/db for postgres (env DPS_DB_DSN)")
+	fs.BoolVar(&cfg.AuthRequired, "auth-required", getenvBool("DPS_AUTH_REQUIRED", false),
+		"require Bearer token or Authelia Remote-User on /api (env DPS_AUTH_REQUIRED)")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
@@ -59,4 +65,15 @@ func getenv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func getenvBool(key string, def bool) bool {
+	switch os.Getenv(key) {
+	case "1", "true", "TRUE", "yes":
+		return true
+	case "0", "false", "FALSE", "no":
+		return false
+	default:
+		return def
+	}
 }

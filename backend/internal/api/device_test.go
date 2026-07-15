@@ -141,6 +141,13 @@ func onlineSnapshot() device.Snapshot {
 	}
 }
 
+// testRemoteUser is the Remote-User value doRequest/doRequestStore inject by
+// default, so the many handler tests that predate F-020 keep exercising
+// their own concerns unaffected by authGate (a trusted forward-auth caller,
+// per ADR-006). Tests of authGate/token auth itself build requests directly
+// instead of going through these helpers.
+const testRemoteUser = "test-suite"
+
 func doRequest(t *testing.T, hub DeviceHub, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -153,6 +160,7 @@ func doRequest(t *testing.T, hub DeviceHub, method, path, body string) *httptest
 		req = httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("Remote-User", testRemoteUser)
 	r.ServeHTTP(w, req)
 	return w
 }

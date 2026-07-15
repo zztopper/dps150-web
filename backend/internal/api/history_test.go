@@ -40,6 +40,7 @@ func doHistory(t *testing.T, hist HistoryStore, query string) *httptest.Response
 	r := NewRouter(&fakeHub{}, WithHistory(hist))
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/history"+query, nil)
+	req.Header.Set("Remote-User", testRemoteUser)
 	r.ServeHTTP(w, req)
 	return w
 }

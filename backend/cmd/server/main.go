@@ -62,12 +62,19 @@ func main() {
 	// Storage is fail-soft: it reconnects in the background with backoff
 	// and never blocks startup — device control works without a database,
 	// storage-backed features answer 503 storage_unavailable meanwhile.
+	// Feature-owned models, auto-migrated with the foundation ones. Stage-3
+	// assembly anchors below: each parallel track appends EXACTLY its own
+	// model(s) at its anchor (`models = append(models, &pkg.Type{})`) and
+	// must not touch the other anchors.
+	models := append(history.Models(), &storage.Profile{})
+	// models:automation
+	models = append(models, &storage.ApiToken{})
+
 	store, err := storage.Open(storage.Config{
 		Driver: cfg.DBDriver,
 		DSN:    cfg.DBDSN,
 		Logger: logger,
-		// Feature-owned models, auto-migrated with the foundation ones.
-		Models: append(history.Models(), &storage.Profile{}),
+		Models: models,
 	})
 	if err != nil {
 		slog.Error("storage disabled: invalid configuration", "error", err)
@@ -132,9 +139,22 @@ func main() {
 		appMetrics.SetStorageReadyFunc(store.Ready)
 	}
 
+	// Stage-3 wiring anchors: each parallel track appends EXACTLY its own
+	// dependency construction (hub and store are in scope) at its anchor and
+	// must not touch the other anchor.
+
+	// wiring:automation
+
+	// API tokens (F-020): CreateToken/LookupToken/ListTokens/DeleteToken run
+	// against the same storage.Storage already wired below via
+	// api.WithStore; authGate and the /tokens routes reach it through
+	// routerDeps.store (see api.routerDeps.tokens). No separate background
+	// job is needed.
+
 	gin.SetMode(gin.ReleaseMode)
 	router := api.NewRouter(appMetrics.InstrumentHub(hub),
-		api.WithStore(store), api.WithHistory(hist))
+		api.WithStore(store), api.WithHistory(hist),
+		api.WithAuthRequired(cfg.AuthRequired))
 	// Serve the embedded frontend bundle (single-binary mode); a backend
 	// built without the bundle logs it and serves the API only.
 	webui.Register(router, logger)
