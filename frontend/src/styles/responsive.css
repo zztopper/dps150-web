@@ -122,4 +122,33 @@
   .dashboard-controls .ant-switch .ant-switch-inner {
     font-size: 0.95rem;
   }
+
+  /* Number inputs: 16px value text stops iOS from zooming on focus, and
+     a 44px min height meets the touch-target guideline. Scoped to mobile
+     so desktop density is untouched. */
+  .ant-input-number,
+  .ant-input-number-input {
+    font-size: 16px;
+  }
+
+  .ant-input-number {
+    min-height: 44px;
+  }
+
+  /* ProtectionsPanel lives in its own Card (outside .dashboard-controls)
+     with fixed-width (150px) InputNumbers. On mobile, stack every field
+     full-width with a large touch target instead of a cramped inline row. */
+  .protections-panel .ant-flex > div {
+    flex: 1 1 100%;
+  }
+
+  .protections-panel .ant-input-number {
+    width: 100% !important;
+  }
+
+  .protections-panel .ant-btn {
+    width: 100%;
+    min-height: 44px;
+    font-size: 1rem;
+  }
 }

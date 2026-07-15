@@ -104,7 +104,11 @@
       "protectionTrip": "Сработала защита: {{protection}}",
       "protectionsChanged": "Изменены уставки защит"
     },
+    "history": {
+      "ariaLabel": "График истории измерений. Ряды: {{series}}."
+    },
     "live": {
+      "ariaLabel": "График телеметрии: напряжение, ток, мощность.",
       "title": "Телеметрия",
       "windowLabel": "{{count}} мин"
     },
@@ -118,7 +122,8 @@
     }
   },
   "common": {
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "retry": "Повторить"
   },
   "errors": {
     "deviceOffline": "Устройство не на связи — команда не выполнена",

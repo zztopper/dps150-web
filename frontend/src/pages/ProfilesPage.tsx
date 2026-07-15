@@ -272,6 +272,11 @@ export function ProfilesPage() {
           showIcon
           message={t('profiles.errors.storageUnavailableTitle')}
           description={t('profiles.errors.storageUnavailable')}
+          action={
+            <Button size="small" onClick={() => void profilesQuery.refetch()}>
+              {t('common.retry')}
+            </Button>
+          }
         />
       )}
 

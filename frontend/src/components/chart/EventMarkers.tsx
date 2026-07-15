@@ -12,9 +12,6 @@ const MARKER_COLOR: Record<string, string> = {
   neutral: '#adb5bd',
 }
 
-/** ±1 min window used as the /events query filter on marker click. */
-const CLICK_FILTER_PAD_MS = 60_000
-
 export interface EventMarkersProps {
   /** The live uPlot instance (null before the first mount effect runs). */
   chart: uPlot | null
@@ -109,28 +106,38 @@ export function EventMarkers({ chart, events, viewRange }: EventMarkersProps) {
 
     return (
       <Tooltip key={ev.id} title={`${time} — ${describeEvent(t, ev)}`}>
+        {/* Invisible 20px-wide hit area centered on the 2px visual line so
+            the marker is comfortably tappable on touch. The Events table
+            has no from/to filter, so the deep-link carries only ?kind. */}
         <div
           role="button"
           aria-label={describeEvent(t, ev)}
-          onClick={() =>
-            navigate(
-              `/events?from=${ev.ts - CLICK_FILTER_PAD_MS}&to=${ev.ts + CLICK_FILTER_PAD_MS}&kind=${ev.kind}`,
-            )
-          }
+          onClick={() => navigate(`/events?kind=${ev.kind}`)}
           style={{
             position: 'absolute',
             left,
             top: 0,
             bottom: 0,
-            width: 2,
-            marginLeft: -1,
-            background: MARKER_COLOR[severity],
-            opacity: 0.55,
+            width: 20,
+            marginLeft: -10,
+            display: 'flex',
+            justifyContent: 'center',
+            background: 'transparent',
             cursor: 'pointer',
             pointerEvents: 'auto',
             zIndex: 5,
           }}
-        />
+        >
+          <div
+            style={{
+              width: 2,
+              height: '100%',
+              background: MARKER_COLOR[severity],
+              opacity: 0.55,
+              pointerEvents: 'none',
+            }}
+          />
+        </div>
       </Tooltip>
     )
   })
