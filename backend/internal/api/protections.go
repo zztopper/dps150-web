@@ -111,7 +111,7 @@ func putProtections(hub DeviceHub, store *storage.Storage) gin.HandlerFunc {
 			}
 		}
 		// Mirror the journal entry onto the WS event stream (API contract v2,
-		// «WS-дополнения») so clients learn about new thresholds without
+		// "WS additions") so clients learn about new thresholds without
 		// polling. Independent of the journal write: the device change is
 		// real even when the database is down.
 		hub.Broadcast(device.JournalEvent{

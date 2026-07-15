@@ -1,5 +1,5 @@
 // Auto-stop rules (F-018). Mirrors docs/architecture/api-contract.md,
-// "API contract v3: Этап 3 (v1.0)", "Правила автостопа (F-018)".
+// "API contract v3: Stage 3 (v1.0)", "Auto-stop rules (F-018)".
 import { apiRequest } from './client'
 
 export type AutomationConditionType =

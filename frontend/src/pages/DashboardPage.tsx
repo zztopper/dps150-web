@@ -12,7 +12,7 @@ import { MeteringCard } from '../components/MeteringCard'
 /**
  * Live dashboard for the DPS-150 (F-006). Stage-2 tracks plug their
  * blocks into the `slot:*` anchors below (see
- * docs/architecture/api-contract.md, "Файловая структура фронтенда").
+ * docs/architecture/api-contract.md, "Frontend file structure").
  */
 export function DashboardPage() {
   const { t } = useTranslation()

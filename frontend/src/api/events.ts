@@ -1,5 +1,5 @@
 // Event journal (F-014). Mirrors docs/architecture/api-contract.md,
-// "Журнал событий (F-014, пишут все)".
+// "Event journal (F-014, written by everyone)".
 import { apiRequest } from './client'
 
 /** Known journal kinds; the union stays open for forward compatibility. */

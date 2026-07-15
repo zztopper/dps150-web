@@ -106,4 +106,17 @@ describe('AppLayout — mobile nav and theme (F-016)', () => {
     const toggle = screen.getByRole('switch', { name: 'Переключить тему' })
     expect(toggle).toBeChecked()
   })
+  it('switches interface language and persists the choice', () => {
+    renderWithProviders(<App />)
+    // Default RU: the dashboard nav link reads "Дашборд".
+    expect(screen.getByRole('link', { name: 'Дашборд' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: 'EN' }))
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(localStorage.getItem('dps150.lang')).toBe('en')
+
+    fireEvent.click(screen.getByRole('radio', { name: 'RU' }))
+    expect(screen.getByRole('link', { name: 'Дашборд' })).toBeInTheDocument()
+    expect(localStorage.getItem('dps150.lang')).toBe('ru')
+  })
 })

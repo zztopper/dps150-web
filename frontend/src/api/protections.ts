@@ -1,5 +1,5 @@
 // Protection thresholds (F-014). Mirrors
-// docs/architecture/api-contract.md, "Уставки защит (F-014)".
+// docs/architecture/api-contract.md, "Protection setpoints (F-014)".
 import type { Protections } from './types'
 import { apiRequest } from './client'
 

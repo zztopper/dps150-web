@@ -7,6 +7,7 @@ import {
   Flex,
   Layout,
   Menu,
+  Segmented,
   Switch,
   theme as antdTheme,
   Typography,
@@ -14,6 +15,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useDevice } from '../state/useDevice'
+import { type Lang, setLang } from '../i18n'
 import '../styles/responsive.css'
 
 const NAV_ITEMS = [
@@ -107,7 +109,7 @@ interface AppShellProps {
 }
 
 function AppShell({ mode, onToggleTheme }: AppShellProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { message } = AntApp.useApp()
   const { wsConnected, deviceLink, lastEvent } = useDevice()
   const { pathname } = useLocation()
@@ -183,6 +185,17 @@ function AppShell({ mode, onToggleTheme }: AppShellProps) {
             items={menuItems}
           />
           <Badge status={badge.status} text={badge.text} />
+          <Segmented
+            className="lang-switch"
+            size="small"
+            value={(i18n.language.split('-')[0] as Lang) === 'en' ? 'en' : 'ru'}
+            onChange={(value) => setLang(value as Lang)}
+            options={[
+              { label: 'RU', value: 'ru' },
+              { label: 'EN', value: 'en' },
+            ]}
+            aria-label={t('lang.switchLabel')}
+          />
           <Switch
             className="theme-toggle"
             checked={mode === 'dark'}

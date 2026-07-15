@@ -44,3 +44,7 @@ tokens-section-empty.png
 # Playwright MCP browser artifacts
 .playwright-mcp/
 *.png
+
+# Tooling (not part of the project)
+.claude/
+.serena/
