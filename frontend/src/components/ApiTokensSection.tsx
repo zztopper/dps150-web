@@ -51,7 +51,7 @@ export function ApiTokensSection() {
   const storageUnavailable =
     tokensQuery.error instanceof ApiError && tokensQuery.error.code === 'storage_unavailable'
 
-  const apiHost = suggestApiHost(window.location.hostname) ?? 'dps150-api.<домен>'
+  const apiHost = suggestApiHost(window.location.hostname) ?? t('tokens.apiHostFallback')
 
   const handleCreate = (input: CreateTokenInput) => {
     createMutation.mutate(input, {

@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
 
 ### Added
+- Open-source cleanup: removed process/tooling scaffolding not part of the
+  project (`.claude/`, `CLAUDE.md`, `.serena/`, boilerplate process docs,
+  helper scripts and issue/MR templates); added a header language switcher
+  (RU/EN, persisted) and routed the last hardcoded string in the tokens
+  hint through i18n.
 - Test hardening (TD-004): storage-ready waits in backend test helpers
   raised from 5s to 20s to stop flakes when the shared CI runner is
   contended.
