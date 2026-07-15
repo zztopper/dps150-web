@@ -14,7 +14,50 @@
   },
   "history": {
     "title": "История измерений",
-    "empty": "Раздел в разработке: здесь появятся графики за период"
+    "empty": "Нет данных за выбранный период",
+    "loading": "Загрузка…",
+    "resetZoom": "Сбросить масштаб",
+    "customFrom": "С",
+    "customTo": "По",
+    "pointCount": "{{count}} точек ({{resolution}})",
+    "resolutionRaw": "сырые",
+    "resolutionMinute": "минутные агрегаты",
+    "preset": {
+      "hour": "Час",
+      "day": "Сутки",
+      "week": "Неделя",
+      "month": "13 дней"
+    },
+    "error": {
+      "rangeTooDense": "Слишком много точек для выбранного диапазона — сузьте период",
+      "invalidRange": "Некорректный диапазон дат",
+      "storageUnavailable": "Хранилище истории недоступно, попробуйте позже"
+    }
+  },
+  "chart": {
+    "live": {
+      "title": "Телеметрия",
+      "windowLabel": "{{count}} мин"
+    },
+    "series": {
+      "voltage": "Напряжение",
+      "current": "Ток",
+      "power": "Мощность",
+      "temperature": "Температура",
+      "min": "{{series}} (мин)",
+      "max": "{{series}} (макс)"
+    },
+    "events": {
+      "protectionTrip": "Сработала защита: {{protection}}",
+      "deviceConnected": "Устройство подключено",
+      "deviceDisconnected": "Устройство отключено",
+      "outputOn": "Выход включён",
+      "outputOff": "Выход выключен",
+      "profileApplied": "Применён профиль: {{name}}",
+      "protectionsChanged": "Изменены уставки защит",
+      "meteringSession": "Сессия учёта: {{capacityAh}} Ач, {{energyWh}} Втч",
+      "autoStop": "Автостоп"
+    }
   },
   "profiles": {
     "title": "Профили",

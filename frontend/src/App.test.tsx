@@ -17,9 +17,10 @@ describe('App shell', () => {
 
     fireEvent.click(screen.getByRole('link', { name: 'История' }))
     expect(screen.getByText('История измерений')).toBeInTheDocument()
-    expect(
-      screen.getByText('Раздел в разработке: здесь появятся графики за период'),
-    ).toBeInTheDocument()
+    // HistoryPage (F-013) is implemented: the day/week/month presets
+    // are the reliable "this is the real page" signal (jsdom has no
+    // canvas, so the chart itself does not render here).
+    expect(screen.getByText('Сутки')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('link', { name: 'Настройки' }))
     expect(

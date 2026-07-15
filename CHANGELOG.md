@@ -7,12 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Charts (F-013), adversarial-review fixes: `EventMarkers`' collision
+  resolution is now a proper two-pass sweep instead of nudging each
+  marker around its own raw position — the old approach could never
+  separate markers whose raw position clamped onto the same off-canvas
+  edge (e.g. events newer than the last flushed sample), leaving them
+  fully occluding each other; and the History page's "Month" quick
+  range now requests 13 days instead of a full 30, since the backend
+  caps `resolution=1m` responses at 20000 minute-points (1m already
+  being the coarsest tier) — a genuine 30-day span was guaranteed to
+  400 `range_too_dense` on any deployment with more than ~14 days of
+  continuous history.
+
 ### Changed
 - Deploys moved to GitOps: the Helm chart lives in argocd-platform
   (`apps/dps150`), releases are image-tag bumps there; the CI deploy stage
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
 
 ### Added
+- Charts (F-013): a Dashboard `LiveChart` (uPlot) streaming a 5/15/30 min
+  sliding V/I/P window straight from the live WS state (no extra network
+  traffic), paused while the tab is hidden; a `HistoryPage` with
+  hour/day/week/month presets plus a custom range picker, drag-to-zoom
+  (double-click to reset) against `GET /api/v1/history?resolution=auto`
+  that transparently drills into raw samples as the zoomed span narrows,
+  a min..max band around the average at `1m` resolution, per-quantity
+  V/I/P/T show/hide toggles, an exact-value/time cursor legend, and
+  `GET /api/v1/events` markers (clickable through to `/events` with a
+  time filter).
 - Stage-2 integration polish: meteringSession and profileApplied journal
   kinds are mirrored to WebSocket clients, profile apply answers 409 while
   the device is offline, and the initial device connect no longer sends a

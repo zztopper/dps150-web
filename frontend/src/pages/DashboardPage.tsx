@@ -4,6 +4,7 @@ import { useDevice } from '../state/useDevice'
 import { Readings } from '../components/Readings'
 import { SetpointsForm } from '../components/SetpointsForm'
 import { OutputControl } from '../components/OutputControl'
+import { LiveChart } from '../components/LiveChart'
 
 /**
  * Live dashboard for the DPS-150 (F-006). Stage-2 tracks plug their
@@ -32,6 +33,7 @@ export function DashboardPage() {
           />
         </Flex>
       </Card>
+      <LiveChart />
       {/* slot:live-chart */}
       {/* slot:protections-panel */}
       {/* slot:quick-profiles */}
