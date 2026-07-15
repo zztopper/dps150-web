@@ -1,79 +1,211 @@
 # dps150-web
 
 Web-based control panel for the **FNIRSI DPS-150** programmable DC power supply
-(0–30 V / 0–5 A / 150 W, USB-CDC serial).
+(0–30 V / 0–5 A / 150 W, USB-CDC serial). Drive the supply from your desktop or
+your phone, watch live telemetry and a month of history, get Telegram alerts,
+and script it over a token-authenticated REST API.
 
-Features (see `docs/architecture/design.md` for the full design):
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8.svg)
+![React 19](https://img.shields.io/badge/react-19-61DAFB.svg)
 
-- Full control of the power supply: voltage/current setpoints, output switch,
-  protection limits (OVP/OCP/OPP/OTP/LVP), hardware presets M1–M6
-- Named profiles (V + I + protections) stored in a database
-- Live telemetry (2 Hz) and historical charts with one month of retention
-- Runs locally next to the device or in Kubernetes behind a serial-over-TCP
-  bridge (ser2net)
+The device connects directly over a serial port, over a serial-over-TCP bridge
+(ser2net), or to a built-in emulator — so you can run and develop the whole
+stack with no hardware attached.
 
-## Repository layout
+## Features
 
-| Path | Description |
-|---|---|
-| `backend/` | Go backend: device driver, REST API, WebSocket, storage |
-| `frontend/` | React SPA (TypeScript, Vite, Ant Design, TanStack Query) |
-| `docs/` | Design doc, vendored DPS-150 protocol reference, process docs |
+- **Full supply control** — voltage/current setpoints, output on/off (with
+  confirmation), protection limits (OVP / OCP / OPP / OTP / LVP) and hardware
+  presets M1–M6.
+- **Named profiles** — store V + I + protection sets in the database and assign
+  them to the device's M1–M6 memory cells. Applying a profile never turns the
+  output on by itself.
+- **Live charts + history** — 2 Hz telemetry (V/I/P, input voltage, temperature,
+  CC/CV, protection state) rendered with uPlot, plus one month of retained
+  history with minute-level aggregation and zoom/pan.
+- **Event log** — protection trips, output switching, connect/disconnect, all
+  timestamped.
+- **Telegram notifications** — protection trips, device link loss/recovery and
+  auto-stop events; notification types are configured in the UI.
+- **Energy metering** — Ah / Wh counters straight from the device.
+- **Auto-stop rules** — stop the output on a condition (current below a
+  threshold for N seconds, after a charge/energy total, or after a time limit),
+  backed by the hardware protections.
+- **CSV export** — download the current history or event view as CSV.
+- **API tokens** — Bearer-token access for scripts (scoped `read` / `control`),
+  see the auth model below.
+- **Mobile-friendly + dark theme** — a large-digit bench view for the phone and
+  the full desktop UI, in light or dark mode.
+- **i18n** — Russian and English.
 
-## Requirements
+## Screenshots
 
-- Go 1.25+
-- Node.js 20+
-- golangci-lint (for `make lint`)
+_Screenshots are not included in the repository yet._
 
-## Local development
+<!--
+![Dashboard](docs/screenshots/dashboard.png)
+![History](docs/screenshots/history.png)
+-->
+
+## Quick start
+
+### From source (single binary)
+
+Requirements: **Go 1.25+**, **Node.js 20+**.
 
 ```bash
-make build          # build backend binary + frontend bundle
-make lint           # gofmt + go vet + golangci-lint, oxlint + tsc
-make test           # go test + vitest
-make run            # run backend on :8080 (device emulator by default)
-make run-frontend   # run Vite dev server
+# Build the frontend bundle and the backend binary with the UI embedded.
+make build
 ```
 
-The backend is configured via command-line flags or environment variables
-(a flag wins over its variable):
+`make build` produces `backend/bin/dps150-server` with the production frontend
+bundle embedded via `go:embed`, so the single binary serves both the API and
+the web UI on `:8080`.
 
-| Flag | Variable | Default | Description |
+Run it against the built-in emulator (no hardware required):
+
+```bash
+./backend/bin/dps150-server -transport mock://
+# open http://localhost:8080
+```
+
+Run it against a real DPS-150 attached over USB:
+
+```bash
+./backend/bin/dps150-server -transport serial:///dev/ttyUSB0
+# macOS example: -transport serial:///dev/tty.usbmodem101
+```
+
+Or against a remote serial-over-TCP bridge (see `docs/runbooks/ser2net-pve.md`):
+
+```bash
+./backend/bin/dps150-server -transport tcp://192.0.2.10:2150
+```
+
+### Docker Compose
+
+Brings up the backend, the nginx-served frontend and PostgreSQL:
+
+```bash
+docker compose up -d
+open http://localhost:8081
+```
+
+By default the stack runs the emulator (`DPS_TRANSPORT=mock://`). To pass a real
+USB device through to the container:
+
+```bash
+BACKEND_UPSTREAM=backend-serial:8080 docker compose --profile serial up -d
+```
+
+Storage is fail-soft: the backend starts and controls the device even if
+PostgreSQL is down; storage-backed features return `503` until it recovers.
+
+## Configuration
+
+The backend is configured via command-line flags or environment variables (a
+flag wins over its variable). Notification credentials are environment-only.
+
+| Variable | Flag | Default | Description |
 |---|---|---|---|
-| `-listen` | `DPS_LISTEN_ADDR` | `:8080` | HTTP listen address |
-| `-transport` | `DPS_TRANSPORT` | `mock://` | Device transport: `serial:///dev/ttyUSB0`, `tcp://host:port` or `mock://` |
-| `-log-level` | `DPS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `-db-driver` | `DPS_DB_DRIVER` | `sqlite` | Storage backend: `sqlite` or `postgres` |
-| `-db-dsn` | `DPS_DB_DSN` | `dps150.db` | File path for sqlite, `postgres://user:pass@host:port/db` for postgres |
+| `DPS_TRANSPORT` | `-transport` | `mock://` | Device transport: `serial:///dev/ttyUSB0`, `tcp://host:port` or `mock://` |
+| `DPS_LISTEN_ADDR` | `-listen` | `:8080` | HTTP listen address |
+| `DPS_LOG_LEVEL` | `-log-level` | `info` | `debug`, `info`, `warn` or `error` |
+| `DPS_DB_DRIVER` | `-db-driver` | `sqlite` | Storage backend: `sqlite` or `postgres` |
+| `DPS_DB_DSN` | `-db-dsn` | `dps150.db` | File path for sqlite, `postgres://user:pass@host:port/db` for postgres |
+| `DPS_AUTH_REQUIRED` | `-auth-required` | `false` | Require a Bearer token or an Authelia `Remote-User` header on `/api` |
+| `DPS_TELEGRAM_TOKEN` | — | _(empty)_ | Telegram bot token; notifications are disabled when empty |
+| `DPS_TELEGRAM_CHAT_ID` | — | _(empty)_ | Telegram chat ID for notifications |
 
-Unknown flags and stray arguments abort startup — a typo never silently
-falls back to the emulator. With `mock://` the backend talks to a built-in
-DPS-150 emulator, so no hardware is required for development:
+Unknown flags and stray arguments abort startup — a typo never silently falls
+back to the emulator.
 
-```bash
-./dps150-server -transport serial:///dev/tty.usbmodem101   # real hardware
-./dps150-server                                            # emulator
+## Architecture
+
+```
+serial:// ─┐
+tcp://   ──┤ transport ── device driver ── hub ──┬── REST API + WebSocket
+mock://  ─┘  (reconnect)   (single owner)        ├── history writer ── storage
+                                                 ├── auto-stop rules      (SQLite / PostgreSQL)
+                                                 └── Telegram notifier
 ```
 
-## End-to-end tests
+- **Transports** — the DPS-150 driver runs over a transport interface with
+  reconnect semantics. Three implementations, selected by `DPS_TRANSPORT`:
+  `serial://` (direct port), `tcp://` (ser2net raw-TCP bridge) and `mock://`
+  (a frame-level emulator for CI e2e and hardware-free development).
+- **Hub** — the device port is single-client, so the backend is its sole owner.
+  All consumers (REST, WebSocket, history, rules) talk to the device through an
+  internal hub that also paces writes (the DPS-150 silently drops back-to-back
+  commands).
+- **Storage** — SQLite (pure-Go, no cgo) for a self-contained local binary, or
+  PostgreSQL for a shared deployment. The schema is portable (time as unix
+  millis, no dialect-specific functions). Storage is fail-soft.
+- **Auth model (ADR-006)** — with `DPS_AUTH_REQUIRED=true` the `/api/*` routes
+  accept a request that carries either a valid `Authorization: Bearer <token>`
+  (scope `control` for mutations, `read`/`control` for reads) **or** a trusted
+  `Remote-User` header. That header is trusted unconditionally, which only holds
+  behind a two-host split: the browser UI host runs Authelia forward-auth in
+  front of the service, while the script-facing host strips any client-supplied
+  `Remote-User` before the request reaches the backend. Token management itself
+  is reachable only through the browser (Authelia) path, so a leaked token can
+  never mint or revoke further tokens.
 
-Playwright drives the dashboard in Chromium against the real backend running
-the built-in device emulator — no hardware required:
+See `docs/architecture/design.md` and `docs/architecture/api-contract.md` for
+the full design, and `docs/FNIRSI_DPS-150_Protocol.md` for the protocol
+reference.
+
+## Deployment
+
+- **Local / homelab** — the single binary (SQLite + embedded UI) or
+  `docker-compose.yml` (backend + frontend + PostgreSQL).
+- **Kubernetes** — a Helm chart deployed via ArgoCD (GitOps, ADR-005). The
+  chart is a single-replica `Recreate` backend (the device port is
+  single-client) behind an nginx frontend and an Ingress; the browser host sits
+  behind forward-auth SSO. The chart lives in a **separate platform
+  repository**, not here, and releases are image-tag bumps there.
+
+## Development
 
 ```bash
-cd backend && go build -o bin/dps150-server ./cmd/server   # once per change
+make lint    # gofmt + go vet + golangci-lint, oxlint + tsc -b
+make test    # go test + vitest
+make build   # backend binary (frontend embedded) + frontend bundle
+make run     # run the backend on :8080 (emulator by default)
+```
+
+End-to-end tests drive the dashboard in Chromium against the real backend
+running the emulator — no hardware required. Playwright starts both servers
+itself:
+
+```bash
+cd backend && go build -o bin/dps150-server ./cmd/server
 cd frontend
-npx playwright install chromium                            # once
+npx playwright install chromium   # once
 npm run e2e
 ```
 
-Playwright starts both servers itself: the backend with `DPS_TRANSPORT=mock://`
-on a dedicated port (default `18080`, override with `E2E_BACKEND_PORT`) and the
-Vite dev server on `:5173` proxying `/api` to it. The HTML report lands in
-`frontend/playwright-report/`.
+The repository layout:
+
+| Path | Description |
+|---|---|
+| `backend/` | Go backend: device driver, REST API, WebSocket, storage, notifier |
+| `frontend/` | React 19 SPA (TypeScript, Vite, Ant Design, TanStack Query, uPlot) |
+| `docs/` | Design docs, API contract, runbooks, vendored protocol reference |
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits
 
-- Protocol reverse engineering: [cho45/fnirsi-dps-150](https://github.com/cho45/fnirsi-dps-150) (MIT)
+The DPS-150 protocol was reverse-engineered by the community:
+
+- Protocol reference: [cho45/fnirsi-dps-150](https://github.com/cho45/fnirsi-dps-150) (MIT) — vendored as `docs/FNIRSI_DPS-150_Protocol.md`
 - Original CLI tool: [svenk123/dps150tool](https://github.com/svenk123/dps150tool) (MIT)
+
+FNIRSI and DPS-150 are trademarks of their respective owners. This project is
+not affiliated with or endorsed by FNIRSI.
+
+## License
+
+[MIT](LICENSE) © 2026 dps150-web contributors

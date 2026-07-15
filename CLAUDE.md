@@ -37,7 +37,7 @@ make lint             # Backend + Frontend linters
 
 | Инструмент | Назначение | Адрес/Конфиг |
 |------------|------------|--------------|
-| `glab` | GitLab CLI (если ISSUE_PROVIDER=gitlab) | gitlab.zztopper.ru |
+| `glab` | GitLab CLI (если ISSUE_PROVIDER=gitlab) | git.example.com |
 | `gh` | GitHub CLI (если ISSUE_PROVIDER=github) | github.com |
 | `tmux` | Окно с пейнами для Agents Team | — |
 | `vault` | HashiCorp Vault CLI (опционально) | — |
@@ -177,7 +177,7 @@ Workflow: `TeamCreate` -> `TaskCreate` (с зависимостями) -> `Task`
 
 ## Issues — источник истины
 
-**Issues** в GitLab (`gitlab.zztopper.ru/applications/dps150-web`) или GitHub (`github.com/applications/dps150-web`) — единственный источник истины по состоянию фичей, задач и техдолга. `.claude/plans/` — только для оперативного планирования внутри сессии. Подробности: `docs/issue-conventions.md`.
+**Issues** в GitLab (`git.example.com/applications/dps150-web`) или GitHub (`github.com/applications/dps150-web`) — единственный источник истины по состоянию фичей, задач и техдолга. `.claude/plans/` — только для оперативного планирования внутри сессии. Подробности: `docs/issue-conventions.md`.
 
 **Обязательные правила:**
 1. **Новый план работ** — создать Issues, привязать к Milestone, назначить labels
@@ -320,4 +320,4 @@ ADR — immutable после `Status: Accepted`. Изменение решени
 
 ## Контакты
 
-- GitLab: `gitlab.zztopper.ru/applications/dps150-web`
+- GitLab: `git.example.com/applications/dps150-web`

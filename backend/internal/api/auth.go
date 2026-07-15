@@ -34,9 +34,9 @@ const (
 // SECURITY REQUIREMENT (ADR-006): Remote-User is trusted UNCONDITIONALLY by
 // this middleware -- it assumes the header can only reach the backend after
 // Authelia's forward-auth has set it. That guarantee is enforced at the
-// Ingress, NOT here: the browser-facing host (dps150.r2bnj.ru) runs Authelia
+// Ingress, NOT here: the browser-facing host (dps150.example.com) runs Authelia
 // forward-auth in front of this service, while the script-facing host
-// (dps150-api.r2bnj.ru) MUST run a headers-middleware that unconditionally
+// (dps150-api.example.com) MUST run a headers-middleware that unconditionally
 // strips any client-supplied Remote-User/Remote-Groups before the request
 // reaches the backend. If that stripping is ever missing on a host
 // reachable by untrusted clients, any caller can set Remote-User itself and

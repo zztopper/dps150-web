@@ -210,8 +210,8 @@ dashboard), `HistoryPage.tsx` (F-013), `ProfilesPage.tsx` (F-010/011),
 
 Зафиксировано для параллельной разработки F-018/F-019/F-020. Правила v1/v2
 действуют. Аутентификация — ADR-006: браузерный UI за Authelia (хост
-`dps150.r2bnj.ru`), скриптовый доступ — Bearer-токен на отдельном хосте
-`dps150-api.r2bnj.ru`. Backend-middleware на `/api/*`: пропускает запрос,
+`dps150.example.com`), скриптовый доступ — Bearer-токен на отдельном хосте
+`dps150-api.example.com`. Backend-middleware на `/api/*`: пропускает запрос,
 если есть валидный `Authorization: Bearer <token>` (с нужным scope) ИЛИ
 доверенный заголовок `Remote-User` от Authelia; иначе 401 `unauthorized`.
 Мутации (PUT/POST/DELETE) требуют scope `control`; GET — `read` или выше.

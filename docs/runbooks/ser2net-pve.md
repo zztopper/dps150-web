@@ -5,9 +5,11 @@
 ## Схема
 
 FNIRSI DPS-150 подключён по USB к Proxmox-хосту `pve` (10.20.0.5) и виден как
-`/dev/serial/by-id/usb-Artery_AT32_Virtual_Com_Port_1126E7FF4486-if00`
+`/dev/serial/by-id/usb-Artery_AT32_Virtual_Com_Port_XXXXXXXX-if00`
 (→ `/dev/ttyACM0`). ser2net публикует порт как raw TCP `10.20.0.5:2150`;
 бэкенд подключается с `DPS_TRANSPORT=tcp://10.20.0.5:2150`.
+
+> `XXXXXXXX` — замените на серийник вашего устройства: `ls /dev/serial/by-id/`.
 
 ## Установка (выполнено)
 
@@ -21,7 +23,8 @@ cat > /etc/ser2net.yaml <<'EOF'
 
 connection: &dps150
   accepter: tcp,2150
-  connector: serialdev,/dev/serial/by-id/usb-Artery_AT32_Virtual_Com_Port_1126E7FF4486-if00,115200n81,local
+  # замените XXXXXXXX на серийник вашего устройства: ls /dev/serial/by-id/
+  connector: serialdev,/dev/serial/by-id/usb-Artery_AT32_Virtual_Com_Port_XXXXXXXX-if00,115200n81,local
   options:
     kickolduser: true
     max-connections: 1
