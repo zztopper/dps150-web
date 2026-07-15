@@ -304,6 +304,59 @@
     "saveError": "Failed to save settings: {{detail}}",
     "loadError": "Failed to load settings"
   },
+  "tokens": {
+    "title": "API tokens",
+    "addButton": "New token",
+    "hint": "Tokens are for scripted access to the API on a separate host ({{host}}). The browser UI uses single sign-on (SSO) and does not need a token.",
+    "empty": "No tokens yet",
+    "deleted": "Token revoked",
+    "table": {
+      "name": "Name",
+      "scope": "Scope",
+      "createdAt": "Created",
+      "lastUsedAt": "Last used",
+      "actions": "Actions"
+    },
+    "scope": {
+      "read": "Read",
+      "control": "Control"
+    },
+    "actions": {
+      "delete": "Revoke",
+      "copy": "Copy"
+    },
+    "deleteConfirm": {
+      "title": "Revoke token \"{{name}}\"?",
+      "content": "This cannot be undone — scripts using this token lose access immediately.",
+      "ok": "Yes, revoke"
+    },
+    "form": {
+      "title": "New API token",
+      "name": "Name",
+      "namePlaceholder": "e.g. lab script",
+      "nameRequired": "Enter a name",
+      "nameMax": "At most {{max}} characters",
+      "scope": "Scope",
+      "scopeRequired": "Choose a scope",
+      "create": "Create"
+    },
+    "secretModal": {
+      "title": "Token created",
+      "warningTitle": "The secret is shown only once",
+      "warning": "Copy the token now — it cannot be shown again after this dialog closes. The server only stores its hash.",
+      "name": "Token \"{{name}}\"",
+      "close": "Got it, close",
+      "copiedButton": "Copied",
+      "copied": "Token copied to clipboard",
+      "copyFailed": "Couldn't copy — select and copy manually"
+    },
+    "errors": {
+      "storageUnavailableTitle": "Storage unavailable",
+      "storageUnavailable": "Database unavailable — tokens can't be changed right now",
+      "invalid": "Invalid token data: {{detail}}",
+      "notFound": "Token not found"
+    }
+  },
   "header": {
     "online": "Online",
     "deviceOffline": "Device offline",
