@@ -237,6 +237,11 @@ e2e:
       policy: pull
   before_script:
     - mkdir -p ${GOMODCACHE}
+    # Some runners intermittently serve a corrupted apt list cache, failing
+    # with "invalid signature"/"is not signed" on the Debian repos — both the
+    # NodeSource setup and `playwright install --with-deps` need apt. Reset
+    # and refresh the lists before using them.
+    - rm -rf /var/lib/apt/lists/* && apt-get clean && apt-get update
     - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
     - apt-get install -y -qq nodejs
     - node --version && npm --version
