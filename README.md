@@ -38,6 +38,9 @@ stack with no hardware attached.
 - **Mobile-friendly + dark theme** — a large-digit bench view for the phone and
   the full desktop UI, in light or dark mode.
 - **i18n** — Russian and English.
+- **Home Assistant + metrics** — MQTT Discovery publishes the supply as HA
+  sensors (and, opt-in, a controllable output and setpoints); Prometheus
+  telemetry gauges feed a ready-made Grafana dashboard.
 
 ## Screenshots
 
@@ -158,6 +161,11 @@ flag wins over its variable). Notification credentials are environment-only.
 | `DPS_AUTH_REQUIRED` | `-auth-required` | `false` | Require a Bearer token or an Authelia `Remote-User` header on `/api` |
 | `DPS_TELEGRAM_TOKEN` | — | _(empty)_ | Telegram bot token; notifications are disabled when empty |
 | `DPS_TELEGRAM_CHAT_ID` | — | _(empty)_ | Telegram chat ID for notifications |
+| `DPS_MQTT_BROKER` | — | _(empty)_ | MQTT broker URL (`tcp://host:1883`); the Home Assistant integration is disabled when empty |
+| `DPS_MQTT_USERNAME` / `DPS_MQTT_PASSWORD` | — | _(empty)_ | MQTT broker credentials |
+| `DPS_MQTT_CONTROL` | — | `false` | Allow Home Assistant to control the output and setpoints (otherwise read-only) |
+| `DPS_MQTT_TOPIC_PREFIX` | — | `dps150` | Prefix for the MQTT state/command topics |
+| `DPS_MQTT_DISCOVERY_PREFIX` | — | `homeassistant` | Home Assistant MQTT Discovery prefix |
 
 Unknown flags and stray arguments abort startup — a typo never silently falls
 back to the emulator.
@@ -196,6 +204,39 @@ mock://  ─┘  (reconnect)   (single owner)        ├── history writer �
 See `docs/architecture/design.md` and `docs/architecture/api-contract.md` for
 the full design, and `docs/FNIRSI_DPS-150_Protocol.md` for the protocol
 reference.
+
+## Home Assistant (MQTT)
+
+Set `DPS_MQTT_BROKER` and the supply appears in Home Assistant automatically via
+MQTT Discovery — sensors for voltage, current, power, temperature, input
+voltage, charge (Ah) and energy (Wh), plus CC/CV mode, active protection and a
+device-link connectivity sensor. State is published to a retained
+`dps150/state` JSON topic; an MQTT Last-Will on `dps150/status` marks the
+service offline if it drops.
+
+Control is **off by default**. With `DPS_MQTT_CONTROL=true` the integration also
+publishes a `switch` for the output and `number` entities for the voltage and
+current setpoints. Note that MQTT commands bypass the browser SSO / token auth
+(ADR-006) entirely — the broker's own authentication and ACLs are the trust
+boundary, and energizing the output over MQTT has no confirmation step. Only
+enable control against a broker you own.
+
+```bash
+DPS_MQTT_BROKER=tcp://mqtt.example:1883 \
+DPS_MQTT_USERNAME=dps150 DPS_MQTT_PASSWORD=… \
+DPS_MQTT_CONTROL=true \
+  ./backend/bin/dps150-server -transport mock://
+```
+
+## Metrics & Grafana
+
+The backend exports Prometheus metrics at `GET /metrics`, including live
+telemetry gauges (`dps150_voltage_volts`, `dps150_current_amps`,
+`dps150_power_watts`, `dps150_temperature_celsius`, `dps150_output_enabled`, …)
+alongside link, protection and command-latency series. Import
+[`deploy/grafana/dashboard.json`](deploy/grafana/dashboard.json) into Grafana
+(see [`deploy/grafana/README.md`](deploy/grafana/README.md)) for a ready
+dashboard.
 
 ## Container images
 

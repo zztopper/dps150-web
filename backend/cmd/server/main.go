@@ -23,6 +23,7 @@ import (
 	"dps150-web/backend/internal/history"
 	"dps150-web/backend/internal/journal"
 	"dps150-web/backend/internal/metrics"
+	"dps150-web/backend/internal/mqtt"
 	"dps150-web/backend/internal/notify"
 	"dps150-web/backend/internal/storage"
 	"dps150-web/backend/internal/transport"
@@ -129,6 +130,16 @@ func main() {
 		notify.WithLogger(logger))
 	go notifier.Run(ctx)
 	api.WireNotifications(settingsStore, telegram.Configured())
+
+	// Home Assistant / MQTT (F-021): an independent hub subscriber that
+	// publishes telemetry + HA Discovery configs and, opt-in via
+	// DPS_MQTT_CONTROL, accepts output/setpoint commands. Silent-off unless
+	// DPS_MQTT_BROKER is set, mirroring the Telegram gate. Subscribes to the
+	// raw hub, not the metrics.InstrumentHub wrapper (whose Subscribe counts
+	// dps150_ws_clients).
+	if mqttCfg := mqtt.ConfigFromEnv(); mqttCfg.Configured() {
+		go mqtt.New(hub, mqttCfg, mqtt.WithLogger(logger)).Run(ctx)
+	}
 
 	// Prometheus domain metrics (TD-001) on the default registry, served by
 	// GET /metrics in the API router. The hub stays uninstrumented: a

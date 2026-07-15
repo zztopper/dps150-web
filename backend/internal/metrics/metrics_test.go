@@ -244,3 +244,44 @@ func TestSubscribeCountsClientsAndDrops(t *testing.T) {
 	for range ch { // drain to the close
 	}
 }
+
+// TestTelemetryGaugesFollowHub checks the F-021 telemetry gauges track the
+// hub stream: measured values from a Telemetry tick, setpoints from a full
+// StateSnapshot.
+func TestTelemetryGaugesFollowHub(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := New(reg)
+	hub := &fakeHub{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m.WatchHub(ctx, hub)
+
+	hub.broadcast(device.Telemetry{
+		Voltage: 12.3, Current: 1.5, Power: 18.45,
+		InputVoltage: 24, Temperature: 40,
+		CapacityAh: 0.25, EnergyWh: 3, OutputOn: true,
+		Protection: protocol.ProtectionOK,
+	})
+	waitFor(t, "voltage gauge", func() bool { return testutil.ToFloat64(m.voltage) == 12.3 })
+	if got := testutil.ToFloat64(m.current); got != 1.5 {
+		t.Errorf("current gauge = %v, want 1.5", got)
+	}
+	if got := testutil.ToFloat64(m.power); got != 18.45 {
+		t.Errorf("power gauge = %v, want 18.45", got)
+	}
+	if got := testutil.ToFloat64(m.energyWh); got != 3 {
+		t.Errorf("energy gauge = %v, want 3", got)
+	}
+	if got := testutil.ToFloat64(m.outputEnabled); got != 1 {
+		t.Errorf("output gauge = %v, want 1", got)
+	}
+
+	hub.broadcast(device.StateSnapshot{Snapshot: device.Snapshot{
+		Connected: true,
+		State:     &device.State{SetVoltage: 12.5, SetCurrent: 2},
+	}})
+	waitFor(t, "setpoint voltage gauge", func() bool { return testutil.ToFloat64(m.setpointVoltage) == 12.5 })
+	if got := testutil.ToFloat64(m.setpointCurrent); got != 2 {
+		t.Errorf("setpoint current gauge = %v, want 2", got)
+	}
+}
