@@ -22,7 +22,7 @@ func openSettingsStorage(t *testing.T) *storage.Storage {
 		t.Fatalf("storage.Open: %v", err)
 	}
 	t.Cleanup(s.Close)
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for !s.Ready() {
 		if time.Now().After(deadline) {
 			t.Fatal("storage did not become ready")

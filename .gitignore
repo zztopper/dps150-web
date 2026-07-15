@@ -38,3 +38,9 @@ frontend/coverage/
 
 # Claude worktrees
 .claude/worktrees/
+tokens-section-empty.png
+/*.png
+
+# Playwright MCP browser artifacts
+.playwright-mcp/
+*.png

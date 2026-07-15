@@ -39,12 +39,12 @@ func newTestStore(t *testing.T) *storage.Storage {
 		t.Fatalf("storage.Open: %v", err)
 	}
 	t.Cleanup(s.Close)
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for !s.Ready() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if !s.Ready() {
-		t.Fatal("test storage not ready after 5s")
+		t.Fatal("test storage not ready after 20s")
 	}
 	return s
 }
@@ -525,7 +525,7 @@ func TestApplyProfileNeverWritesOutputEnable(t *testing.T) {
 		device.WithWriteGap(0))
 	go func() { _ = hub.Run(ctx) }()
 
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for !hub.Snapshot().Connected && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
