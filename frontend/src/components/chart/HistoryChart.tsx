@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef } from 'react'
+import { theme } from 'antd'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useTranslation } from 'react-i18next'
@@ -31,10 +32,27 @@ const HEIGHT = 340
 /** Ignore sub-pixel drags — those are clicks, not a zoom gesture. */
 const MIN_DRAG_PX = 6
 
+/**
+ * Axis/grid/tick colors sourced from the active AntD theme so the chart
+ * stays legible on the dark surface (uPlot otherwise defaults to black
+ * text + near-invisible grid). Threaded into the option builders because
+ * uPlot captures them once at instance-creation time — see the remount
+ * key in the parents (HistoryPage / LiveChart) for theme/locale refresh.
+ */
+interface AxisTheme {
+  /** Axis value labels + the axis baseline. */
+  label: string
+  /** Interior gridlines. */
+  grid: string
+  /** Tick marks. */
+  ticks: string
+}
+
 function buildRawOptions(
   t: (key: string) => string,
   width: number,
   visible: VisibleSeries,
+  axis: AxisTheme,
 ): uPlot.Options {
   return {
     width,
@@ -73,19 +91,35 @@ function buildRawOptions(
         label: t('chart.series.temperature'),
         stroke: SERIES_COLOR.temperature,
         width: 1.5,
+        // Dashed so temperature is separable from the power line without
+        // relying on color (they form a red/green colorblind pair).
+        dash: [6, 4],
         scale: 'T',
         show: visible.temperature,
         value: (_u, v) => (v == null ? '—' : `${v.toFixed(1)} ${t('units.celsius')}`),
       },
     ],
     axes: [
-      {},
-      { scale: 'V', size: 50, values: (_u, ticks) => ticks.map((v) => v.toFixed(1)) },
+      {
+        stroke: axis.label,
+        grid: { stroke: axis.grid },
+        ticks: { stroke: axis.ticks },
+      },
+      {
+        scale: 'V',
+        size: 50,
+        stroke: axis.label,
+        grid: { stroke: axis.grid },
+        ticks: { stroke: axis.ticks },
+        values: (_u, ticks) => ticks.map((v) => v.toFixed(1)),
+      },
       {
         scale: 'A',
         side: 1,
         size: 50,
+        stroke: axis.label,
         grid: { show: false },
+        ticks: { stroke: axis.ticks },
         values: (_u, ticks) => ticks.map((v) => v.toFixed(2)),
       },
     ],
@@ -96,6 +130,7 @@ function buildMinuteOptions(
   t: (key: string, options?: Record<string, unknown>) => string,
   width: number,
   visible: VisibleSeries,
+  axis: AxisTheme,
 ): uPlot.Options {
   function bandSeries(
     quantity: 'voltage' | 'current' | 'power',
@@ -150,6 +185,8 @@ function buildMinuteOptions(
         label: t('chart.series.temperature'),
         stroke: SERIES_COLOR.temperature,
         width: 1.5,
+        // Dashed to stay separable from the power line without color.
+        dash: [6, 4],
         scale: 'T',
         show: visible.temperature,
         value: (_u, v) => (v == null ? '—' : `${v.toFixed(1)} ${t('units.celsius')}`),
@@ -170,13 +207,26 @@ function buildMinuteOptions(
       },
     ],
     axes: [
-      {},
-      { scale: 'V', size: 50, values: (_u, ticks) => ticks.map((v) => v.toFixed(1)) },
+      {
+        stroke: axis.label,
+        grid: { stroke: axis.grid },
+        ticks: { stroke: axis.ticks },
+      },
+      {
+        scale: 'V',
+        size: 50,
+        stroke: axis.label,
+        grid: { stroke: axis.grid },
+        ticks: { stroke: axis.ticks },
+        values: (_u, ticks) => ticks.map((v) => v.toFixed(1)),
+      },
       {
         scale: 'A',
         side: 1,
         size: 50,
+        stroke: axis.label,
         grid: { show: false },
+        ticks: { stroke: axis.ticks },
         values: (_u, ticks) => ticks.map((v) => v.toFixed(2)),
       },
     ],
@@ -200,6 +250,12 @@ export function HistoryChart({
   onResetZoom,
 }: HistoryChartProps) {
   const { t } = useTranslation()
+  const { token } = theme.useToken()
+  const axisTheme: AxisTheme = {
+    label: token.colorText,
+    grid: token.colorSplit,
+    ticks: token.colorBorderSecondary,
+  }
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<uPlot | null>(null)
   const onZoomRef = useRef(onZoom)
@@ -222,8 +278,8 @@ export function HistoryChart({
     const width = Math.max(el.clientWidth, 300)
     const opts =
       resolution === '1m'
-        ? buildMinuteOptions(t, width, visibleSeries)
-        : buildRawOptions(t, width, visibleSeries)
+        ? buildMinuteOptions(t, width, visibleSeries, axisTheme)
+        : buildRawOptions(t, width, visibleSeries, axisTheme)
     opts.hooks = {
       init: [
         (u) => {
@@ -291,8 +347,22 @@ export function HistoryChart({
     chartRef.current.setSize({ width: size.width, height: HEIGHT })
   }, [size])
 
+  const shownSeries = [
+    visibleSeries.voltage ? t('chart.series.voltage') : null,
+    visibleSeries.current ? t('chart.series.current') : null,
+    visibleSeries.power ? t('chart.series.power') : null,
+    visibleSeries.temperature ? t('chart.series.temperature') : null,
+  ]
+    .filter((s): s is string => s !== null)
+    .join(', ')
+
   return (
-    <div className="dps-history-chart" style={{ position: 'relative' }}>
+    <div
+      className="dps-history-chart"
+      style={{ position: 'relative' }}
+      role="img"
+      aria-label={t('chart.history.ariaLabel', { series: shownSeries })}
+    >
       <style>{`
         .dps-history-chart .u-legend, .dps-history-chart .u-legend .u-value {
           font-variant-numeric: tabular-nums;

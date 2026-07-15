@@ -83,7 +83,7 @@ export function ProtectionsPanel({
   })
 
   return (
-    <Card title={t('protections.title')}>
+    <Card title={t('protections.title')} className="protections-panel">
       <Form form={form} layout="vertical" disabled={disabled} onFinish={onFinish}>
         <Flex wrap gap="middle" align="flex-end">
           {FIELDS.map((field) => {

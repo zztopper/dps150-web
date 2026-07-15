@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- UI/UX audit fixes (skill-guided, DA-reviewed): uPlot chart axes/gridlines
+  now use the active Ant Design theme tokens so they stay legible in dark
+  mode (charts remount on theme/locale change without a blank frame);
+  event-marker click now deep-links `/events?kind=…` and the Events page
+  seeds its kind filter from the query param (previously the link was
+  ignored); mobile setpoint/protection inputs use 16px text + 44px targets
+  (no iOS focus-zoom); CC/CV mode is shown as a single active tag (no longer
+  color-only); data-load error alerts gained a retry action; a dashed
+  temperature series, chart aria-label summaries, and a legibility bump to
+  idle metering readouts.
 - Auto-stop rules engine (F-018), adversarial-review fix: for `scope: always`,
   an output-off gap no longer counts toward the `currentBelow` hysteresis
   window — the engine now excludes the off period's duration from the

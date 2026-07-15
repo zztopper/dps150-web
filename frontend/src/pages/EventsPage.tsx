@@ -15,6 +15,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import type { TFunction } from 'i18next'
 import { ApiError } from '../api/client'
 import { JOURNAL_KINDS, type JournalEvent } from '../api/events'
@@ -101,8 +102,13 @@ export function EventsPage() {
   const { t, i18n } = useTranslation()
   useEventsLiveInvalidation()
 
+  const [searchParams] = useSearchParams()
   const [page, setPage] = useState(1)
-  const [kindFilter, setKindFilter] = useState<string[]>([])
+  // Seed the filter from a marker deep-link (?kind=…, possibly repeated).
+  // The events table has no from/to filter, so those params are ignored.
+  const [kindFilter, setKindFilter] = useState<string[]>(() =>
+    searchParams.getAll('kind'),
+  )
   // Export range (F-019): the journal table itself is unbounded (no
   // from/to), but the CSV export backend requires one — defaults to the
   // last 24 h, adjustable independently of the on-screen kind filter/
@@ -176,6 +182,11 @@ export function EventsPage() {
           showIcon
           message={t('events.errors.storageUnavailableTitle')}
           description={t('events.errors.storageUnavailable')}
+          action={
+            <Button size="small" onClick={() => void query.refetch()}>
+              {t('common.retry')}
+            </Button>
+          }
         />
       )}
 

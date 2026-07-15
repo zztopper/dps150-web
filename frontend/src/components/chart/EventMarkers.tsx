@@ -12,9 +12,6 @@ const MARKER_COLOR: Record<string, string> = {
   neutral: '#adb5bd',
 }
 
-/** ±1 min window used as the /events query filter on marker click. */
-const CLICK_FILTER_PAD_MS = 60_000
-
 export interface EventMarkersProps {
   /** The live uPlot instance (null before the first mount effect runs). */
   chart: uPlot | null
@@ -109,14 +106,15 @@ export function EventMarkers({ chart, events, viewRange }: EventMarkersProps) {
 
     return (
       <Tooltip key={ev.id} title={`${time} — ${describeEvent(t, ev)}`}>
+        {/* 2px marker line. Deep-links to /events?kind — the Events table
+            has no from/to filter, so no time range is carried. (A wider
+            touch hit-area was tried but overlapped adjacent markers sharing
+            a timestamp and intercepted their clicks; keyboard/touch access
+            to events is covered by the Events table.) */}
         <div
           role="button"
           aria-label={describeEvent(t, ev)}
-          onClick={() =>
-            navigate(
-              `/events?from=${ev.ts - CLICK_FILTER_PAD_MS}&to=${ev.ts + CLICK_FILTER_PAD_MS}&kind=${ev.kind}`,
-            )
-          }
+          onClick={() => navigate(`/events?kind=${ev.kind}`)}
           style={{
             position: 'absolute',
             left,
@@ -127,7 +125,6 @@ export function EventMarkers({ chart, events, viewRange }: EventMarkersProps) {
             background: MARKER_COLOR[severity],
             opacity: 0.55,
             cursor: 'pointer',
-            pointerEvents: 'auto',
             zIndex: 5,
           }}
         />
