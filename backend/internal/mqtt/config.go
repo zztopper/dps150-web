@@ -67,6 +67,12 @@ func (c Config) nodeID() string { return c.TopicPrefix }
 func (c Config) stateTopic() string  { return c.TopicPrefix + "/state" }
 func (c Config) statusTopic() string { return c.TopicPrefix + "/status" }
 
+// birthTopic is Home Assistant's birth/will topic (<discovery_prefix>/status,
+// default "homeassistant/status"). HA publishes "online" there when it (re)starts;
+// the service re-announces discovery on that message so entities survive an HA
+// restart even though the retained configs may have been purged.
+func (c Config) birthTopic() string { return c.DiscoveryPrefix + "/status" }
+
 // commandTopic is the set-topic for a controllable entity, e.g.
 // "dps150/voltage/set".
 func (c Config) commandTopic(name string) string {

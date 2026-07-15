@@ -1,6 +1,9 @@
 package api
 
-import "dps150-web/backend/internal/storage"
+import (
+	"dps150-web/backend/internal/sequence"
+	"dps150-web/backend/internal/storage"
+)
 
 // RouterOption injects an optional dependency into NewRouter, so existing
 // call sites keep compiling while parallel feature tracks add their own
@@ -21,6 +24,10 @@ type routerDeps struct {
 	// the API is open. It is set true only in the cluster deployment, which
 	// sits behind Authelia on the UI host and issues tokens on the API host.
 	authRequired bool
+	// sequenceManager backs the F-022 run/stop/active routes and the 409 gate
+	// on manual device mutations; nil when storage is not configured, which
+	// makes the run routes answer 503 and the gate a no-op.
+	sequenceManager *sequence.Manager
 }
 
 // WithAuthRequired enables the ADR-006 authentication gate (Bearer token or
@@ -40,6 +47,13 @@ func WithHistory(hist HistoryStore) RouterOption {
 // same as with a down database (fail-soft, F-007).
 func WithStore(store *storage.Storage) RouterOption {
 	return func(d *routerDeps) { d.store = store }
+}
+
+// WithSequenceManager hands the F-022 sequence runner to the run/stop/active
+// routes and the 409 gate on manual device mutations. A nil value is allowed:
+// the run routes then answer 503 storage_unavailable and the gate is a no-op.
+func WithSequenceManager(mgr *sequence.Manager) RouterOption {
+	return func(d *routerDeps) { d.sequenceManager = mgr }
 }
 
 // profiles returns the store as the narrow surface the profile routes

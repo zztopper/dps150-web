@@ -25,6 +25,7 @@ import (
 	"dps150-web/backend/internal/metrics"
 	"dps150-web/backend/internal/mqtt"
 	"dps150-web/backend/internal/notify"
+	"dps150-web/backend/internal/sequence"
 	"dps150-web/backend/internal/storage"
 	"dps150-web/backend/internal/transport"
 	"dps150-web/backend/internal/webui"
@@ -71,6 +72,7 @@ func main() {
 	models := append(history.Models(), &storage.Profile{})
 	models = append(models, &storage.AutomationRule{}, &storage.AutomationTrigger{})
 	models = append(models, &storage.ApiToken{})
+	models = append(models, &storage.Sequence{})
 
 	store, err := storage.Open(storage.Config{
 		Driver: cfg.DBDriver,
@@ -155,6 +157,18 @@ func main() {
 	// dependency construction (hub and store are in scope) at its anchor and
 	// must not touch the other anchor.
 
+	// Programmable sequences (F-022): a start/stop-driven runner that executes
+	// a saved Program (setHold/ramp/loop) against the device, one run at a
+	// time. Only wired when storage is configured (sequences live in the
+	// database). It uses the RAW hub (not appMetrics.InstrumentHub, whose
+	// Subscribe counts dps150_ws_clients) and binds to ctx so a shutdown
+	// aborts an active run with the output off; it never auto-resumes.
+	var seqManager *sequence.Manager
+	if store != nil {
+		seqManager = sequence.New(hub, store, sequence.WithLogger(logger))
+		go seqManager.Run(ctx)
+	}
+
 	// Auto-stop rules engine (F-018): a hub subscriber that evaluates
 	// enabled rules against the telemetry stream and switches the output
 	// off when one fires (journaled as autoStop, mirrored to WS, optional
@@ -162,10 +176,12 @@ func main() {
 	// runs when storage is configured, since rules live in the database.
 	// Subscribes to the raw hub, not the metrics.InstrumentHub wrapper: that
 	// wrapper's Subscribe counts dps150_ws_clients, which must stay a count
-	// of actual WebSocket clients.
+	// of actual WebSocket clients. While a sequence run is active it is
+	// suppressed (WithActiveSuppressor) so it does not fight the run.
 	if store != nil {
 		engine := automation.New(hub, store,
-			automation.WithLogger(logger), automation.WithSender(telegram))
+			automation.WithLogger(logger), automation.WithSender(telegram),
+			automation.WithActiveSuppressor(seqManager.IsRunning))
 		go engine.Run(ctx)
 	}
 
@@ -178,7 +194,8 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	router := api.NewRouter(appMetrics.InstrumentHub(hub),
 		api.WithStore(store), api.WithHistory(hist),
-		api.WithAuthRequired(cfg.AuthRequired))
+		api.WithAuthRequired(cfg.AuthRequired),
+		api.WithSequenceManager(seqManager))
 	// Serve the embedded frontend bundle (single-binary mode); a backend
 	// built without the bundle logs it and serves the API only.
 	webui.Register(router, logger)

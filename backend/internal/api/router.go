@@ -24,11 +24,16 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// seqGate rejects manual device mutations (setpoints, output, presets,
+	// protections, profile apply) with 409 sequence_active while a sequence
+	// run owns the device (F-022). It is a no-op when no manager is wired.
+	seqGate := blockDuringSequenceRun(deps.sequenceManager)
+
 	v1 := r.Group("/api/v1")
 	v1.Use(authGate(deps))
 	v1.GET("/device", getDevice(hub))
-	v1.PUT("/device/setpoints", putSetpoints(hub))
-	v1.PUT("/device/output", putOutput(hub))
+	v1.PUT("/device/setpoints", seqGate, putSetpoints(hub))
+	v1.PUT("/device/output", seqGate, putOutput(hub))
 	v1.GET("/ws", handleWS(hub))
 
 	// Stage-2 assembly anchors. Each parallel track replaces EXACTLY its own
@@ -41,13 +46,13 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	v1.POST("/profiles", createProfile(profiles))
 	v1.PUT("/profiles/:id", updateProfile(profiles))
 	v1.DELETE("/profiles/:id", deleteProfile(profiles))
-	v1.POST("/profiles/:id/apply", applyProfile(profiles, hub))
+	v1.POST("/profiles/:id/apply", seqGate, applyProfile(profiles, hub))
 
 	// Hardware presets M1..M6 (F-011).
 	v1.GET("/device/presets", getPresets(hub))
-	v1.PUT("/device/presets/:slot", putPreset(deps.profiles(), hub))
+	v1.PUT("/device/presets/:slot", seqGate, putPreset(deps.profiles(), hub))
 
-	v1.PUT("/device/protections", putProtections(hub, deps.store))
+	v1.PUT("/device/protections", seqGate, putProtections(hub, deps.store))
 
 	v1.GET("/history", getHistory(deps.history))
 
@@ -62,6 +67,11 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	// Auto-stop rules (F-018): CRUD + trigger history, evaluated by the
 	// internal/automation engine (see wiring:automation in cmd/server).
 	registerAutomationRoutes(v1, deps.store)
+
+	// Programmable sequences (F-022): CRUD + run/stop/active, executed by the
+	// internal/sequence Manager (see wiring:sequence in cmd/server). A run
+	// blocks manual device mutations via seqGate above.
+	registerSequenceRoutes(v1, deps.store, deps.sequenceManager)
 
 	// CSV export (F-019): streaming downloads mirroring the JSON
 	// /history and /events routes, without their point/page caps.
