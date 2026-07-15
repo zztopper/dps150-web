@@ -133,8 +133,12 @@ lint:changelog:
         echo "changelog check skipped ([skip changelog] marker)"
         exit 0
       fi
-      git fetch origin master --depth=1 --quiet
-      CHANGED=$(git diff --name-only origin/master HEAD -- CHANGELOG.md)
+      # Fetch enough history to find the merge-base with master; the
+      # three-dot diff then shows only what THIS branch changed since it
+      # forked, so an unrelated CHANGELOG edit on master cannot mask a
+      # branch that forgot to update it (TD-003).
+      git fetch origin master --quiet
+      CHANGED=$(git diff --name-only origin/master...HEAD -- CHANGELOG.md)
       if [ -z "$CHANGED" ]; then
         echo "ERROR: CHANGELOG.md was not updated (update it or add [skip changelog] to the commit message)"
         exit 1

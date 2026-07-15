@@ -25,6 +25,7 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	})
 
 	v1 := r.Group("/api/v1")
+	v1.Use(authGate(deps))
 	v1.GET("/device", getDevice(hub))
 	v1.PUT("/device/setpoints", putSetpoints(hub))
 	v1.PUT("/device/output", putOutput(hub))
@@ -53,6 +54,21 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	v1.GET("/events", getEvents(deps.store))
 
 	registerNotificationRoutes(v1)
+
+	// Stage-3 assembly anchors. Each parallel track replaces EXACTLY its own
+	// anchor line below with its route registrations (r, v1 and deps are in
+	// scope) and must not touch the other anchors.
+	// routes:automation
+	// routes:export
+
+	// API tokens (F-020). Management is restricted to the browser UI behind
+	// Authelia (ADR-006): requireAuthelia runs in addition to authGate on
+	// these three routes only, so a bearer token -- even scope "control" --
+	// can never mint or revoke further tokens.
+	tokens := deps.tokens()
+	v1.GET("/tokens", requireAuthelia(), listTokens(tokens))
+	v1.POST("/tokens", requireAuthelia(), createToken(tokens))
+	v1.DELETE("/tokens/:id", requireAuthelia(), deleteToken(tokens))
 
 	// Prometheus scrape endpoint (TD-001), serving the default registry the
 	// domain metrics are registered on (see internal/metrics). It lives

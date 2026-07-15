@@ -62,6 +62,7 @@ func doRequestStore(t *testing.T, hub DeviceHub, store *storage.Storage, method,
 		req = httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("Remote-User", testRemoteUser)
 	r.ServeHTTP(w, req)
 	return w
 }
