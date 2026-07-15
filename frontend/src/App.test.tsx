@@ -1,14 +1,46 @@
 import { fireEvent, screen } from '@testing-library/react'
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { renderWithProviders } from './test/render'
 import { ResizeObserverStub } from './test/resizeObserver'
 import App from './App'
 
-// EventsPage (F-014) renders an antd Table, which needs a ResizeObserver
-// that jsdom does not provide.
-vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+// SettingsPage (F-015) fetches GET /api/v1/settings/notifications on
+// mount; stub it so the navigation smoke test never hits the network.
+function stubSettingsFetch() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            telegramEnabled: false,
+            events: {
+              protectionTrip: false,
+              deviceLink: false,
+              output: false,
+              meteringSession: false,
+            },
+          }),
+        }) as unknown as Response,
+    ),
+  )
+}
 
 describe('App shell', () => {
+  // EventsPage (F-014) renders an antd Table, which needs a ResizeObserver
+  // jsdom lacks; re-install it per test because afterEach's
+  // unstubAllGlobals() (clearing the fetch stub) also clears it.
+  beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+
   test('renders the layout: title, connection badge and navigation', () => {
     renderWithProviders(<App />)
     expect(screen.getByText('Управление DPS-150')).toBeInTheDocument()
@@ -18,6 +50,7 @@ describe('App shell', () => {
   })
 
   test('menu click navigates to a stub page', () => {
+    stubSettingsFetch()
     renderWithProviders(<App />)
 
     fireEvent.click(screen.getByRole('link', { name: 'История' }))
@@ -28,10 +61,10 @@ describe('App shell', () => {
     expect(screen.getByText('Сутки')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('link', { name: 'Настройки' }))
+    // SettingsPage (F-015) loads its data asynchronously; only the
+    // heading is guaranteed synchronously right after navigation.
     expect(
-      screen.getByText(
-        'Раздел в разработке: здесь появятся настройки уведомлений',
-      ),
+      screen.getByRole('heading', { name: 'Настройки', level: 4 }),
     ).toBeInTheDocument()
 
     // Back to the dashboard.

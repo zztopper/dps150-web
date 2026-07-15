@@ -14,7 +14,8 @@ test('the journal shows outputOn after the output is switched on', async ({ page
   await page.goto('/')
   await expect(page.getByText('На связи', { exact: true })).toBeVisible({ timeout: 10_000 })
 
-  const output = page.getByRole('switch')
+  // Scope to the dashboard content: the header also has a theme-toggle switch.
+  const output = page.locator('.app-content').getByRole('switch')
   await expect(output).not.toBeChecked()
   await output.click()
   const dialog = page.getByRole('dialog', { name: 'Включить выход?' })

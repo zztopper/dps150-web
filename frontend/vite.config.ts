@@ -29,9 +29,11 @@ export default defineConfig({
     passWithNoTests: true,
     setupFiles: ['./src/test/setup.ts'],
     // jsdom + antd + TanStack Query component tests are slow on CI runners;
-    // the 5s default flakes them (they pass locally). 15s gives headroom
-    // without masking a genuine hang.
-    testTimeout: 15000,
+    // the 5s default flakes them (they pass in ~2s locally). The single
+    // shared CI runner can host two pipelines at once, starving CPU so a
+    // heavy render takes 15s+ — 30s absorbs that without masking a real hang.
+    testTimeout: 30000,
+    hookTimeout: 30000,
     // Playwright e2e specs are not vitest tests.
     exclude: [...configDefaults.exclude, 'e2e/**'],
   },

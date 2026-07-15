@@ -1,8 +1,20 @@
-import { useEffect, useRef } from 'react'
-import { App as AntApp, Badge, Flex, Layout, Menu, Typography } from 'antd'
+import { useEffect, useRef, useState } from 'react'
+import {
+  App as AntApp,
+  Badge,
+  ConfigProvider,
+  Drawer,
+  Flex,
+  Layout,
+  Menu,
+  Switch,
+  theme as antdTheme,
+  Typography,
+} from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useDevice } from '../state/useDevice'
+import '../styles/responsive.css'
 
 const NAV_ITEMS = [
   { key: '/', labelKey: 'nav.dashboard' },
@@ -12,16 +24,93 @@ const NAV_ITEMS = [
   { key: '/settings', labelKey: 'nav.settings' },
 ]
 
+type ThemeMode = 'light' | 'dark'
+
+const THEME_STORAGE_KEY = 'dps150.theme'
+
+function readStoredThemeMode(): ThemeMode | null {
+  try {
+    const v = localStorage.getItem(THEME_STORAGE_KEY)
+    return v === 'light' || v === 'dark' ? v : null
+  } catch {
+    // Storage unavailable (private browsing, etc.) — fall back to system.
+    return null
+  }
+}
+
+function prefersDark(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+}
+
 /**
- * App shell: compact top navigation, device connection badge and
- * app-global toasts (protection trips, device link changes) that must
- * fire on every page. Pages render into the Outlet.
+ * Theme mode (F-016): follows `prefers-color-scheme` until the user
+ * flips the header switch, after which the explicit choice persists in
+ * localStorage and wins over the system preference.
+ */
+function useThemeMode(): { mode: ThemeMode; toggle: () => void } {
+  const [override, setOverride] = useState<ThemeMode | null>(readStoredThemeMode)
+  const [systemDark, setSystemDark] = useState(prefersDark)
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return
+    }
+    const mql = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+
+  const mode: ThemeMode = override ?? (systemDark ? 'dark' : 'light')
+
+  const toggle = () => {
+    const next: ThemeMode = mode === 'dark' ? 'light' : 'dark'
+    setOverride(next)
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next)
+    } catch {
+      // Nothing to persist to — the choice still applies for this tab.
+    }
+  }
+
+  return { mode, toggle }
+}
+
+/**
+ * App shell: compact top navigation (a burger + Drawer below ~640px),
+ * device connection badge, dark/light theme and app-global toasts
+ * (protection trips, device link changes) that must fire on every page.
+ * Pages render into the Outlet. The theme's ConfigProvider + App live
+ * here so every page and toast underneath picks up the selected mode.
  */
 export function AppLayout() {
+  const { mode, toggle } = useThemeMode()
+
+  return (
+    <ConfigProvider
+      theme={{ algorithm: mode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm }}
+    >
+      <AntApp>
+        <AppShell mode={mode} onToggleTheme={toggle} />
+      </AntApp>
+    </ConfigProvider>
+  )
+}
+
+interface AppShellProps {
+  mode: ThemeMode
+  onToggleTheme: () => void
+}
+
+function AppShell({ mode, onToggleTheme }: AppShellProps) {
   const { t } = useTranslation()
   const { message } = AntApp.useApp()
   const { wsConnected, deviceLink, lastEvent } = useDevice()
   const { pathname } = useLocation()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Protection trip toast.
   useEffect(() => {
@@ -63,26 +152,60 @@ export function AppLayout() {
     NAV_ITEMS.find((item) => item.key !== '/' && pathname.startsWith(item.key))
       ?.key ?? '/'
 
+  const menuItems = NAV_ITEMS.map(({ key, labelKey }) => ({
+    key,
+    label: <Link to={key}>{t(labelKey)}</Link>,
+  }))
+
   return (
-    <Layout className="app-layout">
+    <Layout className="app-layout app-shell" data-theme={mode}>
       <Layout.Header className="app-header">
         <Flex align="center" wrap gap="small">
-          <Typography.Title level={3} style={{ margin: 0 }}>
+          <button
+            type="button"
+            className="app-burger"
+            aria-label={t('nav.menu')}
+            onClick={() => setDrawerOpen(true)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+          <Typography.Title level={3} className="app-title" style={{ margin: 0 }}>
             {t('app.title')}
           </Typography.Title>
           <Menu
-            className="app-nav"
+            className="app-nav app-nav-desktop"
             mode="horizontal"
             disabledOverflow
             selectedKeys={[selectedKey]}
-            items={NAV_ITEMS.map(({ key, labelKey }) => ({
-              key,
-              label: <Link to={key}>{t(labelKey)}</Link>,
-            }))}
+            items={menuItems}
           />
           <Badge status={badge.status} text={badge.text} />
+          <Switch
+            className="theme-toggle"
+            checked={mode === 'dark'}
+            onChange={onToggleTheme}
+            checkedChildren={t('theme.dark')}
+            unCheckedChildren={t('theme.light')}
+            aria-label={t('theme.toggleLabel')}
+          />
         </Flex>
       </Layout.Header>
+      <Drawer
+        title={t('app.title')}
+        placement="left"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        styles={{ body: { padding: 0 } }}
+      >
+        <Menu
+          mode="vertical"
+          selectedKeys={[selectedKey]}
+          items={menuItems}
+          onClick={() => setDrawerOpen(false)}
+        />
+      </Drawer>
       <Layout.Content className="app-content">
         <Outlet />
       </Layout.Content>
