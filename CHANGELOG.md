@@ -33,12 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deploys moved to GitOps: the Helm chart lives in argocd-platform
   (`apps/dps150`), releases are image-tag bumps there; the CI deploy stage
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
+- `docker-compose.yml` now pulls the prebuilt backend/frontend images from
+  Docker Hub (`docker compose pull`) instead of building from source.
+- CI: GitHub Actions bumped to Node.js 24 runtimes (`actions/checkout@v5`,
+  `docker/*` v4/v6/v7) to clear the Node.js 20 deprecation warning.
 
 ### Added
 - README screenshots (dashboard, history, automation, profiles, events,
   settings) captured from the running app with the device emulator.
 - GitHub Actions workflow that builds and publishes the backend and
   frontend images to Docker Hub on push/tag (`.github/workflows/docker-publish.yml`).
+- Standalone all-in-one Docker image (`deploy/docker/Dockerfile.standalone`):
+  a single container serving the web UI and REST API from one binary with
+  SQLite storage — no PostgreSQL required.
 - Open-source cleanup: removed process/tooling scaffolding not part of the
   project (`.claude/`, `CLAUDE.md`, `.serena/`, boilerplate process docs,
   helper scripts and issue/MR templates); added a header language switcher

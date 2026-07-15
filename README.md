@@ -107,11 +107,28 @@ Or against a remote serial-over-TCP bridge (see `docs/runbooks/ser2net-pve.md`):
 ./backend/bin/dps150-server -transport tcp://192.0.2.10:2150
 ```
 
-### Docker Compose
+### Standalone container (SQLite, no PostgreSQL)
 
-Brings up the backend, the nginx-served frontend and PostgreSQL:
+A single container that serves the UI and the API from one binary, storing
+history in SQLite — nothing else to run. Built from
+[`deploy/docker/Dockerfile.standalone`](deploy/docker/Dockerfile.standalone):
 
 ```bash
+docker build -f deploy/docker/Dockerfile.standalone -t dps150-web .
+docker run --rm -p 8080:8080 -v dps150-data:/data dps150-web
+# open http://localhost:8080  (emulator by default)
+```
+
+The `dps150-data` volume keeps the SQLite database across restarts. Point it at
+a real PSU with `--device /dev/ttyUSB0 -e DPS_TRANSPORT=serial:///dev/ttyUSB0`.
+
+### Docker Compose (PostgreSQL, prebuilt images)
+
+Brings up the backend, the nginx-served frontend and PostgreSQL, pulling the
+images published to Docker Hub by CI:
+
+```bash
+docker compose pull
 docker compose up -d
 open http://localhost:8081
 ```
@@ -198,7 +215,8 @@ even without credentials.
 
 ## Deployment
 
-- **Local / homelab** — the single binary (SQLite + embedded UI) or
+- **Local / homelab** — the single binary (SQLite + embedded UI), the
+  standalone container (`Dockerfile.standalone`, SQLite) or
   `docker-compose.yml` (backend + frontend + PostgreSQL).
 - **Kubernetes** — a Helm chart deployed via ArgoCD (GitOps, ADR-005). The
   chart is a single-replica `Recreate` backend (the device port is
