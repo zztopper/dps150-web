@@ -44,6 +44,20 @@ type Metrics struct {
 	storageReady    prometheus.GaugeFunc
 	eventsDropped   prometheus.Counter
 
+	// Telemetry gauges (F-021): live readings mirrored from the hub stream
+	// so Grafana can chart them straight off /metrics. Measured values come
+	// from Telemetry ticks, setpoints from full-state snapshots.
+	voltage         prometheus.Gauge
+	current         prometheus.Gauge
+	power           prometheus.Gauge
+	temperature     prometheus.Gauge
+	inputVoltage    prometheus.Gauge
+	capacityAh      prometheus.Gauge
+	energyWh        prometheus.Gauge
+	outputEnabled   prometheus.Gauge
+	setpointVoltage prometheus.Gauge
+	setpointCurrent prometheus.Gauge
+
 	// storageReadyFn is the pluggable readiness probe read by the
 	// dps150_storage_ready gauge at scrape time; see SetStorageReadyFunc.
 	storageReadyFn atomic.Pointer[func() bool]
@@ -93,6 +107,46 @@ func New(reg prometheus.Registerer) *Metrics {
 		Name: "dps150_events_dropped_total",
 		Help: "Total device updates/events dropped because a subscriber could not keep up.",
 	})
+	m.voltage = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_voltage_volts",
+		Help: "Measured output voltage in volts.",
+	})
+	m.current = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_current_amps",
+		Help: "Measured output current in amperes.",
+	})
+	m.power = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_power_watts",
+		Help: "Measured output power in watts.",
+	})
+	m.temperature = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_temperature_celsius",
+		Help: "Device temperature in degrees Celsius.",
+	})
+	m.inputVoltage = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_input_voltage_volts",
+		Help: "Measured input (supply) voltage in volts.",
+	})
+	m.capacityAh = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_capacity_amp_hours",
+		Help: "Accumulated charge delivered this output session in amp-hours.",
+	})
+	m.energyWh = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_energy_watt_hours",
+		Help: "Accumulated energy delivered this output session in watt-hours.",
+	})
+	m.outputEnabled = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_output_enabled",
+		Help: "Whether the output relay is on (1) or off (0).",
+	})
+	m.setpointVoltage = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_setpoint_voltage_volts",
+		Help: "Configured voltage setpoint in volts.",
+	})
+	m.setpointCurrent = f.NewGauge(prometheus.GaugeOpts{
+		Name: "dps150_setpoint_current_amps",
+		Help: "Configured current setpoint in amperes.",
+	})
 
 	// Materialize the fixed protection label set so the series exist (all 0,
 	// honestly unknown) before the device reports its state.
@@ -126,9 +180,7 @@ func (m *Metrics) WatchHub(ctx context.Context, hub hubSource) {
 	// is re-applied from the update stream (gauge sets are idempotent).
 	snap := hub.Snapshot()
 	m.setConnected(snap.Connected)
-	if snap.State != nil {
-		m.setProtection(snap.State.Protection)
-	}
+	m.observeState(snap.State)
 	go func() {
 		for u := range updates {
 			switch v := u.(type) {
@@ -138,11 +190,10 @@ func (m *Metrics) WatchHub(ctx context.Context, hub hubSource) {
 					m.reconnects.Inc()
 				}
 			case device.StateSnapshot:
-				if v.State != nil {
-					m.setProtection(v.State.Protection)
-				}
+				m.observeState(v.State)
 			case device.Telemetry:
 				m.setProtection(v.Protection)
+				m.observeTelemetry(v)
 			}
 		}
 	}()
@@ -154,6 +205,46 @@ func (m *Metrics) setConnected(connected bool) {
 		return
 	}
 	m.deviceConnected.Set(0)
+}
+
+// observeTelemetry mirrors one telemetry tick into the measured-value gauges.
+func (m *Metrics) observeTelemetry(t device.Telemetry) {
+	m.voltage.Set(t.Voltage)
+	m.current.Set(t.Current)
+	m.power.Set(t.Power)
+	m.inputVoltage.Set(t.InputVoltage)
+	m.temperature.Set(t.Temperature)
+	m.capacityAh.Set(t.CapacityAh)
+	m.energyWh.Set(t.EnergyWh)
+	setBool(m.outputEnabled, t.OutputOn)
+}
+
+// observeState mirrors a full-state snapshot into both the measured-value
+// gauges and the setpoint gauges (setpoints ride only on full state, not on
+// telemetry ticks). A nil state (device not answered yet) is a no-op.
+func (m *Metrics) observeState(st *device.State) {
+	if st == nil {
+		return
+	}
+	m.voltage.Set(st.Voltage)
+	m.current.Set(st.Current)
+	m.power.Set(st.Power)
+	m.inputVoltage.Set(st.InputVoltage)
+	m.temperature.Set(st.Temperature)
+	m.capacityAh.Set(st.CapacityAh)
+	m.energyWh.Set(st.EnergyWh)
+	setBool(m.outputEnabled, st.OutputOn)
+	m.setpointVoltage.Set(st.SetVoltage)
+	m.setpointCurrent.Set(st.SetCurrent)
+	m.setProtection(st.Protection)
+}
+
+func setBool(g prometheus.Gauge, on bool) {
+	if on {
+		g.Set(1)
+		return
+	}
+	g.Set(0)
 }
 
 // setProtection marks active as the current protection state. Label
