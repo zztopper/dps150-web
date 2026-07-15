@@ -20,6 +20,9 @@ export function useDeviceMutations() {
         case 'device_offline':
           void message.error(t('errors.deviceOffline'))
           return
+        case 'sequence_active':
+          void message.error(t('sequences.deviceBusy'))
+          return
         default:
           void message.error(t('errors.requestFailed', { detail: err.message }))
           return

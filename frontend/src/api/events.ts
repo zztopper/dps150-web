@@ -13,6 +13,8 @@ export type JournalKind =
   | 'protectionsChanged'
   | 'meteringSession'
   | 'autoStop'
+  | 'sequenceRun'
+  | 'sequenceProgress'
 
 export const JOURNAL_KINDS: JournalKind[] = [
   'protectionTrip',
@@ -24,6 +26,7 @@ export const JOURNAL_KINDS: JournalKind[] = [
   'protectionsChanged',
   'meteringSession',
   'autoStop',
+  'sequenceRun',
 ]
 
 export interface JournalEvent {

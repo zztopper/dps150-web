@@ -173,6 +173,8 @@ export type HistoryEventKind =
   | 'protectionsChanged'
   | 'meteringSession'
   | 'autoStop'
+  | 'sequenceRun'
+  | 'sequenceProgress'
 
 export interface HistoryEvent {
   id: number

@@ -102,7 +102,9 @@
       "outputOn": "Output turned on",
       "profileApplied": "Profile applied: {{name}}",
       "protectionTrip": "Protection tripped: {{protection}}",
-      "protectionsChanged": "Protection setpoints changed"
+      "protectionsChanged": "Protection setpoints changed",
+      "sequenceProgress": "Sequence step",
+      "sequenceRun": "Sequence run"
     },
     "history": {
       "ariaLabel": "Measurement history chart. Series: {{series}}."
@@ -149,7 +151,9 @@
       "outputOn": "Output turned on",
       "profileApplied": "Profile applied",
       "protectionTrip": "Protection tripped",
-      "protectionsChanged": "Protection thresholds changed"
+      "protectionsChanged": "Protection thresholds changed",
+      "sequenceProgress": "Sequence step",
+      "sequenceRun": "Sequence run"
     },
     "pagination": {
       "total": "Total: {{total}}"
@@ -223,6 +227,7 @@
     "history": "History",
     "menu": "Menu",
     "profiles": "Profiles",
+    "sequences": "Sequences",
     "settings": "Settings"
   },
   "output": {
@@ -337,6 +342,99 @@
   "readings": {
     "inputVoltage": "Input",
     "temperature": "Temperature"
+  },
+  "sequences": {
+    "actions": {
+      "delete": "Delete",
+      "edit": "Edit",
+      "run": "Run",
+      "stop": "Stop"
+    },
+    "addButton": "New sequence",
+    "created": "Sequence created",
+    "deleteConfirm": {
+      "content": "This cannot be undone.",
+      "ok": "Yes, delete",
+      "title": "Delete sequence \"{{name}}\"?"
+    },
+    "deleted": "Sequence deleted",
+    "deviceBusy": "A sequence is running — stop it to control the device manually",
+    "editor": {
+      "emptyHint": "No steps yet — add a Set & hold, a Ramp or a Loop below."
+    },
+    "empty": "No sequences yet — create one to run a programmed V/I profile",
+    "errors": {
+      "active": "A sequence run is already active",
+      "invalid": "Invalid sequence data: {{detail}}",
+      "notFound": "Sequence not found",
+      "storageUnavailable": "The database is unavailable — sequences are temporarily unavailable",
+      "storageUnavailableTitle": "Storage unavailable"
+    },
+    "form": {
+      "amps": "Current, A",
+      "from": "From",
+      "loopEmpty": "A loop needs at least one step",
+      "min": "Value must be at least {{min}}",
+      "name": "Name",
+      "nameMax": "At most 64 characters",
+      "nameRequired": "Enter a name",
+      "positive": "Value must be greater than 0",
+      "range": "Value must be between {{min}} and {{max}}",
+      "repeat": "Repeat",
+      "repeatMin": "Repeat must be at least 1",
+      "required": "Enter a value",
+      "save": "Save",
+      "seconds": "Duration, s",
+      "stepsTitle": "Steps",
+      "target": "Target",
+      "targetCurrent": "Current",
+      "targetVoltage": "Voltage",
+      "titleCreate": "New sequence",
+      "titleEdit": "Edit sequence",
+      "to": "To",
+      "tooDeep": "Loops are nested too deep (max {{max}})",
+      "tooMany": "Too many steps (max {{max}})",
+      "volts": "Voltage, V"
+    },
+    "run": {
+      "currentStep": "Current step",
+      "elapsed": "Elapsed",
+      "state": {
+        "aborted": "Aborted",
+        "completed": "Completed",
+        "failed": "Failed",
+        "running": "Running",
+        "stopped": "Stopped"
+      },
+      "stepOfTotal": "{{index}} of {{total}}",
+      "stepPath": "Step path",
+      "stop": "Stop run",
+      "title": "Active run"
+    },
+    "runStarted": "Sequence \"{{name}}\" started",
+    "saved": "Sequence saved",
+    "step": {
+      "addLoop": "Add loop",
+      "addRamp": "Add ramp",
+      "addSetHold": "Add step",
+      "advanceType": "Advance condition",
+      "advanceWhen": "Advance when",
+      "delete": "Delete step",
+      "loop": "Loop",
+      "moveDown": "Move down",
+      "moveUp": "Move up",
+      "ramp": "Ramp",
+      "setHold": "Set & hold",
+      "wrapInLoop": "Wrap in loop"
+    },
+    "stopped": "Sequence stopped",
+    "table": {
+      "actions": "Actions",
+      "name": "Name",
+      "run": "Run",
+      "steps": "Steps"
+    },
+    "title": "Sequences"
   },
   "setpoints": {
     "apply": "Apply",

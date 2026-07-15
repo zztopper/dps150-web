@@ -12,6 +12,8 @@ const SEVERITY_BY_KIND: Record<HistoryEventKind, EventSeverity> = {
   protectionsChanged: 'neutral',
   meteringSession: 'neutral',
   autoStop: 'critical',
+  sequenceRun: 'info',
+  sequenceProgress: 'neutral',
 }
 
 export function eventSeverity(kind: string): EventSeverity {
@@ -59,6 +61,10 @@ export function describeEvent(t: Translate, ev: HistoryEvent): string {
     }
     case 'autoStop':
       return t('chart.events.autoStop')
+    case 'sequenceRun':
+      return t('chart.events.sequenceRun')
+    case 'sequenceProgress':
+      return t('chart.events.sequenceProgress')
     default:
       return ev.kind
   }

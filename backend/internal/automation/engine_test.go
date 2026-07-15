@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -490,6 +491,42 @@ func TestDisabledRuleIsNeverEvaluated(t *testing.T) {
 	if hub.outputCallCount() != 0 {
 		t.Errorf("SetOutput calls = %d, want 0 for a disabled rule", hub.outputCallCount())
 	}
+}
+
+// TestActiveSuppressorSuspendsEvaluation: while the suppressor predicate
+// returns true (a programmable-sequence run owns the device, F-022) no rule
+// fires; once it returns false, evaluation resumes and the rule can fire.
+func TestActiveSuppressorSuspendsEvaluation(t *testing.T) {
+	rule := storage.AutomationRule{
+		ID: 1, Name: "Safety timer", Enabled: true,
+		Condition: mustJSON(Condition{Type: ConditionElapsedAbove, Seconds: 1}),
+		Action:    ActionOutputOff, Scope: ScopeSession,
+	}
+	var suppress atomic.Bool
+	suppress.Store(true)
+
+	hub := newFakeHub()
+	hub.snap = device.Snapshot{Connected: true}
+	store := newFakeStore()
+	store.addRule(rule)
+	eng := New(hub, store, WithReloadInterval(time.Hour), WithActiveSuppressor(suppress.Load))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go eng.Run(ctx)
+	hub.push(device.StatusChange{Connected: true, Transport: "mock://dps-150"})
+
+	t0 := time.Now()
+	hub.push(device.Telemetry{OutputOn: true, TS: t0})
+	hub.push(device.Telemetry{OutputOn: true, TS: t0.Add(5 * time.Second)})
+	staySilent(t, func() bool { return store.triggerCount() > 0 },
+		"a suppressed engine must not fire even when the condition is met")
+
+	// Lift suppression: the rule resumes and fires on the next qualifying tick.
+	suppress.Store(false)
+	hub.push(device.Telemetry{OutputOn: true, TS: t0.Add(10 * time.Second)}) // baseline after resume
+	hub.push(device.Telemetry{OutputOn: true, TS: t0.Add(20 * time.Second)}) // elapsed 10s > 1s -> fire
+	waitFor(t, func() bool { return store.triggerCount() == 1 },
+		"the engine must fire once suppression is lifted")
 }
 
 // TestReloadPicksUpNewRule: a rule created in storage after the engine has

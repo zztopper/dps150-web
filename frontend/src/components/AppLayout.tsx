@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { key: '/profiles', labelKey: 'nav.profiles' },
   { key: '/events', labelKey: 'nav.events' },
   { key: '/automation', labelKey: 'nav.automation' },
+  { key: '/sequences', labelKey: 'nav.sequences' },
   { key: '/settings', labelKey: 'nav.settings' },
 ]
 

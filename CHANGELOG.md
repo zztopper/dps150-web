@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Home Assistant MQTT discovery reliability (F-021): discovery configs are now
+  published synchronously (waiting for the broker ack) with a connect log for
+  visibility, and the publisher subscribes to the HA birth topic
+  (`<discovery_prefix>/status`) and re-announces discovery + state whenever
+  Home Assistant comes back `online` — so the supply's entities appear
+  reliably and survive a Home Assistant restart.
 - UI/UX audit fixes (skill-guided, DA-reviewed): uPlot chart axes/gridlines
   now use the active Ant Design theme tokens so they stay legible in dark
   mode (charts remount on theme/locale change without a blank frame);
@@ -49,6 +55,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docker/*` v4/v6/v7) to clear the Node.js 20 deprecation warning.
 
 ### Added
+- Programmable sequences (F-022, `internal/sequence`): test programs built
+  from a tree of steps — `setHold` (set V/I, advance when a condition holds),
+  `ramp` (linearly sweep V or I over time) and nestable `loop` blocks — run by
+  a telemetry-driven interpreter over the device hub. Advance conditions reuse
+  the auto-stop condition model (`currentBelow`/`capacityAbove`/`energyAbove`/
+  `elapsedAbove`). One run at a time: starting a run turns the output on and
+  every terminal path (completion, stop, protection trip, backend shutdown,
+  error) turns it off; manual device/profile mutations return `409
+  sequence_active` while a run is active, and user auto-stop rules are
+  suspended for its duration. REST CRUD + `POST /sequences/:id/run|stop` +
+  `GET /sequences/active`; live step progress over the WebSocket
+  `sequenceProgress` event.
 - Home Assistant integration over MQTT Discovery (F-021, `internal/mqtt`):
   a retained JSON state topic, an availability topic with an MQTT Last-Will,
   and auto-published discovery configs so the supply shows up in HA as
