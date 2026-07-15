@@ -61,11 +61,128 @@
   },
   "profiles": {
     "title": "Профили",
-    "empty": "Раздел в разработке: здесь появятся профили и пресеты M1–M6"
+    "empty": "Профилей пока нет — создайте первый, чтобы применять его одним кликом",
+    "addButton": "Новый профиль",
+    "table": {
+      "name": "Название",
+      "voltage": "Напряжение",
+      "current": "Ток",
+      "protections": "Защиты",
+      "actions": "Действия"
+    },
+    "actions": {
+      "apply": "Применить",
+      "assign": "В ячейку",
+      "edit": "Изменить",
+      "delete": "Удалить"
+    },
+    "applyConfirm": {
+      "title": "Применить профиль «{{name}}»?",
+      "content": "Уставки V/I и защиты будут записаны на устройство. Выход НЕ включается и не выключается.",
+      "ok": "Да, применить"
+    },
+    "applied": "Профиль «{{name}}» применён",
+    "deleteConfirm": {
+      "title": "Удалить профиль «{{name}}»?",
+      "content": "Действие необратимо.",
+      "ok": "Да, удалить"
+    },
+    "deleted": "Профиль удалён",
+    "assigned": "Профиль назначен в ячейку M{{slot}}",
+    "saved": "Профиль сохранён",
+    "created": "Профиль создан",
+    "presets": {
+      "title": "Аппаратные пресеты M1–M6",
+      "slotShort": "M{{slot}}"
+    },
+    "form": {
+      "titleCreate": "Новый профиль",
+      "titleEdit": "Изменить профиль",
+      "name": "Название",
+      "nameRequired": "Укажите название",
+      "nameMax": "Не более 64 символов",
+      "voltage": "Напряжение, В",
+      "voltageHint": "0 < V ≤ {{max}} В",
+      "current": "Ток, А",
+      "currentHint": "0 < I ≤ {{max}} А",
+      "protectionsTitle": "Уставки защит",
+      "ovpHint": "0 < OVP ≤ {{max}} {{unit}}",
+      "ocpHint": "0 < OCP ≤ {{max}} {{unit}}",
+      "oppHint": "0 < OPP ≤ {{max}} {{unit}}",
+      "otpHint": "0 < OTP ≤ {{max}} {{unit}}",
+      "lvpHint": "LVP ≥ 0 {{unit}} (0 — выключено)",
+      "required": "Укажите значение",
+      "rangeError": "Значение должно быть от {{min}} до {{max}} {{unit}}",
+      "lvpRangeError": "LVP должно быть не меньше 0",
+      "save": "Сохранить"
+    },
+    "quick": {
+      "title": "Быстрые профили",
+      "empty": "Профили ещё не созданы — добавьте их на странице «Профили»",
+      "applied": "Применено: {{name}}",
+      "offlineHint": "Устройство не на связи"
+    },
+    "errors": {
+      "nameTaken": "Профиль с таким названием уже существует",
+      "notFound": "Профиль не найден",
+      "invalid": "Некорректные данные профиля: {{detail}}",
+      "invalidSetpoint": "Уставка профиля выходит за пределы устройства: {{detail}}",
+      "invalidSlot": "Некорректный номер ячейки: {{detail}}",
+      "storageUnavailableTitle": "Хранилище недоступно",
+      "storageUnavailable": "База данных недоступна — профили временно нельзя изменить"
+    }
   },
   "events": {
     "title": "Журнал событий",
-    "empty": "Раздел в разработке: здесь появится журнал событий"
+    "empty": "Событий пока нет",
+    "filter": {
+      "placeholder": "Тип события"
+    },
+    "table": {
+      "time": "Время",
+      "kind": "Событие",
+      "summary": "Подробности"
+    },
+    "kinds": {
+      "protectionTrip": "Сработала защита",
+      "deviceConnected": "Устройство подключено",
+      "deviceDisconnected": "Устройство отключено",
+      "outputOn": "Выход включён",
+      "outputOff": "Выход выключен",
+      "profileApplied": "Профиль применён",
+      "protectionsChanged": "Изменены уставки защит",
+      "meteringSession": "Сессия учёта завершена",
+      "autoStop": "Автостоп"
+    },
+    "summary": {
+      "protectionTrip": "{{protection}} при {{voltage}} В / {{current}} А / {{power}} Вт",
+      "profileApplied": "«{{name}}»",
+      "meteringSession": "{{capacity}} Ач, {{energy}} Втч за {{durationMin}} мин"
+    },
+    "pagination": {
+      "total": "Всего: {{total}}"
+    },
+    "errors": {
+      "storageUnavailableTitle": "Хранилище недоступно",
+      "storageUnavailable": "База данных недоступна — журнал событий временно недоступен"
+    }
+  },
+  "protections": {
+    "title": "Уставки защит",
+    "ovp": "OVP",
+    "ocp": "OCP",
+    "opp": "OPP",
+    "otp": "OTP",
+    "lvp": "LVP",
+    "trippedBadge": "сработала",
+    "required": "Укажите значение",
+    "range": "Значение должно быть от {{min}} до {{max}}",
+    "rangeMin": "Значение должно быть не меньше {{min}}",
+    "save": "Сохранить",
+    "saved": "Уставки защит сохранены",
+    "errors": {
+      "invalid": "Недопустимая уставка защиты: {{detail}}"
+    }
   },
   "settings": {
     "title": "Настройки",

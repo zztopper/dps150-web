@@ -5,6 +5,8 @@ import { Readings } from '../components/Readings'
 import { SetpointsForm } from '../components/SetpointsForm'
 import { OutputControl } from '../components/OutputControl'
 import { LiveChart } from '../components/LiveChart'
+import { ProtectionsPanel } from '../components/ProtectionsPanel'
+import { QuickProfiles } from '../components/QuickProfiles' 
 
 /**
  * Live dashboard for the DPS-150 (F-006). Stage-2 tracks plug their
@@ -36,7 +38,13 @@ export function DashboardPage() {
       <LiveChart />
       {/* slot:live-chart */}
       {/* slot:protections-panel */}
+      <ProtectionsPanel
+        protections={state?.protections ?? null}
+        activeProtection={state?.protection ?? null}
+        disabled={!connected}
+      />
       {/* slot:quick-profiles */}
+      <QuickProfiles />
       {/* slot:metering-card */}
     </Flex>
   )

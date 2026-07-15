@@ -1,7 +1,12 @@
 import { fireEvent, screen } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { renderWithProviders } from './test/render'
+import { ResizeObserverStub } from './test/resizeObserver'
 import App from './App'
+
+// EventsPage (F-014) renders an antd Table, which needs a ResizeObserver
+// that jsdom does not provide.
+vi.stubGlobal('ResizeObserver', ResizeObserverStub)
 
 describe('App shell', () => {
   test('renders the layout: title, connection badge and navigation', () => {
@@ -34,11 +39,19 @@ describe('App shell', () => {
     expect(screen.getByText('Уставки и выход')).toBeInTheDocument()
   })
 
-  test('deep link renders the stub page directly', () => {
+  test('deep link renders the events page directly', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ items: [], total: 0 }),
+        }) as unknown as Response,
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
     renderWithProviders(<App />, { route: '/events' })
     expect(screen.getByText('Журнал событий')).toBeInTheDocument()
-    expect(
-      screen.getByText('Раздел в разработке: здесь появится журнал событий'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Событий пока нет')).toBeInTheDocument()
   })
 })

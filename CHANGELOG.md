@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   being the coarsest tier) — a genuine 30-day span was guaranteed to
   400 `range_too_dense` on any deployment with more than ~14 days of
   continuous history.
+- `ProtectionsPanel` (F-014-UI): client-side validation now rejects 0 for OVP/OCP/OPP/OTP (only LVP may be 0), matching the backend's `> 0` contract and the sibling `ProfileFormModal` validator — previously a 0 threshold passed inline validation and only got rejected by the server's 400 `invalid_protection`.
 
 ### Changed
 - Deploys moved to GitOps: the Helm chart lives in argocd-platform
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   V/I/P/T show/hide toggles, an exact-value/time cursor legend, and
   `GET /api/v1/events` markers (clickable through to `/events` with a
   time filter).
+- Profiles, presets, protections and event journal UI (F-010/F-011/F-014): `ProfilesPage` (CRUD modal with per-protection range hints, apply-to-device via Popconfirm that never touches the output relay, assign-to-M1–M6 dropdown, live presets grid), dashboard `QuickProfiles` (one-click apply, applied-feedback, disabled offline) and `ProtectionsPanel` (inline OVP/OCP/OPP/OTP/LVP editing with a highlighted tripped-threshold row) slots, and `EventsPage` (paginated, kind-filterable journal with localized timestamps, an expandable raw-JSON row and WS-driven live refresh); 503 `storage_unavailable` renders a page Alert, 409 `device_offline` a toast.
 - Stage-2 integration polish: meteringSession and profileApplied journal
   kinds are mirrored to WebSocket clients, profile apply answers 409 while
   the device is offline, and the initial device connect no longer sends a

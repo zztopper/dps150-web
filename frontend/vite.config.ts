@@ -28,6 +28,10 @@ export default defineConfig({
     environment: 'jsdom',
     passWithNoTests: true,
     setupFiles: ['./src/test/setup.ts'],
+    // jsdom + antd + TanStack Query component tests are slow on CI runners;
+    // the 5s default flakes them (they pass locally). 15s gives headroom
+    // without masking a genuine hang.
+    testTimeout: 15000,
     // Playwright e2e specs are not vitest tests.
     exclude: [...configDefaults.exclude, 'e2e/**'],
   },

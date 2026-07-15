@@ -61,11 +61,128 @@
   },
   "profiles": {
     "title": "Profiles",
-    "empty": "Under construction: profiles and M1–M6 presets will appear here"
+    "empty": "No profiles yet — create one to apply it in a single click",
+    "addButton": "New profile",
+    "table": {
+      "name": "Name",
+      "voltage": "Voltage",
+      "current": "Current",
+      "protections": "Protections",
+      "actions": "Actions"
+    },
+    "actions": {
+      "apply": "Apply",
+      "assign": "To slot",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "applyConfirm": {
+      "title": "Apply profile \"{{name}}\"?",
+      "content": "V/I setpoints and protections will be written to the device. The output is NOT switched on or off.",
+      "ok": "Yes, apply"
+    },
+    "applied": "Profile \"{{name}}\" applied",
+    "deleteConfirm": {
+      "title": "Delete profile \"{{name}}\"?",
+      "content": "This cannot be undone.",
+      "ok": "Yes, delete"
+    },
+    "deleted": "Profile deleted",
+    "assigned": "Profile assigned to slot M{{slot}}",
+    "saved": "Profile saved",
+    "created": "Profile created",
+    "presets": {
+      "title": "Hardware presets M1–M6",
+      "slotShort": "M{{slot}}"
+    },
+    "form": {
+      "titleCreate": "New profile",
+      "titleEdit": "Edit profile",
+      "name": "Name",
+      "nameRequired": "Enter a name",
+      "nameMax": "At most 64 characters",
+      "voltage": "Voltage, V",
+      "voltageHint": "0 < V ≤ {{max}} V",
+      "current": "Current, A",
+      "currentHint": "0 < I ≤ {{max}} A",
+      "protectionsTitle": "Protection thresholds",
+      "ovpHint": "0 < OVP ≤ {{max}} {{unit}}",
+      "ocpHint": "0 < OCP ≤ {{max}} {{unit}}",
+      "oppHint": "0 < OPP ≤ {{max}} {{unit}}",
+      "otpHint": "0 < OTP ≤ {{max}} {{unit}}",
+      "lvpHint": "LVP ≥ 0 {{unit}} (0 disables it)",
+      "required": "Enter a value",
+      "rangeError": "Value must be between {{min}} and {{max}} {{unit}}",
+      "lvpRangeError": "LVP must be at least 0",
+      "save": "Save"
+    },
+    "quick": {
+      "title": "Quick profiles",
+      "empty": "No profiles yet — add some on the Profiles page",
+      "applied": "Applied: {{name}}",
+      "offlineHint": "Device offline"
+    },
+    "errors": {
+      "nameTaken": "A profile with this name already exists",
+      "notFound": "Profile not found",
+      "invalid": "Invalid profile data: {{detail}}",
+      "invalidSetpoint": "Profile setpoint is outside the device range: {{detail}}",
+      "invalidSlot": "Invalid slot number: {{detail}}",
+      "storageUnavailableTitle": "Storage unavailable",
+      "storageUnavailable": "The database is unavailable — profiles cannot be changed right now"
+    }
   },
   "events": {
     "title": "Event log",
-    "empty": "Under construction: the event log will appear here"
+    "empty": "No events yet",
+    "filter": {
+      "placeholder": "Event type"
+    },
+    "table": {
+      "time": "Time",
+      "kind": "Event",
+      "summary": "Details"
+    },
+    "kinds": {
+      "protectionTrip": "Protection tripped",
+      "deviceConnected": "Device connected",
+      "deviceDisconnected": "Device disconnected",
+      "outputOn": "Output turned on",
+      "outputOff": "Output turned off",
+      "profileApplied": "Profile applied",
+      "protectionsChanged": "Protection thresholds changed",
+      "meteringSession": "Metering session finished",
+      "autoStop": "Auto-stop"
+    },
+    "summary": {
+      "protectionTrip": "{{protection}} at {{voltage}} V / {{current}} A / {{power}} W",
+      "profileApplied": "\"{{name}}\"",
+      "meteringSession": "{{capacity}} Ah, {{energy}} Wh over {{durationMin}} min"
+    },
+    "pagination": {
+      "total": "Total: {{total}}"
+    },
+    "errors": {
+      "storageUnavailableTitle": "Storage unavailable",
+      "storageUnavailable": "The database is unavailable — the event log is temporarily unavailable"
+    }
+  },
+  "protections": {
+    "title": "Protection thresholds",
+    "ovp": "OVP",
+    "ocp": "OCP",
+    "opp": "OPP",
+    "otp": "OTP",
+    "lvp": "LVP",
+    "trippedBadge": "tripped",
+    "required": "Enter a value",
+    "range": "Value must be between {{min}} and {{max}}",
+    "rangeMin": "Value must be at least {{min}}",
+    "save": "Save",
+    "saved": "Protection thresholds saved",
+    "errors": {
+      "invalid": "Invalid protection threshold: {{detail}}"
+    }
   },
   "settings": {
     "title": "Settings",
