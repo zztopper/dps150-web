@@ -48,7 +48,7 @@ describe('AppLayout — mobile nav and theme (F-016)', () => {
 
   it(
     'opens the drawer from the burger button and navigates on item click',
-    () => {
+    async () => {
       renderWithProviders(<App />)
 
       // The desktop horizontal menu link exists but the drawer's own copy
@@ -56,7 +56,10 @@ describe('AppLayout — mobile nav and theme (F-016)', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('button', { name: 'Меню' }))
-      const drawer = screen.getByRole('dialog')
+      // The Drawer mounts through an rc-motion transition, so wait for it
+      // rather than asserting synchronously — a starved CI runner can defer
+      // the re-render past the same tick.
+      const drawer = await screen.findByRole('dialog', {}, { timeout: 10_000 })
       expect(drawer).toBeVisible()
 
       // Scoped to the drawer: the desktop menu still has its own copy of
@@ -64,12 +67,11 @@ describe('AppLayout — mobile nav and theme (F-016)', () => {
       // jsdom does not evaluate).
       fireEvent.click(within(drawer).getByRole('link', { name: 'История' }))
 
-      expect(screen.getByText('История измерений')).toBeInTheDocument()
+      // The route change swaps in the History page; wait for its content.
+      expect(
+        await screen.findByText('История измерений', {}, { timeout: 10_000 }),
+      ).toBeInTheDocument()
     },
-    // The Drawer's open/close mount transition plus a route change is
-    // more than the default 5000ms leaves room for under CI load (see
-    // the frontend `waitFor` timeout convention in CLAUDE.md).
-    10_000,
   )
 
   it('defaults to light theme when there is no stored preference and the system prefers light', () => {

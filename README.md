@@ -41,12 +41,36 @@ stack with no hardware attached.
 
 ## Screenshots
 
-_Screenshots are not included in the repository yet._
+Live control panel, driven by the built-in device emulator (dark theme).
 
-<!--
+### Dashboard — live readings, setpoints, protections, quick profiles and metering
+
 ![Dashboard](docs/screenshots/dashboard.png)
+
+### History — a month of telemetry with uPlot charts, range presets and CSV export
+
 ![History](docs/screenshots/history.png)
--->
+
+### Automation — auto-stop rules over the telemetry stream
+
+![Automation](docs/screenshots/automation.png)
+
+<details>
+<summary>More screens — Profiles, Events, Settings</summary>
+
+**Profiles** — named V/I + protection presets, apply to the device or a hardware M1–M6 slot
+
+![Profiles](docs/screenshots/profiles.png)
+
+**Events** — the device journal (protection trips, output changes, connects, auto-stops)
+
+![Events](docs/screenshots/events.png)
+
+**Settings** — Telegram notification preferences and API tokens for scripted access
+
+![Settings](docs/screenshots/settings.png)
+
+</details>
 
 ## Quick start
 
@@ -155,6 +179,22 @@ mock://  ─┘  (reconnect)   (single owner)        ├── history writer �
 See `docs/architecture/design.md` and `docs/architecture/api-contract.md` for
 the full design, and `docs/FNIRSI_DPS-150_Protocol.md` for the protocol
 reference.
+
+## Container images
+
+GitHub Actions ([`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml))
+builds and publishes both images to Docker Hub on every push to the default
+branch (tagged `latest` + the short commit SHA) and on `v*` tags (semver):
+
+```
+docker pull <dockerhub-user>/dps150-web-backend
+docker pull <dockerhub-user>/dps150-web-frontend
+```
+
+Publishing requires two repository secrets — `DOCKERHUB_USERNAME` (also the
+image namespace) and `DOCKERHUB_TOKEN` (a Docker Hub access token). Pull
+requests build the images without pushing, so the Dockerfiles stay validated
+even without credentials.
 
 ## Deployment
 
