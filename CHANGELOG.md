@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Auto-stop rules engine (F-018), adversarial-review fix: for `scope: always`,
+  an output-off gap no longer counts toward the `currentBelow` hysteresis
+  window — the engine now excludes the off period's duration from the
+  counted hold time instead of treating it as elapsed wall clock, so an
+  interruption at least as long as `forSeconds` can no longer, by itself,
+  fire the rule unconditionally on the very first telemetry tick after the
+  output comes back on; genuine progress made before and after the gap
+  still accumulates correctly.
 - Charts (F-013), adversarial-review fixes: `EventMarkers`' collision
   resolution is now a proper two-pass sweep instead of nudging each
   marker around its own raw position — the old approach could never
@@ -28,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - API tokens and bearer/forward-auth gate (F-020, ADR-006): `api_tokens(id, name, scope, token_hash, created_at, last_used_at)` storing only the SHA-256 hash of a `dps_<base64url>` secret shown once at creation; `GET/POST /api/v1/tokens` and `DELETE /api/v1/tokens/{id}` for management, reachable only through the browser UI behind Authelia (`Remote-User`), never by a bearer token even scope `control`; a real `authGate` on `/api/v1/*` now requires either a valid `Authorization: Bearer <token>` with sufficient scope (`control` for mutations, `read` or above for reads) or a trusted `Remote-User` header, otherwise 401 `unauthorized` (403 `forbidden` for insufficient scope); a down or unconfigured token store fails a bearer attempt closed (401), never 503 — a database outage must never bypass auth. `/healthz` and `/metrics` stay outside the gate.
+- Auto-stop rules engine and API (F-018): `automation_rules`/`automation_triggers` tables (condition stored as JSON); CRUD at `GET/POST/PUT/DELETE /api/v1/automation/rules(/{id})` (404 `rule_not_found`) plus `GET /api/v1/automation/triggers` (paginated firing history), all 503 `storage_unavailable` while the database is down; a hub-subscribing `internal/automation` engine evaluates enabled rules against the live telemetry stream (`currentBelow`/`capacityAbove`/`energyAbove`/`elapsedAbove`) with duration/hysteresis (a single telemetry spike never fires a rule — the condition must hold for `forSeconds`), `scope: session` resetting a rule's progress when the output turns off vs. `scope: always` carrying it across on/off cycles; on firing it switches the output off, journals an `autoStop` entry (mirrored to WS `event`), records the trigger history and optionally notifies via the existing Telegram sender; every rule is suspended (not evaluated, no accumulated progress) while the device link is down.
 - Charts (F-013): a Dashboard `LiveChart` (uPlot) streaming a 5/15/30 min
   sliding V/I/P window straight from the live WS state (no extra network
   traffic), paused while the tab is hidden; a `HistoryPage` with
