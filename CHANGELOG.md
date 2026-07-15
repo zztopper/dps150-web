@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is gone (ADR-005 supersedes the ADR-003 deploy mechanism).
 
 ### Added
+- README screenshots (dashboard, history, automation, profiles, events,
+  settings) captured from the running app with the device emulator.
+- GitHub Actions workflow that builds and publishes the backend and
+  frontend images to Docker Hub on push/tag (`.github/workflows/docker-publish.yml`).
 - Open-source cleanup: removed process/tooling scaffolding not part of the
   project (`.claude/`, `CLAUDE.md`, `.serena/`, boilerplate process docs,
   helper scripts and issue/MR templates); added a header language switcher

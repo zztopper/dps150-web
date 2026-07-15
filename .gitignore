@@ -38,13 +38,15 @@ frontend/coverage/
 
 # Claude worktrees
 .claude/worktrees/
-tokens-section-empty.png
-/*.png
 
 # Playwright MCP browser artifacts
 .playwright-mcp/
-*.png
 
 # Tooling (not part of the project)
 .claude/
 .serena/
+
+# Stray screenshots at repo root (Playwright MCP artifacts); keep README screenshots
+/*.png
+!/docs/screenshots/
+docs/screenshots/*.tmp.png
