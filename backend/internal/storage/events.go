@@ -83,3 +83,40 @@ func (s *Storage) QueryEvents(ctx context.Context, from, to int64, kinds []strin
 	}
 	return items, total, nil
 }
+
+// QueryEventsPage returns up to limit journal entries oldest-first (ts
+// ascending, then id ascending to break ties within the same millisecond),
+// filtered the same way as QueryEvents (inclusive from/to when positive, an
+// empty kinds slice matching every kind), starting strictly after the
+// keyset cursor (afterTS, afterID) — the (ts, id) of the last row of the
+// previous page, or (-1, -1) for the first page. Unlike QueryEvents it never
+// runs a COUNT() and never seeks past already-read rows with OFFSET, so
+// callers that only need to walk the whole range once — CSV export (F-019)
+// — can page through it in O(1) work per page regardless of how deep they
+// are. It returns ErrUnavailable while the database is down.
+func (s *Storage) QueryEventsPage(ctx context.Context, from, to int64, kinds []string, afterTS, afterID int64, limit int) ([]Event, error) {
+	db, err := s.DB()
+	if err != nil {
+		return nil, err
+	}
+	q := db.WithContext(ctx).Model(&Event{})
+	if from > 0 {
+		q = q.Where("ts >= ?", from)
+	}
+	if to > 0 {
+		q = q.Where("ts <= ?", to)
+	}
+	if len(kinds) > 0 {
+		q = q.Where("kind IN ?", kinds)
+	}
+	q = q.Where("(ts > ? OR (ts = ? AND id > ?))", afterTS, afterTS, afterID)
+	q = q.Order("ts ASC, id ASC")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	var items []Event
+	if err := q.Find(&items).Error; err != nil {
+		return nil, fmt.Errorf("query events page: %w", err)
+	}
+	return items, nil
+}

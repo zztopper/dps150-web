@@ -63,7 +63,10 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	// internal/automation engine (see wiring:automation in cmd/server).
 	registerAutomationRoutes(v1, deps.store)
 
-	// routes:export
+	// CSV export (F-019): streaming downloads mirroring the JSON
+	// /history and /events routes, without their point/page caps.
+	v1.GET("/history.csv", getHistoryCSV(deps.history))
+	v1.GET("/events.csv", getEventsCSV(deps.store))
 
 	// API tokens (F-020). Management is restricted to the browser UI behind
 	// Authelia (ADR-006): requireAuthelia runs in addition to authGate on

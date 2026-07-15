@@ -68,8 +68,14 @@ func TestMeteringAgainstEmulator(t *testing.T) {
 	if err := hub.SetOutput(ctx, true); err != nil {
 		t.Fatalf("SetOutput(true): %v", err)
 	}
+	// Wait for a clear margin (half of session 1's gain, i.e. several
+	// telemetry ticks), not just a single tick past afterFirst: the notifier
+	// is a separate hub subscriber whose session baseline can land a tick
+	// later than this snapshot, so a one-tick window could yield a zero delta
+	// on a slow/contended runner.
+	target := afterFirst + first.data.CapacityAh/2
 	waitState(t, hub, "counters to keep accumulating", func(st *device.State) bool {
-		return st.CapacityAh > afterFirst // documented: no reset between sessions
+		return st.CapacityAh > target // documented: no reset between sessions
 	})
 	if err := hub.SetOutput(ctx, false); err != nil {
 		t.Fatalf("SetOutput(false): %v", err)

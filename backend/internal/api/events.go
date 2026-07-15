@@ -69,12 +69,7 @@ func getEvents(store *storage.Storage) gin.HandlerFunc {
 			return
 		}
 
-		var kinds []string
-		for _, k := range strings.Split(c.Query("kind"), ",") {
-			if k = strings.TrimSpace(k); k != "" {
-				kinds = append(kinds, k)
-			}
-		}
+		kinds := queryKinds(c)
 
 		rows, total, err := store.QueryEvents(c.Request.Context(),
 			from, to, kinds, int(limit), int(offset))
@@ -98,6 +93,20 @@ func getEvents(store *storage.Storage) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, eventsPageDTO{Items: items, Total: total})
 	}
+}
+
+// queryKinds parses the kind query parameter as a comma-separated event
+// kind filter (contract v2/v3), trimming whitespace and dropping empty
+// entries; an absent or blank parameter yields a nil slice (match every
+// kind). Also used by GET /api/v1/events.csv (F-019).
+func queryKinds(c *gin.Context) []string {
+	var kinds []string
+	for _, k := range strings.Split(c.Query("kind"), ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			kinds = append(kinds, k)
+		}
+	}
+	return kinds
 }
 
 // queryInt64 parses an optional non-negative integer query parameter,
