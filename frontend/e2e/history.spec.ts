@@ -171,7 +171,9 @@ test('an output event marker links to /events filtered around its time', async (
   // Generate a fresh, easy-to-find event: toggle the output on and off.
   await page.goto('/')
   await expect(page.getByText('На связи', { exact: true })).toBeVisible({ timeout: 10_000 })
-  const outputSwitch = page.getByRole('switch').first()
+  // Scope to the dashboard content: the header also has a theme-toggle switch,
+  // and .first() would otherwise grab that instead of the output control.
+  const outputSwitch = page.locator('.app-content').getByRole('switch')
   await outputSwitch.click()
   await page.getByRole('dialog', { name: 'Включить выход?' }).getByRole('button', { name: 'Включить' }).click()
   await expect(outputSwitch).toBeChecked()

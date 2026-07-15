@@ -1,0 +1,125 @@
+/* Mobile layout + dark-mode support for the app shell (F-016). */
+
+.app-burger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.app-burger:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.app-burger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  margin: 0 auto;
+  background: currentcolor;
+  border-radius: 1px;
+}
+
+.theme-toggle {
+  margin-left: auto;
+}
+
+/* Bench-top defaults: the shell fills the theme's page background so the
+   parts of the viewport not covered by an AntD component (which is
+   already themed via ConfigProvider) still switch with dark mode. */
+.app-shell {
+  min-height: 100vh;
+  background: var(--dps-bg, transparent);
+}
+
+.app-shell[data-theme='dark'] {
+  --dps-bg: #141414;
+  color-scheme: dark;
+}
+
+.app-shell[data-theme='light'] {
+  --dps-bg: #f5f5f5;
+  color-scheme: light;
+}
+
+@media (max-width: 640px) {
+  .app-nav-desktop {
+    display: none;
+  }
+
+  .app-burger {
+    display: inline-flex;
+  }
+
+  .app-header {
+    padding: 8px 12px;
+  }
+
+  .app-header .app-title {
+    font-size: 1.1rem;
+  }
+
+  .app-content {
+    padding: 0 12px 16px;
+  }
+
+  /* V/I/P: as large as the screen reasonably allows, readable at arm's
+     length. */
+  .dashboard-readings .reading-value {
+    font-size: clamp(3rem, 16vw, 4rem);
+  }
+
+  .dashboard-readings .readings-grid {
+    justify-content: space-between;
+    gap: 4px 12px;
+  }
+
+  /* Secondary readings (input voltage, temperature) collapse to one
+     compact line instead of competing with the primary numbers. */
+  .dashboard-readings .ant-typography-secondary {
+    font-size: 0.8rem;
+  }
+
+  /* Output switch and setpoints form: full-width stack with large touch
+     targets instead of a cramped inline row. */
+  .dashboard-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .dashboard-controls .setpoints-form {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+
+  .dashboard-controls .setpoints-form .ant-form-item {
+    flex: 1 1 auto;
+    min-width: 45%;
+    margin-inline-end: 0;
+  }
+
+  .dashboard-controls .setpoints-form .ant-btn {
+    width: 100%;
+    min-height: 44px;
+    font-size: 1rem;
+  }
+
+  .dashboard-controls .ant-switch {
+    min-width: 88px;
+    height: 40px;
+    line-height: 38px;
+  }
+
+  .dashboard-controls .ant-switch .ant-switch-inner {
+    font-size: 0.95rem;
+  }
+}

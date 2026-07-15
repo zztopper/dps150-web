@@ -1,0 +1,28 @@
+/* MeteringCard (F-017): prominent while the output is on, muted while
+   it is off — the numbers are only "live" in the first state. */
+
+.metering-stat-value {
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.metering-stat .reading-unit {
+  font-size: 0.85em;
+  opacity: 0.65;
+}
+
+.metering-card-idle .metering-stat-value {
+  opacity: 0.5;
+  font-weight: 500;
+}
+
+.metering-card-active .metering-stat-value {
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  .metering-stat-value {
+    font-size: clamp(1.5rem, 6vw, 2rem);
+  }
+}

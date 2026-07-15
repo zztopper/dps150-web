@@ -10,7 +10,13 @@
     "history": "История",
     "profiles": "Профили",
     "events": "События",
-    "settings": "Настройки"
+    "settings": "Настройки",
+    "menu": "Меню"
+  },
+  "theme": {
+    "light": "Светлая",
+    "dark": "Тёмная",
+    "toggleLabel": "Переключить тему"
   },
   "history": {
     "title": "История измерений",
@@ -186,7 +192,20 @@
   },
   "settings": {
     "title": "Настройки",
-    "empty": "Раздел в разработке: здесь появятся настройки уведомлений"
+    "telegramTitle": "Уведомления в Telegram",
+    "telegramEnabled": "Отправлять уведомления в Telegram",
+    "eventsTitle": "Типы событий",
+    "events": {
+      "protectionTrip": "Сработка защиты",
+      "deviceLink": "Связь с устройством потеряна/восстановлена",
+      "output": "Включение/выключение выхода",
+      "meteringSession": "Итог сессии метеринга"
+    },
+    "notConfiguredTitle": "Telegram не настроен (env)",
+    "notConfiguredDescription": "Токен бота и chat id заданы только через переменные окружения сервера (DPS_TELEGRAM_TOKEN, DPS_TELEGRAM_CHAT_ID). Пока они не заданы, уведомления недоступны.",
+    "saved": "Настройки сохранены",
+    "saveError": "Не удалось сохранить настройки: {{detail}}",
+    "loadError": "Не удалось загрузить настройки"
   },
   "header": {
     "online": "На связи",
@@ -197,7 +216,19 @@
     "volt": "В",
     "amp": "А",
     "watt": "Вт",
-    "celsius": "°C"
+    "celsius": "°C",
+    "ampHour": "Ач",
+    "wattHour": "Втч"
+  },
+  "metering": {
+    "title": "Метеринг",
+    "capacity": "Ёмкость",
+    "energy": "Энергия",
+    "sessionDuration": "Текущая сессия",
+    "outputOff": "выход выключен",
+    "lastSession": "Последняя сессия",
+    "noLastSession": "Завершённых сессий пока нет",
+    "lastSessionSummary": "{{ah}} Ач, {{wh}} Втч за {{duration}}"
   },
   "readings": {
     "inputVoltage": "Вход",

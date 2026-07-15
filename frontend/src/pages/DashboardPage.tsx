@@ -6,7 +6,8 @@ import { SetpointsForm } from '../components/SetpointsForm'
 import { OutputControl } from '../components/OutputControl'
 import { LiveChart } from '../components/LiveChart'
 import { ProtectionsPanel } from '../components/ProtectionsPanel'
-import { QuickProfiles } from '../components/QuickProfiles' 
+import { QuickProfiles } from '../components/QuickProfiles'
+import { MeteringCard } from '../components/MeteringCard' 
 
 /**
  * Live dashboard for the DPS-150 (F-006). Stage-2 tracks plug their
@@ -18,12 +19,12 @@ export function DashboardPage() {
   const { connected, state } = useDevice()
 
   return (
-    <Flex vertical gap="middle">
-      <Card>
+    <Flex vertical gap="middle" className="dashboard-page">
+      <Card className="dashboard-readings">
         <Readings state={state} />
       </Card>
       <Card title={t('setpoints.title')}>
-        <Flex align="center" justify="space-between" wrap gap="middle">
+        <Flex align="center" justify="space-between" wrap gap="middle" className="dashboard-controls">
           <SetpointsForm
             setpoints={state?.setpoints ?? null}
             limits={state?.limits ?? null}
@@ -46,6 +47,7 @@ export function DashboardPage() {
       {/* slot:quick-profiles */}
       <QuickProfiles />
       {/* slot:metering-card */}
+      <MeteringCard />
     </Flex>
   )
 }

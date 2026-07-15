@@ -10,7 +10,13 @@
     "history": "History",
     "profiles": "Profiles",
     "events": "Events",
-    "settings": "Settings"
+    "settings": "Settings",
+    "menu": "Menu"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "toggleLabel": "Toggle theme"
   },
   "history": {
     "title": "Measurement history",
@@ -186,7 +192,20 @@
   },
   "settings": {
     "title": "Settings",
-    "empty": "Under construction: notification settings will appear here"
+    "telegramTitle": "Telegram notifications",
+    "telegramEnabled": "Send notifications to Telegram",
+    "eventsTitle": "Event types",
+    "events": {
+      "protectionTrip": "Protection tripped",
+      "deviceLink": "Device link lost/restored",
+      "output": "Output turned on/off",
+      "meteringSession": "Metering session summary"
+    },
+    "notConfiguredTitle": "Telegram is not configured (env)",
+    "notConfiguredDescription": "The bot token and chat id are set only via server environment variables (DPS_TELEGRAM_TOKEN, DPS_TELEGRAM_CHAT_ID). Notifications are unavailable until they are set.",
+    "saved": "Settings saved",
+    "saveError": "Failed to save settings: {{detail}}",
+    "loadError": "Failed to load settings"
   },
   "header": {
     "online": "Online",
@@ -197,7 +216,19 @@
     "volt": "V",
     "amp": "A",
     "watt": "W",
-    "celsius": "°C"
+    "celsius": "°C",
+    "ampHour": "Ah",
+    "wattHour": "Wh"
+  },
+  "metering": {
+    "title": "Metering",
+    "capacity": "Capacity",
+    "energy": "Energy",
+    "sessionDuration": "Current session",
+    "outputOff": "output off",
+    "lastSession": "Last session",
+    "noLastSession": "No finished sessions yet",
+    "lastSessionSummary": "{{ah}} Ah, {{wh}} Wh over {{duration}}"
   },
   "readings": {
     "inputVoltage": "Input",
