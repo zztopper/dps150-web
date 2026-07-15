@@ -1,5 +1,5 @@
 import type uPlot from 'uplot'
-import type { HistoryResponse } from './historyTypes'
+import type { HistoryResponse } from '../../api/types'
 
 /**
  * Aligned-data column layout for `resolution: "raw"` — one line per

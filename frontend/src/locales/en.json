@@ -10,6 +10,7 @@
     "history": "History",
     "profiles": "Profiles",
     "events": "Events",
+    "automation": "Automation",
     "settings": "Settings",
     "menu": "Menu"
   },
@@ -172,6 +173,15 @@
       "storageUnavailableTitle": "Storage unavailable",
       "storageUnavailable": "The database is unavailable — the event log is temporarily unavailable"
     }
+  },
+  "automation": {
+    "title": "Automation"
+  },
+  "export": {
+    "button": "Export CSV",
+    "range": "Export range",
+    "customFrom": "From",
+    "customTo": "To"
   },
   "protections": {
     "title": "Protection thresholds",

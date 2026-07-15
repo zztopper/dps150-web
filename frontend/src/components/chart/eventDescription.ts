@@ -1,4 +1,4 @@
-import type { HistoryEvent, HistoryEventKind } from './historyTypes'
+import type { HistoryEvent, HistoryEventKind } from '../../api/types'
 
 export type EventSeverity = 'critical' | 'info' | 'neutral'
 

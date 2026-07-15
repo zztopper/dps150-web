@@ -60,6 +60,12 @@ describe('App shell', () => {
     // canvas, so the chart itself does not render here).
     expect(screen.getByText('Сутки')).toBeInTheDocument()
 
+    // Automation (route/menu placeholder, TD-002): just the stub heading.
+    fireEvent.click(screen.getByRole('link', { name: 'Автоматика' }))
+    expect(
+      screen.getByRole('heading', { name: 'Автоматика', level: 4 }),
+    ).toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('link', { name: 'Настройки' }))
     // SettingsPage (F-015) loads its data asynchronously; only the
     // heading is guaranteed synchronously right after navigation.

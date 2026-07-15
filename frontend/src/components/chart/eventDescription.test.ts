@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { HistoryEvent } from './historyTypes'
+import type { HistoryEvent } from '../../api/types'
 import { describeEvent, eventSeverity, type Translate } from './eventDescription'
 
 // A tiny stand-in for i18next's t(): returns the key with interpolated

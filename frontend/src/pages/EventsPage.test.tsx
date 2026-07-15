@@ -30,6 +30,7 @@ describe('EventsPage', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('maps journal kinds to human-readable labels and shows a summary', async () => {
@@ -133,5 +134,71 @@ describe('EventsPage', () => {
     await waitFor(() => expect(calls.length).toBeGreaterThan(initialCalls), {
       timeout: 5000,
     })
+  })
+
+  // F-019: the "Export CSV" button downloads /api/v1/events.csv with the
+  // current export range (default: last 24 h) and the current kind
+  // filter — independent of the on-screen table's own query/pagination.
+  it('exports the default last-24h range as events.csv with no kind filter', async () => {
+    stubFetchRoutes([
+      {
+        method: 'GET',
+        match: (u) => u.startsWith('/api/v1/events'),
+        respond: () => ({ status: 200, body: { items: [], total: 0 } }),
+      },
+    ])
+
+    const before = Date.now()
+    renderWithProviders(<EventsPage />)
+    await screen.findByText('Событий пока нет')
+
+    let capturedHref: string | undefined
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      capturedHref = this.href
+    })
+
+    screen.getByRole('button', { name: 'Экспорт CSV' }).click()
+    const after = Date.now()
+
+    expect(capturedHref).toBeDefined()
+    const url = new URL(capturedHref!)
+    expect(url.pathname).toBe('/api/v1/events.csv')
+    expect(url.searchParams.has('kind')).toBe(false)
+
+    const from = Number(url.searchParams.get('from'))
+    const to = Number(url.searchParams.get('to'))
+    expect(to - from).toBeCloseTo(24 * 60 * 60 * 1000, -2)
+    expect(to).toBeGreaterThanOrEqual(before)
+    expect(to).toBeLessThanOrEqual(after)
+  })
+
+  it('exports with the currently selected kind filter applied', async () => {
+    stubFetchRoutes([
+      {
+        method: 'GET',
+        match: (u) => u.startsWith('/api/v1/events'),
+        respond: () => ({ status: 200, body: { items: [], total: 0 } }),
+      },
+    ])
+
+    renderWithProviders(<EventsPage />)
+    await screen.findByText('Событий пока нет')
+
+    fireEvent.mouseDown(screen.getByText('Тип события'))
+    fireEvent.click(await screen.findByText('Сработала защита'))
+
+    let capturedHref: string | undefined
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      capturedHref = this.href
+    })
+
+    screen.getByRole('button', { name: 'Экспорт CSV' }).click()
+
+    const url = new URL(capturedHref!)
+    expect(url.searchParams.get('kind')).toBe('protectionTrip')
   })
 })

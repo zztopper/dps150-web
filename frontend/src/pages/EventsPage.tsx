@@ -1,11 +1,30 @@
 import { useState } from 'react'
-import { Alert, Card, Empty, Flex, Select, Table, Tag, Typography } from 'antd'
+import {
+  Alert,
+  Button,
+  Card,
+  DatePicker,
+  Empty,
+  Flex,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import dayjs, { type Dayjs } from 'dayjs'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { ApiError } from '../api/client'
 import { JOURNAL_KINDS, type JournalEvent } from '../api/events'
+import { eventsCsvUrl, triggerDownload } from '../api/export'
 import { useEventsLiveInvalidation, useEventsQuery } from '../hooks/useEvents'
+
+// dayjs is a transitive dependency of antd's DatePicker (see
+// HistoryPage.tsx) — only used here to seed a default export range.
+const { RangePicker } = DatePicker
+const EXPORT_DEFAULT_SPAN_MS = 24 * 60 * 60 * 1000
 
 const PAGE_SIZE = 20
 
@@ -84,6 +103,28 @@ export function EventsPage() {
 
   const [page, setPage] = useState(1)
   const [kindFilter, setKindFilter] = useState<string[]>([])
+  // Export range (F-019): the journal table itself is unbounded (no
+  // from/to), but the CSV export backend requires one — defaults to the
+  // last 24 h, adjustable independently of the on-screen kind filter/
+  // pagination above.
+  const [exportRange, setExportRange] = useState<[Dayjs, Dayjs]>(() => {
+    const to = Date.now()
+    return [dayjs(to - EXPORT_DEFAULT_SPAN_MS), dayjs(to)]
+  })
+
+  function selectExportRange(values: [Dayjs | null, Dayjs | null] | null) {
+    const [from, to] = values ?? [null, null]
+    if (from === null || to === null) {
+      return
+    }
+    setExportRange([from, to])
+  }
+
+  function handleExport() {
+    triggerDownload(
+      eventsCsvUrl(exportRange[0].valueOf(), exportRange[1].valueOf(), kindFilter),
+    )
+  }
 
   const query = useEventsQuery({
     kinds: kindFilter.length > 0 ? kindFilter : undefined,
@@ -137,6 +178,22 @@ export function EventsPage() {
           description={t('events.errors.storageUnavailable')}
         />
       )}
+
+      <Card size="small">
+        <Flex wrap gap="middle" align="center" justify="space-between">
+          <Space size="middle" wrap>
+            <Typography.Text type="secondary">{t('export.range')}</Typography.Text>
+            <RangePicker
+              showTime
+              value={exportRange}
+              onChange={selectExportRange}
+              placeholder={[t('export.customFrom'), t('export.customTo')]}
+              aria-label={t('export.range')}
+            />
+          </Space>
+          <Button onClick={handleExport}>{t('export.button')}</Button>
+        </Flex>
+      </Card>
 
       <Card>
         <Flex vertical gap="middle">

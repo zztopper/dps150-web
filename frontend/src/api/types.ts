@@ -113,3 +113,75 @@ export interface OutputRequest {
 /** Fallback limits when the device never reported its own. */
 export const FALLBACK_MAX_VOLTAGE = 30.0
 export const FALLBACK_MAX_CURRENT = 5.0
+
+// -- History (F-012/F-013), mirrors "API contract v2", "История" --
+
+export type HistoryResolution = 'raw' | '1m' | 'auto'
+
+/** One `resolution=raw` point: instantaneous values. */
+export interface HistoryRawItem {
+  ts: number
+  voltage: number
+  current: number
+  power: number
+  temperature: number
+  outputOn: boolean
+}
+
+export interface MinAvgMax {
+  min: number
+  avg: number
+  max: number
+}
+
+/** One `resolution=1m` bucket: per-minute min/avg/max aggregates. */
+export interface History1mItem {
+  ts: number
+  voltage: MinAvgMax
+  current: MinAvgMax
+  power: MinAvgMax
+  temperature: { avg: number }
+  samples: number
+}
+
+export interface HistoryRawResponse {
+  resolution: 'raw'
+  items: HistoryRawItem[]
+}
+
+export interface History1mResponse {
+  resolution: '1m'
+  items: History1mItem[]
+}
+
+export type HistoryResponse = HistoryRawResponse | History1mResponse
+
+// -- Journal events (F-014), mirrors "API contract v2", "Журнал событий" --
+// Kept as a separate (closed-union) shape from `JournalEvent`/`JournalKind`
+// in `./events.ts`: this one backs the history chart's own `GET /events`
+// call (a plain [from, to] window fetch, no kind filter/pagination), so
+// its `kind` intentionally stays a closed union rather than the open
+// `JournalKind | (string & {})` the paginated journal table tolerates.
+
+export type HistoryEventKind =
+  | 'protectionTrip'
+  | 'deviceConnected'
+  | 'deviceDisconnected'
+  | 'outputOn'
+  | 'outputOff'
+  | 'profileApplied'
+  | 'protectionsChanged'
+  | 'meteringSession'
+  | 'autoStop'
+
+export interface HistoryEvent {
+  id: number
+  ts: number
+  kind: HistoryEventKind
+  data: Record<string, unknown>
+}
+
+export interface EventsResponse {
+  items: HistoryEvent[]
+  total: number
+}

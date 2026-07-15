@@ -3,7 +3,7 @@ import type uPlot from 'uplot'
 import { Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import type { HistoryEvent } from './historyTypes'
+import type { HistoryEvent } from '../../api/types'
 import { describeEvent, eventSeverity } from './eventDescription'
 
 const MARKER_COLOR: Record<string, string> = {

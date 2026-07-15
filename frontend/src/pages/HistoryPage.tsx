@@ -15,9 +15,9 @@ import {
 } from 'antd'
 import type { Dayjs } from 'dayjs'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client'
+import { ApiError, fetchEvents, fetchHistory } from '../api/client'
+import { historyCsvUrl, triggerDownload } from '../api/export'
 import { HistoryChart, type VisibleSeries } from '../components/chart/HistoryChart'
-import { fetchEvents, fetchHistory } from '../components/chart/historyApi'
 import { mapHistoryToAlignedData } from '../components/chart/mapHistory'
 import {
   RANGE_PRESETS,
@@ -98,6 +98,14 @@ export function HistoryPage() {
     setViewRange(baseRange)
   }
 
+  // Exports the currently viewed range (F-019): same [from, to] the
+  // chart itself is querying, and the same `resolution=auto` request
+  // `fetchHistory` sends above — the backend resolves it to raw/1m from
+  // the span exactly as the on-screen query did.
+  function handleExport() {
+    triggerDownload(historyCsvUrl(viewRange.from, viewRange.to, 'auto'))
+  }
+
   const isZoomed = viewRange.from !== baseRange.from || viewRange.to !== baseRange.to
 
   const historyQuery = useQuery({
@@ -147,6 +155,7 @@ export function HistoryPage() {
           <Button onClick={handleResetZoom} disabled={!isZoomed}>
             {t('history.resetZoom')}
           </Button>
+          <Button onClick={handleExport}>{t('export.button')}</Button>
         </Flex>
       </Card>
 
