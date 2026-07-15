@@ -11,7 +11,7 @@ export interface TokenSecretModalProps {
 
 /**
  * Shows a freshly minted token's bearer secret exactly once (F-020 API
- * contract: "СЕКРЕТ показывается единожды"). The backend never returns the
+ * contract: "the SECRET is shown once"). The backend never returns the
  * secret again — only its SHA-256 hash is stored — so this is the only
  * chance to copy it. `destroyOnHidden` drops the secret from the DOM the
  * instant the modal closes, and the parent clears `token` in `onClose` so

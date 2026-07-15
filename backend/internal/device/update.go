@@ -68,7 +68,7 @@ type DeviceEvent struct {
 // JournalEvent mirrors an event-journal entry into the update stream:
 // features that append journal kinds the hub itself does not produce
 // (protectionsChanged, profileApplied, meteringSession — see the API
-// contract's «WS-дополнения») publish one via Hub.Broadcast so WS clients
+// contract's "WS additions") publish one via Hub.Broadcast so WS clients
 // receive those kinds without polling GET /api/v1/events.
 type JournalEvent struct {
 	Kind string         // journal entry kind, e.g. "protectionsChanged"

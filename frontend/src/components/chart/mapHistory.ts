@@ -74,7 +74,7 @@ export function mapHistoryToAlignedData(resp: HistoryResponse): uPlot.AlignedDat
 
 /**
  * Mirrors the backend's `resolution=auto` rule (API contract v2,
- * "История (F-012)": raw up to a 2 h span, 1m beyond) so the UI can
+ * "History (F-012)": raw up to a 2 h span, 1m beyond) so the UI can
  * decide up front — before the response arrives — whether the
  * min/max band applies. The response's own `resolution` field remains
  * authoritative for rendering; this is only a client-side prediction.

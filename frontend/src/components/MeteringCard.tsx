@@ -17,7 +17,7 @@ import '../styles/metering.css'
  * is on. Below that, the summary of the last *finished* session — as
  * journaled by the backend under kind `meteringSession` — is shown; it
  * is fetched once via REST and kept live over the WS `event` passthrough
- * (see docs/architecture/api-contract.md, "WS-дополнения").
+ * (see docs/architecture/api-contract.md, "WS additions").
  */
 
 interface LastSession {

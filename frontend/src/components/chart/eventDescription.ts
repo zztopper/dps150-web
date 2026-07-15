@@ -23,7 +23,7 @@ export type Translate = (key: string, options?: Record<string, unknown>) => stri
 
 /**
  * Builds a human label for one journal event, per kind (API contract v2,
- * "Журнал событий"). Falls back to the bare kind for forward-compat with
+ * "Event journal"). Falls back to the bare kind for forward-compat with
  * kinds this build does not know about yet.
  */
 export function describeEvent(t: Translate, ev: HistoryEvent): string {

@@ -46,7 +46,7 @@ type DeviceHub interface {
 	Snapshot() device.Snapshot
 	Subscribe(ctx context.Context) <-chan device.Update
 	// Broadcast mirrors journal kinds this service appends (meteringSession)
-	// into the WS update stream per the API contract «WS-дополнения».
+	// into the WS update stream per the API contract "WS additions".
 	Broadcast(u device.Update)
 }
 

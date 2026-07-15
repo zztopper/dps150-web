@@ -1,5 +1,5 @@
 // API access tokens (F-020). Mirrors docs/architecture/api-contract.md,
-// "API-токены (F-020)" section of API contract v3. Management is exposed
+// "API tokens (F-020)" section of API contract v3. Management is exposed
 // ONLY behind the browser UI (Authelia/forward-auth per ADR-006) — these
 // endpoints are never reachable with a Bearer token.
 import { apiRequest } from './client'

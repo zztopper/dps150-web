@@ -1,5 +1,5 @@
 // CSV export (F-019). Mirrors docs/architecture/api-contract.md, "API
-// contract v3: Этап 3", "Экспорт CSV (F-019)": both endpoints stream
+// contract v3: Stage 3", "CSV export (F-019)": both endpoints stream
 // text/csv and the server sets `Content-Disposition: attachment`
 // itself, so the frontend only has to build the right URL and hand it
 // to the browser — no manual fetch/blob/save-as handling needed.

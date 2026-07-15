@@ -8,7 +8,7 @@ import { ApiTokensSection } from '../components/ApiTokensSection'
 // Notification settings (F-015): GET/PUT /api/v1/settings/notifications.
 // Not modeled in api/types.ts (owned by another track) — kept local to
 // this page per the file-ownership split in
-// docs/architecture/api-contract.md ("Файловая структура фронтенда").
+// docs/architecture/api-contract.md ("Frontend file structure").
 
 interface NotificationEventSettings {
   protectionTrip: boolean

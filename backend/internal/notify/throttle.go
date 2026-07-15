@@ -9,7 +9,7 @@ import (
 // throttleState is the per-kind antispam state. The first notification of a
 // kind goes out immediately; anything else within the cooldown window is
 // aggregated — a flush timer fires once the window closes and sends the
-// latest suppressed text with a "повторилось N раз" suffix, opening the next
+// latest suppressed text with a "repeated N times" suffix, opening the next
 // window.
 type throttleState struct {
 	mu      sync.Mutex
