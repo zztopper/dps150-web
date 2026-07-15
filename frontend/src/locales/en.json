@@ -14,7 +14,50 @@
   },
   "history": {
     "title": "Measurement history",
-    "empty": "Under construction: charts over a time range will appear here"
+    "empty": "No data for the selected period",
+    "loading": "Loading…",
+    "resetZoom": "Reset zoom",
+    "customFrom": "From",
+    "customTo": "To",
+    "pointCount": "{{count}} points ({{resolution}})",
+    "resolutionRaw": "raw",
+    "resolutionMinute": "1-minute aggregates",
+    "preset": {
+      "hour": "Hour",
+      "day": "Day",
+      "week": "Week",
+      "month": "13 days"
+    },
+    "error": {
+      "rangeTooDense": "Too many points for the selected range — narrow it down",
+      "invalidRange": "Invalid date range",
+      "storageUnavailable": "History storage is unavailable, try again later"
+    }
+  },
+  "chart": {
+    "live": {
+      "title": "Telemetry",
+      "windowLabel": "{{count}} min"
+    },
+    "series": {
+      "voltage": "Voltage",
+      "current": "Current",
+      "power": "Power",
+      "temperature": "Temperature",
+      "min": "{{series}} (min)",
+      "max": "{{series}} (max)"
+    },
+    "events": {
+      "protectionTrip": "Protection tripped: {{protection}}",
+      "deviceConnected": "Device connected",
+      "deviceDisconnected": "Device disconnected",
+      "outputOn": "Output turned on",
+      "outputOff": "Output turned off",
+      "profileApplied": "Profile applied: {{name}}",
+      "protectionsChanged": "Protection setpoints changed",
+      "meteringSession": "Metering session: {{capacityAh}} Ah, {{energyWh}} Wh",
+      "autoStop": "Auto-stop"
+    }
   },
   "profiles": {
     "title": "Profiles",

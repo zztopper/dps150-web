@@ -6,6 +6,16 @@ import { FakeWebSocket } from './fakeWebSocket'
 // jsdom has no WebSocket implementation.
 vi.stubGlobal('WebSocket', FakeWebSocket)
 
+// jsdom has no ResizeObserver (used internally by several antd
+// components, e.g. Select/DatePicker/Segmented, and by chart
+// containers that track their own size).
+class NoopResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+vi.stubGlobal('ResizeObserver', NoopResizeObserver)
+
 // jsdom has no matchMedia (used by antd responsive utilities).
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
