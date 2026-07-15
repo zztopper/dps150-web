@@ -42,6 +42,8 @@ function profileErrorMessage(t: TFunction, err: ApiError): string {
       return t('profiles.errors.invalidSlot', { detail: err.message })
     case 'device_offline':
       return t('errors.deviceOffline')
+    case 'sequence_active':
+      return t('sequences.deviceBusy')
     case 'storage_unavailable':
       return t('profiles.errors.storageUnavailable')
     default:
