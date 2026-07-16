@@ -3,7 +3,7 @@ import { theme } from 'antd'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useTranslation } from 'react-i18next'
-import { SERIES_COLOR } from '../chart/colors'
+import { modeFromBg, seriesColors } from '../chart/colors'
 import { isCanvas2DSupported } from '../chart/canvasSupported'
 import { useContainerSize } from '../chart/useContainerSize'
 import { type ChargeSample, type PhaseSegment, phaseSegments } from './chargeFormat'
@@ -105,6 +105,9 @@ export function ChargeChart({ samples, paused }: ChargeChartProps) {
     divider: token.colorBorderSecondary,
     label: token.colorTextTertiary,
   }
+  // Same theme signal the axis colors use (colorBgContainer differs by mode);
+  // picks the per-theme series palette. Captured at creation like the axes.
+  const colors = seriesColors(modeFromBg(token.colorBgContainer))
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<uPlot | null>(null)
   const segmentsRef = useRef<readonly PhaseSegment[]>([])
@@ -132,14 +135,14 @@ export function ChargeChart({ samples, paused }: ChargeChartProps) {
         {},
         {
           label: t('chart.series.voltage'),
-          stroke: SERIES_COLOR.voltage,
+          stroke: colors.voltage,
           width: 1.5,
           scale: 'V',
           value: (_u, v) => (v == null ? '—' : `${v.toFixed(2)} ${t('units.volt')}`),
         },
         {
           label: t('chart.series.current'),
-          stroke: SERIES_COLOR.current,
+          stroke: colors.current,
           width: 1.5,
           scale: 'A',
           value: (_u, v) => (v == null ? '—' : `${v.toFixed(3)} ${t('units.amp')}`),

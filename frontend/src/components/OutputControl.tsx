@@ -41,6 +41,7 @@ export function OutputControl({ outputOn, disabled }: OutputControlProps) {
         onChange={onChange}
         checkedChildren={t('output.on')}
         unCheckedChildren={t('output.off')}
+        aria-label={t('output.switchLabel')}
       />
     </Space>
   )

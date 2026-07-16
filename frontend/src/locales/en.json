@@ -425,7 +425,8 @@
     "confirmTitle": "Turn the output on?",
     "label": "Output",
     "off": "OFF",
-    "on": "ON"
+    "on": "ON",
+    "switchLabel": "Toggle output"
   },
   "profiles": {
     "actions": {

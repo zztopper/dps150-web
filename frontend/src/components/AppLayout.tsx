@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useDevice } from '../state/useDevice'
 import { type Lang, setLang } from '../i18n'
+import { ErrorBoundary } from './ErrorBoundary'
 import '../styles/responsive.css'
 
 const NAV_ITEMS = [
@@ -242,7 +243,12 @@ function AppShell({ mode, onToggleTheme }: AppShellProps) {
         </Flex>
       </Drawer>
       <Layout.Content className="app-content">
-        <Outlet />
+        {/* Contain a render error on any page to a recoverable card instead of
+            white-screening the whole app (the Charge page wraps its own subtree
+            too; this is the app-wide backstop). */}
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </Layout.Content>
     </Layout>
   )

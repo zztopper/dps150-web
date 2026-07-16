@@ -425,7 +425,8 @@
     "confirmTitle": "Включить выход?",
     "label": "Выход",
     "off": "ВЫКЛ",
-    "on": "ВКЛ"
+    "on": "ВКЛ",
+    "switchLabel": "Переключить выход"
   },
   "profiles": {
     "actions": {

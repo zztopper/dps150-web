@@ -70,7 +70,7 @@ test.describe('Mobile layout smoke (F-016)', () => {
     expect(layoutBox!.width).toBeLessThanOrEqual(viewport!.width + 1)
 
     // The output switch is reachable and sized as a proper touch target.
-    const output = page.getByRole('switch', { name: 'ВКЛ ВЫКЛ' })
+    const output = page.getByRole('switch', { name: 'Переключить выход' })
     await expect(output).toBeVisible()
     const box = await output.boundingBox()
     expect(box).not.toBeNull()

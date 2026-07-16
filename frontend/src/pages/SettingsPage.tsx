@@ -162,6 +162,7 @@ export function SettingsPage() {
                   disabled={controlsDisabled}
                   loading={pendingKey === key && mutation.isPending}
                   onChange={onToggleEvent(key)}
+                  aria-label={t(`settings.events.${key}`)}
                 />
               </Flex>
             ))}

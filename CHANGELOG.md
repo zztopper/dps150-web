@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- UX/accessibility pass (skill-guided audit): chart series colors are now
+  theme-aware — the voltage/current/power/temperature traces use darker,
+  higher-contrast variants on the light theme instead of washing out on white;
+  `<html lang>` follows the selected UI language (was stuck at `en` while RU is
+  primary); the mobile 16px-input rule now also covers text inputs and selects
+  (no more iOS zoom-on-focus on names/filters); the output and notification
+  Switches gained accessible names; in-table action buttons meet the 44px touch
+  target on phones; `ProtectionsPanel` uses the AntD error token instead of a
+  hard-coded red; the charge-profiles table rounds `capacityMah`; and the routed
+  page content is wrapped in the ErrorBoundary so a render error on any page no
+  longer white-screens the whole app.
 - Responsive header/navigation: the top bar no longer wraps its nav tabs onto a
   second row at intermediate widths. It is now a single non-wrapping row where
   the horizontal menu fills the middle and folds overflowing items into a "…"

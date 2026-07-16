@@ -4,7 +4,7 @@ import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useTranslation } from 'react-i18next'
 import type { LiveSample } from './liveWindow'
-import { SERIES_COLOR } from './colors'
+import { modeFromBg, seriesColors } from './colors'
 import { isCanvas2DSupported } from './canvasSupported'
 import { useContainerSize } from './useContainerSize'
 
@@ -31,6 +31,9 @@ export function LiveChartCanvas({ samples, paused }: LiveChartCanvasProps) {
   const axisLabel = token.colorText
   const gridStroke = token.colorSplit
   const ticksStroke = token.colorBorderSecondary
+  // Same theme signal the axis colors use (colorBgContainer differs by mode);
+  // picks the per-theme series palette. Captured at creation like the axes.
+  const colors = seriesColors(modeFromBg(token.colorBgContainer))
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<uPlot | null>(null)
   const size = useContainerSize(containerRef)
@@ -53,21 +56,21 @@ export function LiveChartCanvas({ samples, paused }: LiveChartCanvasProps) {
         {},
         {
           label: t('chart.series.voltage'),
-          stroke: SERIES_COLOR.voltage,
+          stroke: colors.voltage,
           width: 1.5,
           scale: 'V',
           value: (_u, v) => (v == null ? '—' : `${v.toFixed(2)} ${t('units.volt')}`),
         },
         {
           label: t('chart.series.current'),
-          stroke: SERIES_COLOR.current,
+          stroke: colors.current,
           width: 1.5,
           scale: 'A',
           value: (_u, v) => (v == null ? '—' : `${v.toFixed(3)} ${t('units.amp')}`),
         },
         {
           label: t('chart.series.power'),
-          stroke: SERIES_COLOR.power,
+          stroke: colors.power,
           width: 1.5,
           scale: 'W',
           value: (_u, v) => (v == null ? '—' : `${v.toFixed(2)} ${t('units.watt')}`),

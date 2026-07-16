@@ -159,9 +159,15 @@
 
   /* Number inputs: 16px value text stops iOS from zooming on focus, and
      a 44px min height meets the touch-target guideline. Scoped to mobile
-     so desktop density is untouched. */
+     so desktop density is untouched. The same 16px floor also covers plain
+     text inputs (profile/token names) and every Select — including the
+     combobox search field, the actual focus target that triggers the zoom. */
   .ant-input-number,
-  .ant-input-number-input {
+  .ant-input-number-input,
+  .ant-input,
+  .ant-select-selector,
+  .ant-select-selection-item,
+  .ant-select-selection-search-input {
     font-size: 16px;
   }
 
@@ -184,5 +190,17 @@
     width: 100%;
     min-height: 44px;
     font-size: 1rem;
+  }
+
+  /* In-table action buttons (edit/delete/apply/…) reach the 44px touch-target
+     minimum on phones; a little row-gap keeps the taller buttons from
+     crowding when the action Space wraps. Scoped to mobile so desktop table
+     density is unchanged. */
+  .ant-table .ant-btn {
+    min-height: 44px;
+  }
+
+  .ant-table .ant-space {
+    row-gap: 8px;
   }
 }

@@ -106,7 +106,7 @@ export function ChargeProfiles() {
       key: 'capacity',
       render: (_, p) => (
         <span className="tabular">
-          {p.capacityMah} {t('units.milliampHour')}
+          {Math.round(p.capacityMah)} {t('units.milliampHour')}
         </span>
       ),
     },
