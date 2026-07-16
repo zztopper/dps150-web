@@ -32,6 +32,35 @@ import {
 // is dayjs objects; only the `Dayjs` type is used directly here).
 const { RangePicker } = DatePicker
 
+function isRangePreset(value: string | null): value is RangePreset {
+  return value !== null && (RANGE_PRESETS as readonly string[]).includes(value)
+}
+
+// The selected range preset is mirrored to a `?range=` query param so refresh,
+// bookmark and share restore it. It is written with the History API
+// (replaceState), NOT react-router's useSearchParams: setSearchParams performs
+// a navigation whose app-wide location-context re-render previously raced the
+// chart's drag-to-zoom (leaving the refetch Spin's pointer-events:none over the
+// plot mid-drag). replaceState updates the URL with no React re-render, so the
+// chart's interaction is byte-for-byte identical to having no param at all. The
+// param is read once on mount (lazy initializer) — the custom drag-zoom window
+// stays ephemeral (not persisted), matching how a preset is a coarse choice and
+// a zoom is transient exploration.
+function readInitialPreset(): RangePreset {
+  const raw = new URLSearchParams(window.location.search).get('range')
+  return isRangePreset(raw) ? raw : 'day'
+}
+
+function writeRangeParam(preset: RangePreset | null): void {
+  const url = new URL(window.location.href)
+  if (preset === null) {
+    url.searchParams.delete('range')
+  } else {
+    url.searchParams.set('range', preset)
+  }
+  window.history.replaceState(window.history.state, '', url)
+}
+
 function apiErrorMessage(
   t: (key: string, options?: Record<string, unknown>) => string,
   err: unknown,
@@ -56,10 +85,10 @@ export function HistoryPage() {
   const { t, i18n } = useTranslation()
   const { token } = theme.useToken()
 
-  const [preset, setPreset] = useState<RangePreset | 'custom'>('day')
+  const [preset, setPreset] = useState<RangePreset | 'custom'>(readInitialPreset)
   const [customRange, setCustomRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [baseRange, setBaseRange] = useState<MsRange>(() =>
-    presetRangeMs('day', Date.now()),
+    presetRangeMs(readInitialPreset(), Date.now()),
   )
   const [viewRange, setViewRange] = useState<MsRange>(baseRange)
   const [visibleSeries, setVisibleSeries] = useState<VisibleSeries>({
@@ -75,6 +104,7 @@ export function HistoryPage() {
     setCustomRange(null)
     setBaseRange(range)
     setViewRange(range)
+    writeRangeParam(next)
   }
 
   function selectCustomRange(values: [Dayjs | null, Dayjs | null] | null) {
@@ -87,6 +117,9 @@ export function HistoryPage() {
     setCustomRange([from, to])
     setBaseRange(range)
     setViewRange(range)
+    // A custom window can't be expressed as a preset — drop the param so a
+    // reload doesn't restore a stale preset.
+    writeRangeParam(null)
   }
 
   function handleZoom(fromMs: number, toMs: number) {
