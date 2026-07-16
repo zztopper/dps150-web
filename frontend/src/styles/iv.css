@@ -1,0 +1,25 @@
+/* IV curve tracer (F-024) view styles. */
+
+/* Large glanceable sweep KPIs reuse the dashboard reading scale. */
+.iv-kpis {
+  gap: 8px 32px;
+}
+
+@media (max-width: 640px) {
+  .iv-kpis .reading-value {
+    font-size: clamp(2rem, 11vw, 3rem);
+  }
+
+  .iv-kpis {
+    justify-content: space-between;
+    gap: 4px 12px;
+  }
+}
+
+/* Respect prefers-reduced-motion: freeze the running Badge pulse so the live
+   view has no perpetual animation (the chart is separately pausable). */
+@media (prefers-reduced-motion: reduce) {
+  .ant-badge-status-processing::after {
+    animation: none;
+  }
+}

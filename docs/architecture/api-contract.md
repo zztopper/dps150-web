@@ -512,3 +512,239 @@ phase bands, phase/elapsed/ETA, mAh delivered, safety-cap progress bars) and
 `src/components/ChargeSessions.tsx` (history). API types + TanStack Query hooks in
 `src/api/charge.ts`; MSW mocks for every route. i18n prefix `charge.*`. Visual
 design is handled separately (ui-ux skill).
+
+---
+
+# API contract v5: IV curve tracer (ADR-009 / F-024)
+
+Fixed for parallel development of F-024 (backend `internal/ivtrace` +
+`internal/storage/iv.go` + `internal/api/iv.go`; frontend IVPage). The
+v1/v2/v3 rules apply (camelCase, unix millis, error format). All voltages are
+volts, currents amperes, power watts, resistances ohms.
+
+The IV curve tracer is a backend-supervised run engine that owns the output for
+a whole sweep (mirroring the F-023 charge Manager). It is a **telemetry-driven
+step loop**: for each linear step it writes a setpoint, waits for a fresh settled
+telemetry tick, and records the measured `(V,I)` operating point — a real point
+on the DUT's I–V curve. It is **mutually exclusive** with the charge runner and
+the sequence runner through the shared `device.Interlock` (owner tag `iv`). It is
+**low-risk** (no battery): there is **no pre-flight**, the output energizes at the
+sweep start with the compliance already written. New error codes:
+`iv_active` (409) — a sweep owns the device;
+`invalid_iv_profile` (400); `iv_profile_not_found` (404);
+`iv_sweep_not_found` (404). `device_offline` (409) and `storage_unavailable`
+(503) are reused (profiles/sweeps live in the DB; run/stop/active answer 503 when
+the runner is not configured).
+
+## Coordination (extends the F-023 interlock gate)
+
+The manual-mutation gate (`blockDuringInterlock`, keyed on the shared interlock)
+already 409s with `owner+"_active"`, so it rejects `PUT /device/setpoints`,
+`PUT /device/output`, `PUT /device/protections`, `PUT /device/presets/{slot}` and
+`POST /profiles/{id}/apply` with **409 `iv_active`** while a sweep runs — with no
+change to the gate. Starting a sweep while a charge/sequence runs →
+`409 charge_active`/`409 sequence_active`; starting a charge/sequence while a
+sweep runs → `409 iv_active`. Reads, `POST /iv/stop`, `POST /charge/stop` and
+`POST /sequences/stop` are never blocked.
+
+## IV profiles (CRUD)
+
+`IVProfile`:
+```json
+{
+  "id": 1, "name": "Red LED 5mm",
+  "component": "led", "mode": "voltage",
+  "vStart": 0.0, "vStop": 6.0, "iStart": 0.0, "iStop": 0.0,
+  "steps": 50, "dwellMs": 1000,
+  "complianceA": 0.02, "complianceV": 0.0,
+  "params": null,
+  "createdAt": <ms>, "updatedAt": <ms>
+}
+```
+- `component`: `"led" | "diode" | "zener" | "resistor" | "lamp" | "generic"`.
+- `mode`: `"voltage" | "current"`. A **voltage** sweep uses `vStart`/`vStop` and
+  `complianceA` (the current limit that protects the DUT); a **current** sweep uses
+  `iStart`/`iStop` and `complianceV` (the voltage ceiling). The unused pair is
+  ignored (stored as 0).
+- `steps` (int, 2–1000, default 50) — linear steps `start → stop` inclusive,
+  uni-directional in v1. `dwellMs` (int ≥ 200, default 1000) — the per-step settle
+  wait; the sample is the first telemetry tick with `TS ≥ writeTS + dwellMs`.
+- `params` (nullable object) — optional per-component analysis overrides (design
+  §3.8). Any subset of: `refCurrentA` (Vf/rd reference current), `junctionTempK`
+  (thermal voltage), `iztA` (Zener test current), `powerRatingW` (Zener/resistor
+  power derating), `fitLowFrac`/`fitHighFrac` (the exponential/ohmic fit windows).
+  Stored opaquely; the analysis layer owns the shape.
+- Validation (`400 invalid_iv_profile`): non-empty name ≤ 64 chars; valid
+  `component` and `mode`; `steps` in `[2,1000]`; `dwellMs ≥ 200`; and the device
+  envelope — for a voltage sweep `0 ≤ vStart < vStop ≤ 30`, `0 < complianceA ≤ 5`,
+  `vStop × complianceA ≤ 150`; for a current sweep `0 ≤ iStart < iStop ≤ 5`,
+  `0 < complianceV ≤ 30`, `complianceV × iStop ≤ 150`.
+- `GET /api/v1/iv/profiles` → `{"items": [IVProfile...]}` (by id, creation order).
+- `POST /api/v1/iv/profiles` (no id) → `201 IVProfile`.
+- `GET /api/v1/iv/profiles/{id}` → `200 IVProfile`; `404 iv_profile_not_found`.
+- `PUT /api/v1/iv/profiles/{id}` → `200 IVProfile`; `404 iv_profile_not_found`.
+- `DELETE /api/v1/iv/profiles/{id}` → `204`; `404 iv_profile_not_found`.
+  Deleting a profile does not affect past `IVSweep` rows (they copy
+  `profileName`/`component`/`mode`).
+
+## Run / stop / active
+
+- `POST /api/v1/iv/profiles/{id}/start` — body `{"confirm": true}` (the
+  output-energize confirmation interlock, §3.5; a missing/false `confirm` →
+  `400 invalid_iv_profile`). The server sets OVP/OCP/OPP/OTP a step above the
+  bounds, writes the compliance **before** the first swept setpoint and
+  output-on, then energizes and runs the step loop. → `202 {"started": true}`.
+  Errors: `409 iv_active`, `409 charge_active`, `409 sequence_active`,
+  `409 device_offline`, `404 iv_profile_not_found`, `400 invalid_iv_profile`,
+  `503 storage_unavailable`.
+- `POST /api/v1/iv/stop` → `200 {"stopped": true}` — idempotent, `200` even when
+  idle (output off follows in the run goroutine). `503` when the runner is not
+  configured.
+- `GET /api/v1/iv/active` → `200 IVStatus`, or `{"active": false}` when idle.
+  `503` when the runner is not configured.
+
+`IVStatus`:
+```json
+{
+  "active": true,
+  "sweepId": 7, "profileId": 1, "profileName": "Red LED 5mm",
+  "component": "led", "mode": "voltage", "startedAt": <ms>,
+  "state": "running",
+  "stepIndex": 23, "totalSteps": 50, "pointCount": 23,
+  "lastPoint": {"v": 1.94, "i": 0.011},
+  "complianceA": 0.02, "complianceV": 0.0,
+  "measured": {"voltage": 1.94, "current": 0.011, "power": 0.021},
+  "elapsedMs": 23000, "etaMs": 27000
+}
+```
+- `state`: `"running" | "completed" | "stopped" | "aborted" | "failed"`
+  (`completed` = the sweep ran to its last step; `stopped` = user stop;
+  `aborted` = a safety fault: telemetry-stale / per-sweep timeout / protection
+  trip / device offline / output-off-failed; `failed` = internal error mid-run).
+- `stepIndex`/`totalSteps` drive the progress indicator; `pointCount` is the
+  number of recorded points; `lastPoint` is the most recent measured `(v,i)`.
+- `etaMs`: remaining steps × dwell; `-1` when unknown.
+- **Live curve**: `IVStatus`/`ivProgress` carry only `lastPoint` (+ `pointCount`,
+  `stepIndex`), so the client appends points incrementally. The **authoritative**
+  full point set and metrics come from `GET /iv/sweeps/{id}`, which the client
+  fetches on the terminal `ivSweep` event (and on WS reconnect), reconciling any
+  dropped `ivProgress` frames.
+- The **WS `ivProgress`** event carries this exact field set (minus `active`) at
+  ~1 Hz and on every step/state change, so the frontend uses one shape whether it
+  polls `GET /iv/active` or consumes the push.
+
+## Sweep history
+
+- `GET /api/v1/iv/sweeps?limit=50&offset=0` →
+  `{"items": [IVSweep...], "total": 123}` (newest first).
+- `GET /api/v1/iv/sweeps/{id}` → `200 IVSweep`; `404 iv_sweep_not_found`.
+
+`IVSweep`:
+```json
+{
+  "id": 7, "profileId": 1, "profileName": "Red LED 5mm",
+  "component": "led", "mode": "voltage",
+  "startedAt": <ms>, "endedAt": <ms>,
+  "state": "completed", "reason": "complete",
+  "points": [{"v": 0.0, "i": 0.0}, {"v": 1.82, "i": 0.004}, {"v": 1.98, "i": 0.02}],
+  "metrics": {
+    "vfAtRef": 1.98, "refCurrentA": 0.02,
+    "ideality": 1.9, "satCurrentA": 3.1e-12,
+    "seriesR": 8.4, "seriesRApparent": true, "dynamicR": 12.1,
+    "quality": {"vfAtRef": "ok", "ideality": "approx"},
+    "notes": ["ideality: approximate — linear-V sampling, 9 in-region points"]
+  },
+  "snapshot": {
+    "vStart": 0, "vStop": 6, "steps": 50, "dwellMs": 1000,
+    "complianceA": 0.02,
+    "protections": {"ovp": 6.6, "ocp": 0.03, "opp": 0.2, "otp": 60.0}
+  }
+}
+```
+- `endedAt` is `null` while a run is in flight. `points` is a JSON array of the
+  measured `{v,i}` samples, **persisted at finalize** (the `running` row carries
+  `[]`, matching the charge-session finalize-only model) — so a mid-run
+  `GET /iv/sweeps/{id}` returns the running row with no points; the live curve is
+  rebuilt client-side from the incremental `ivProgress` frames, and the
+  authoritative full `points` + `metrics` land on the terminal `ivSweep`.
+- `metrics` (null until finalized) is component-specific — only the relevant keys
+  are present. **Every numeric metric is `number | null`**: it is `null` (or
+  omitted) when the guards (design §3.8) could not compute it reliably —
+  non-conducting DUT, too few in-region points, degenerate/ill-conditioned fit,
+  breakdown not reached. The backend **never emits a fabricated value**; the
+  frontend renders a null metric as "—" / "не определено", not `0`. Two companion
+  fields explain confidence:
+  - `quality` — an object mapping metric name → `"ok" | "approx" | "unreliable"`
+    (absent key ⇒ `ok`). `ideality` is `approx` by construction (linear-V sampling
+    + 12-bit quantisation, §3.8).
+  - `notes` — `string[]` human-readable reasons for any null/`approx`/`unreliable`
+    metric (e.g. `"did-not-conduct"`, `"breakdown-not-reached"`,
+    `"too few in-region points (3)"`).
+  Per component (any of these may be `null` per the above):
+  - **led/diode**: `vfAtRef`, `refCurrentA`, `ideality`, `satCurrentA`,
+    `seriesR`, `seriesRApparent` (bool), `dynamicR`.
+  - **resistor**: `resistance`, `rSquared`, `maxDevPct`.
+  - **zener**: `vz`, `iztA`, `zzt`.
+  - **lamp**: `rCold`, `rHot`, `rHotColdRatio`.
+- A row is created at start with `state:"running"`, `endedAt:null`, and finalized
+  at the terminal state — a leftover `running` row is the visible trace of a
+  backend crash. Sweep persistence is fail-soft (a down DB drops it with a warning
+  and never affects the sweep), matching the charge-run journal.
+
+## CSV export
+
+- `GET /api/v1/iv/sweeps/{id}.csv` — streaming `text/csv`,
+  `Content-Disposition: attachment; filename="dps150-iv-sweep-<id>.csv"`. Columns:
+  `index,voltage,current,power` (`power = voltage × current`), one row per
+  recorded point, in sweep order. `404 iv_sweep_not_found`;
+  `503 storage_unavailable`.
+
+## WS additions
+
+Two journal kinds ride the existing v1 `event` message (`data` = the journal
+fields + `kind` + `ts`); there are **no new message types**.
+- `ivProgress` — throttled to ~1 Hz and emitted on every step/state change; the
+  `IVStatus` field set (minus `active`) plus `kind`/`ts`:
+  `{kind:"ivProgress", sweepId, profileId, profileName, component, mode, state,
+  stepIndex, totalSteps, pointCount, lastPoint:{v,i}, complianceA, complianceV,
+  measured:{voltage,current,power}, elapsedMs, etaMs, ts}`.
+- `ivSweep` — the terminal outcome with the computed metrics, also appended to the
+  `events` journal (below): `{kind:"ivSweep", sweepId, profileName, component,
+  mode, state, reason, pointCount, metrics:{...}, durationMs, ts}`.
+
+The `events` journal (F-014) gains one kind:
+`ivSweep {sweepId, profileName, component, mode, state, reason, pointCount,
+durationMs}` (summary at each terminal state; feeds the Events page, CSV export
+and — best-effort, like autoStop — Telegram).
+
+## DB schema (all times unix millis, portable SQL)
+
+- `iv_profiles(id PK autoincr, name, component, mode, v_start, v_stop, i_start,
+  i_stop, steps, dwell_ms, compliance_a, compliance_v, params TEXT/JSON,
+  created_at, updated_at)`
+- `iv_sweeps(id PK autoincr, profile_id INDEX, profile_name, component, mode,
+  started_at INDEX, ended_at, state, reason, points TEXT/JSON, metrics TEXT/JSON,
+  snapshot TEXT/JSON, created_at)`
+
+Both are feature-owned models wired via `storage.Config.Models` (a new anchor in
+`cmd/server/main.go`), auto-migrated on both sqlite and postgres — no dialect
+functions, no separate SQL migration.
+
+## Emulator (testing)
+
+`DPS_MOCK_DUT` attaches a passive device-under-test to the `mock://` emulator so a
+sweep runs end-to-end without hardware (sibling to `DPS_MOCK_BATTERY`):
+`"resistor,<ohms>"` or `"diode,<Is>,<n>,<Rs>[,<Vt>]"` (e.g.
+`"diode,1e-9,1.8,1.0"` for an LED, `"resistor,100"` for a 100 Ω resistor). A DUT
+and a battery are mutually exclusive; an invalid value is logged and ignored
+(mock-only dev knob), never fatal.
+
+## Frontend file structure
+
+New page/components in their own files: `src/pages/IVPage.tsx` (route `/iv` + menu
+item) with `src/components/IVProfiles.tsx` (CRUD), `src/components/IVLive.tsx`
+(confirmation + live I(V) chart — uPlot, V on the x-axis and I on the y-axis, with
+the compliance band and annotated metrics — plus the step-progress indicator) and
+`src/components/IVSweeps.tsx` (history + CSV export). API types + TanStack Query
+hooks in `src/api/iv.ts`; MSW mocks for every route. i18n prefix `iv.*`. Visual
+design is handled separately (ui-ux skill).

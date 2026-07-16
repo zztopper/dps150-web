@@ -322,6 +322,222 @@ pre-flight/reporting UX. v1 ships **Li-ion, LiFePO4 and Pb**; **NiMH is deferred
   [BU-409 Li-ion](https://www.batteryuniversity.com/article/bu-409-charging-lithium-ion),
   [BU-409b LiFePO4](https://www.batteryuniversity.com/article/bu-409b-charging-lithium-iron-phosphate/).
 
+### 3.8 IV curve tracer (ADR-009)
+
+Decision: add a first-class **IV curve tracer** as a NEW independent hub
+subscriber (`internal/ivtrace`, a sibling run-engine to the charge Manager and
+the sequence Manager), not a charge phase and not a sequence node type. A sweep
+is a **telemetry-driven step loop**, not a condition-watch: for each of N linear
+steps it writes one setpoint, waits for a fresh settled telemetry tick, samples
+the real operating point `(Vmeasured, Imeasured)`, and records the point — the
+hardware's own CV/CC regulation means every sampled point is a true point on the
+DUT's I–V curve. v1 ships **both sweep modes** (voltage and current) and rich
+per-component analysis; bidirectional sweeps are deferred. This is a **low-risk**
+feature — there is no battery, the worst case is a fried cheap component — so
+unlike the charger it has **no pre-flight**: the output energizes at the sweep
+start with the compliance already written.
+
+- **Engine (`internal/ivtrace`)** — mirrors the charge Manager: one active
+  run-slot (`Start`/`Stop`/`Run(ctx)`/`IsRunning`/`ActiveStatus`), it
+  `Subscribe`s to the raw hub (~2 Hz), owns the output for the whole sweep, and
+  broadcasts `device.JournalEvent`s (kind `ivProgress` during the sweep,
+  `ivSweep` at the terminal). It reuses the charger's plumbing verbatim: the
+  `HubController` interface (Snapshot/Subscribe/Broadcast/SetVoltage/SetCurrent/
+  SetOutput/SetProtections/Refresh), `device.SafeOutputOff` + the
+  telemetry-confirmed output-off check, `device.Hub.Refresh`, the staleness
+  `nextTick`, the `Store` interface (adapted in `cmd/server/ivstore.go`), the
+  startup reconciliation and the fail-soft session journal. Only wired when
+  storage is configured (profiles/sweeps live in the DB), same as the charger.
+- **Two sweep modes** (`mode: "voltage" | "current"`), both producing `(V,I)`
+  points:
+  - **Voltage sweep** — `SetCurrent(complianceA)` once (the current limit that
+    protects the DUT), then step `Vset` linearly `vStart → vStop`. The hardware
+    runs CV until the DUT's demand hits the compliance, then CC; each sampled
+    point is where the DUT's curve meets the {Vset, compliance} constraint. All
+    presets use this mode — the knee (where Vf/Vz/ideality live) is best resolved
+    by stepping voltage.
+  - **Current sweep** — `SetVoltage(complianceV)` once (the voltage ceiling), then
+    step `Iset` linearly `iStart → iStop`. Better for the ohmic/high-current
+    region; on a steep exponential (LED/diode) linear `Iset` steps cluster the
+    `V` samples and a ceiling below Vf never lets the DUT conduct, so voltage
+    sweep is preferred for the knee.
+  - N linear steps (default ~50, configurable 2–1000), **uni-directional** in v1.
+    The sample for a step is the first telemetry tick with
+    `TS ≥ writeTS + dwellMs`, so with ~2 Hz telemetry ≥ ~0.5–1 s/step is needed to
+    capture a fresh settled reading; a ~50-step sweep ≈ 30–40 s. The lamp preset
+    uses a longer dwell (filament thermal settling).
+- **Step loop & start order (safety invariant), each step error-checked**: (1)
+  `SetProtections` (OVP/OCP/OPP/OTP from the profile, one step above the sweep
+  bounds) → (2) the **compliance write** (`SetCurrent(complianceA)` for a
+  V-sweep / `SetVoltage(complianceV)` for an I-sweep) → (3) the first swept
+  setpoint (`SetVoltage(vStart)` / `SetCurrent(iStart)`, so the output comes on at
+  the low end, typically 0) → (4) **only then** `SetOutput(true)`. The output must
+  never energize before the compliance is written. Then per step: write the swept
+  setpoint → drain telemetry until `TS ≥ writeTS + dwell` → sample `(V,I)` →
+  record; every consumed tick is checked against the safety envelope and the
+  staleness watchdog. Starting a sweep energizes the output, so
+  `POST /iv/profiles/{id}/start` carries `confirm:true`, honouring the §3.5
+  "enabling the output is always an explicit confirmed action" invariant.
+- **Safety envelope (low-risk, non-disable-able).** (1) the **compliance** bounds
+  DUT current (V-sweep) or voltage (I-sweep) — the primary DUT protection; (2)
+  hardware **OVP/OCP/OPP/OTP** set from the profile a step above the sweep bounds;
+  (3) **output OFF on every terminal path** via `SafeOutputOff` (fresh bounded
+  context, retried, telemetry-confirmed; a failed/unconfirmed off escalates to a
+  fault + alarm — the same helper the charger uses); (4) a **telemetry-staleness
+  watchdog** (no tick for >~4 s → fault → SafeOutputOff — the primary trip,
+  because over raw-TCP ser2net a device hang does not surface as a link-loss); (5)
+  a **per-sweep hard timeout** (`steps × dwell × factor` + a floor) → abort, so a
+  wedged settle loop cannot run forever; (6) the **shared interlock** (owner tag
+  `iv`). The **device envelope bounds every profile**: a voltage sweep needs
+  `vStop ≤ 30 V`, `complianceA ≤ 5 A`, `vStop × complianceA ≤ 150 W`; a current
+  sweep needs `iStop ≤ 5 A`, `complianceV ≤ 30 V`, `complianceV × iStop ≤ 150 W`.
+  There is **no pre-flight and no open-terminal read** — a passive DUT sits at 0 V
+  open-circuit, so there is nothing to measure before energizing.
+- **Coordination — reuses F-023's shared interlock unchanged.** The tracer, the
+  charger and the sequence runner are mutually exclusive via the single
+  `device.Interlock`; the tracer acquires it atomically at `Start` with owner
+  `iv`. Because the 409 gate (`blockDuringInterlock`) already 409s with
+  `owner+"_active"` and the automation suppressor already reads `interlock.Busy()`,
+  **adding the third owner needs no change to either** — the gate emits
+  `iv_active` and the suppressor covers the tracer automatically. Starting a sweep
+  while a charge/sequence runs → `409 charge_active`/`409 sequence_active`;
+  starting a charge/sequence while a sweep runs → `409 iv_active`.
+- **Analysis (`internal/ivtrace/analyze.go`, computed on the captured dataset and
+  persisted).** Least-squares fits over the sampled `(V,I)` points, per component
+  type; each metric is stored on the sweep record (`metrics` JSON), annotated on
+  the I(V) chart, exported and reported. The thermal voltage is
+  `Vt = kT/q = 25.852 mV at 300 K` (SI-2019 exact constants; configurable per
+  junction temperature — the reported `n`/`rd` assume 300 K unless overridden).
+  - **LED / diode** — forward voltage **Vf** at a reference current
+    (linear-interpolated; LED ref = 20 mA per datasheet convention, diode ref =
+    the compliance-limited point, e.g. Vf@100 mA); **ideality factor n** from the
+    Shockley equation `I = Is·(exp(V/(n·Vt)) − 1)` by fitting `ln(I)` vs `V` over
+    the **mid-range exponential segment only** (slope `= 1/(n·Vt) ⇒
+    n = 1/(slope·Vt)`, intercept `= ln(Is)`); **apparent series resistance Rs** as
+    `dV/dI` over the top of the sweep (near compliance) — labelled *apparent*
+    because it overestimates true Rs by the residual `n·Vt/I`, optionally
+    corrected by subtracting it; **dynamic resistance rd = dV/dI** at a reference
+    point (`= n·Vt/I + Rs`).
+  - **Resistor** — **R** from a linear least-squares fit of `I` vs `V` (Ohm's law),
+    with **linearity** reported as `R²` (coefficient of determination) *and* max
+    deviation from the fit (`R²` alone can hide small systematic curvature).
+  - **Zener** — **breakdown Vz** at the knee, at the test current **Izt**
+    (interpolated), and dynamic impedance **Zzt = dV/dI** taken at Izt. The Zener
+    is connected **reverse** (cathode to the + terminal) so the forward voltage
+    sweep drives it into breakdown.
+  - **Lamp** — **cold resistance** (`V/I` near 0 V) vs **hot resistance** (`V/I` at
+    rated), and the hot/cold ratio (≈ 10–15× for tungsten's positive-
+    temperature-coefficient filament).
+  - **Robust fits — never fabricate a number (safety-critical for trust).** Real
+    sweeps break naive least-squares, so every metric is nullable and carries a
+    `quality` (`ok`/`approx`/`unreliable`) + a `reason` when absent; a missing or
+    low-confidence metric is reported as such, never as a confident wrong value.
+    The guards, in order:
+    - **Conduction gate.** If `max(I)` never exceeds a small floor (a few × the
+      noise/quantisation step above zero), the DUT did not conduct (open, reversed,
+      or `vStop < Vf/Vz`) — emit `did-not-conduct` and skip every fit rather than
+      fitting noise.
+    - **Region selection by measured current, not the Mode flag.** The exponential
+      fit uses only points with `I_min ≤ I ≤ (1−ε)·compliance`: the lower bound
+      drops sub-`Vf` noise-floor points (where `ln(I)` is `NaN`/garbage), the upper
+      bound drops **CC-clamped** points (a flat top that is not on the DUT curve).
+      Clamping is detected from the **measured current** approaching compliance, not
+      from the telemetry `Mode` field (which lags a step and misreports at the CV↔CC
+      boundary).
+    - **Minimum-support & conditioning guards.** A fit runs only with enough
+      in-region points (ideality needs ≈8–10 log-linear points, resistor ≥3 with a
+      real voltage span); it is rejected if `SS_tot ≈ 0` (degenerate — e.g. a short
+      or an open reads a single clustered point) or the normal-equations are
+      ill-conditioned (near-zero `x`-variance / determinant). Any of these → the
+      metric is `null` with a reason, not a divide-by-tiny blow-up.
+    - **Ideality `n` is `approx` by construction.** A *linear* voltage sweep places
+      only a handful of steps in the exponential decade and the 12-bit measurement
+      quantises `ln(I)`, so `n` is a best-effort estimate labelled `approx` (with
+      the in-region point count) — a finer adaptive step near the knee is a
+      documented v2 improvement, not a v1 promise of laboratory accuracy.
+    - **Zener/knee "reached" gate.** `Vz`/`Zzt` are emitted only if the sweep
+      actually entered breakdown (current rose through `Izt` before `vStop`);
+      otherwise `breakdown-not-reached`, never an extrapolated `Vz`.
+    - Only the component's configured analyses run (an ideality fit is never
+      attempted on a resistor). These fit functions are unit-tested **directly**
+      against crafted arrays — noisy, quantised, CC-clamped, non-conducting and
+      single-point-degenerate — not only against the ideal emulator, because the
+      emulator's instant, noiseless settling hides exactly the cases these guards
+      exist for.
+- **Storage, reconciliation & UI.** Two feature-owned models registered through
+  `storage.Config.Models`: `iv_profiles` (saved CRUD profiles) and `iv_sweeps`
+  (one row per run, created `running` at start and finalized at the terminal
+  state, carrying the full `points` array, the computed `metrics`, and a
+  `snapshot` of bounds/compliance/protections). Unix-milli int64 times, opaque
+  JSON string columns — the charge-storage convention. **Startup reconciliation**
+  finalizes any `iv_sweeps` row left `running` by a crash as `failed` and cuts a
+  stray energized output with no owner (the charger's `reconcileOnBoot`/
+  `cutStrayOutput` pattern). CSV export of a sweep's point dataset. A new **IV /
+  ВАХ** page (like the Charge page): profiles CRUD; a live sweep (the curve builds
+  in real time from `ivProgress` with a step-progress indicator); a new **I(V)
+  chart** (uPlot with V on the x-axis, I on the y-axis — not a time series —
+  showing the compliance band and the annotated metrics); sweep history and CSV
+  export.
+- **Emulator DUT.** `internal/device/emulator` gains a passive **device-under-test**
+  on the terminals (a sibling to the F-023 `battery`) so a sweep is testable
+  end-to-end on `mock://`. `WithDUT(DUTConfig)` + `DPS_MOCK_DUT` (mirroring
+  `WithBattery`/`DPS_MOCK_BATTERY`) attach either a **resistor** (`I = V/R`), a
+  **diode/LED** (Shockley `I = Is·(exp(V/(n·Vt)) − 1)` with a series `Rs`), or a
+  **zener** (the diode branch plus a **reverse-breakdown** term that clamps at
+  `Vz` with dynamic impedance `Zzt` once the forward-swept terminal reaches the
+  knee) — the last so the Zener preset and its `Vz@Izt`/`Zzt` analysis are
+  exercised end-to-end on `mock://`, not only in direct fit unit-tests. Given
+  the supply's `{vset, iset}` regulation the DUT returns the self-consistent
+  operating point (CV at `vset` when the DUT's demand ≤ `iset`, else CC at `iset`
+  with the terminal voltage the DUT needs for that current — for the diode found
+  by bisection on the monotonic Shockley curve). Unlike the battery the DUT is
+  **stateless**: it reads `0 V` open-circuit with the output off (no pre-flight)
+  and integrates no charge (no `chargeStep`), so only `measure()`/`currentMode()`
+  gain a `dut` branch. A DUT and a battery are mutually exclusive (both claim the
+  terminals); a DUT is ignored with a warning if a battery is also configured.
+- **Component presets (validated — cite sources).** All voltage-sweep. Compliance
+  and bounds are first-class safety parameters bounded by the device envelope.
+
+  | Component | Sweep (V) | Compliance | Steps | Dwell | Analysis |
+  |---|---|---|---|---|---|
+  | LED | 0 → 6 | 20 mA | ~50 | ~1 s | Vf@20 mA, n, apparent Rs, rd |
+  | Diode 1N400x | 0 → 1 | 100 mA | ~50 | ~1 s | Vf@100 mA (knee), n, apparent Rs, rd |
+  | Zener | 0 → Vz + ~20 % | derived: `min(Izt≈5 mA, derate·Pmax/Vz)` | ~50 | ~1 s | Vz@Izt, Zzt |
+  | Resistor | 0 → `√(derate·P·R)` | `Vmax/R` | ~50 | ~1 s | R, R², max-dev % |
+  | Lamp | 0 → rated | ~1.5 × rated I (inrush) | ~50 | ~2 s | R_cold, R_hot, ratio |
+
+  Corrections applied to the first-cut draft: the **LED ceiling is raised 4 → ~6 V**
+  — 4 V is marginal for violet/UV and high-Vf white dies (3.6–4.2 V at the die)
+  and leaves no drive headroom to actually reach 20 mA; 20 mA compliance is kept
+  (the standard indicator-LED test current, and it protects low-Vf reds). The
+  **Zener compliance is derived from the part's power rating, not a fixed 15 mA**
+  (safety-critical): a constant 15 mA is fine at low Vz (12 V × 15 mA = 180 mW)
+  but exceeds a 500 mW part above ~33 V, so
+  `complianceA = min(nominal Izt, derate × Pmax / Vz)` with the read taken near the
+  true **Izt ≈ 5 mA** for a 500 mW BZX55/BZX79 glass Zener (the 1N47xx series is
+  **1 W**, not 500 mW, with device-specific higher Izt — do not lump them). The
+  **resistor Vmax is derated** to `√(derate·P·R)` (≈ 50 %) so a small-R part stays
+  under its power rating (a ¼ W 100 Ω part ⇒ Vmax ≈ 3.5 V), with
+  `complianceA = Vmax/R`. `Rs` is reported as **apparent Rs** (overestimated by
+  `n·Vt/I`) and the ideality fit uses only the mid-range exponential segment
+  (low-current recombination inflates `n` toward 2; high-current `Rs` inflates it
+  too).
+
+  Sources: [PVEducation — Diode Equation](https://www.pveducation.org/pvcdrom/pn-junctions/diode-equation)
+  (Shockley, ideality, `rd = n·Vt/I`);
+  [Boltzmann constant](https://en.wikipedia.org/wiki/Boltzmann_constant) /
+  [Elementary charge](https://en.wikipedia.org/wiki/Elementary_charge) /
+  [NIST SP 330](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.330-2019.pdf)
+  (SI-2019 exact constants, `Vt = 25.852 mV @ 300 K`);
+  [onsemi 1N4001-07](https://www.onsemi.com/download/data-sheet/pdf/1n4001-d.pdf)
+  (1 A rating, Vf 1.1 V @ 1 A);
+  [LED Vf @ 20 mA](https://industrialmonitordirect.com/blogs/knowledgebase/led-forward-voltage-current-limiting-and-datasheet-specs);
+  [Vishay BZX55](https://www.vishay.com/docs/85604/bzx55.pdf) (Izt = 5 mA, Zzt);
+  [onsemi 1N4728A (1 W)](https://www.mouser.com/datasheet/2/149/1N4728A-196207.pdf);
+  [coefficient of determination](https://en.wikipedia.org/wiki/Coefficient_of_determination);
+  [Ohm's law / P=V²/R](https://en.wikipedia.org/wiki/Ohm%27s_law); tungsten lamp
+  cold/hot ratio ([BCcampus](https://pressbooks.bccampus.ca/lightingforelectricians/chapter/incandescent/)).
+
 ## 4. Deploy and environments
 
 - **Single environment** (ns `dps150`): a second instance could not connect

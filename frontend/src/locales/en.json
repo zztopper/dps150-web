@@ -100,8 +100,8 @@
       "title": "Current & voltage"
     },
     "chemistry": {
-      "liion": "Li-ion",
       "lifepo4": "LiFePO4",
+      "liion": "Li-ion",
       "pb": "Lead-acid"
     },
     "errors": {
@@ -393,6 +393,196 @@
     "resolutionRaw": "raw",
     "title": "Measurement history"
   },
+  "iv": {
+    "chart": {
+      "annotations": {
+        "vf": "Vf",
+        "vz": "Vz"
+      },
+      "ariaLabel": "IV chart: current on the vertical axis, voltage on the horizontal axis.",
+      "compliance": "Current limit",
+      "pause": "Pause",
+      "resume": "Resume",
+      "title": "I–V curve"
+    },
+    "component": {
+      "diode": "Diode",
+      "generic": "Generic",
+      "lamp": "Lamp",
+      "led": "LED",
+      "resistor": "Resistor",
+      "zener": "Zener"
+    },
+    "errors": {
+      "chargeActive": "A charge is running — stop it to trace an IV curve",
+      "invalidProfile": "Invalid IV profile: {{detail}}",
+      "ivActive": "An IV sweep is already running — stop it to start a new one",
+      "profileNotFound": "IV profile not found",
+      "sequenceActive": "A sequence is running — stop it to trace an IV curve",
+      "storageUnavailable": "Database unavailable — IV profiles and history are temporarily unavailable",
+      "sweepNotFound": "IV sweep not found"
+    },
+    "form": {
+      "complianceA": "Current compliance, A",
+      "complianceAHint": "The current that protects the DUT; 0 < I ≤ 5 A, V×I ≤ 150 W",
+      "compliancePositive": "Compliance must be greater than zero",
+      "complianceV": "Voltage compliance, V",
+      "complianceVHint": "The voltage ceiling; 0 < V ≤ 30 V, V×I ≤ 150 W",
+      "component": "Component",
+      "dwellHint": "At least {{min}} ms — the settle time before sampling",
+      "dwellMs": "Dwell per step, ms",
+      "dwellRange": "Dwell must be at least {{min}} ms",
+      "iStart": "Start current, A",
+      "iStop": "Stop current, A",
+      "mode": "Sweep mode",
+      "modeHint": "V-sweep: step voltage with a current limit. I-sweep: step current with a voltage ceiling.",
+      "name": "Name",
+      "nameMax": "Max 64 characters",
+      "nameRequired": "Enter a name",
+      "powerExceeded": "Power exceeds {{max}} W — reduce the range or compliance",
+      "rangeError": "Value must be between {{min}} and {{max}}",
+      "required": "Enter a value",
+      "save": "Save",
+      "steps": "Steps",
+      "stepsHint": "{{min}} to {{max}}, linear",
+      "stepsRange": "Steps must be {{min}} to {{max}}",
+      "stopAboveStart": "The stop value must be greater than the start",
+      "titleCreate": "New IV profile",
+      "titleEdit": "Edit IV profile",
+      "vStart": "Start voltage, V",
+      "vStop": "Stop voltage, V"
+    },
+    "live": {
+      "deviceOffline": "Starting a sweep is unavailable while the device is offline.",
+      "deviceOfflineTitle": "Device offline",
+      "goToProfiles": "Go to profiles",
+      "noProfiles": "No IV profiles yet — create one on the Profiles tab",
+      "profileOption": "{{name}} — {{component}}, {{mode}}",
+      "safetyNote": "The output energizes at the sweep start. The compliance limit is written before the output turns on.",
+      "selectPlaceholder": "Select an IV profile",
+      "selectProfile": "IV profile",
+      "start": "Trace curve",
+      "title": "Trace an IV curve"
+    },
+    "metrics": {
+      "approx": "approximate",
+      "approxHint": "Best-effort estimate — linear voltage sweep and 12-bit quantisation (§3.8)",
+      "dynamicR": "Dynamic resistance rd",
+      "ideality": "Ideality factor n",
+      "iztA": "Test current Izt",
+      "maxDevPct": "Max deviation",
+      "noneForComponent": "No analysis is computed for this component",
+      "notDetermined": "not determined",
+      "notDeterminedHint": "The metric could not be computed reliably",
+      "notesTitle": "Notes",
+      "pending": "Analysis appears once the sweep finishes",
+      "rCold": "Cold resistance R_cold",
+      "rHot": "Hot resistance R_hot",
+      "rHotColdRatio": "Hot/cold ratio",
+      "rSquared": "Linearity R²",
+      "resistance": "Resistance R",
+      "satCurrentA": "Saturation current Is",
+      "seriesR": "Series resistance Rs (apparent)",
+      "title": "Analysis",
+      "vfAtRef": "Forward voltage Vf@Iref",
+      "vz": "Breakdown voltage Vz",
+      "zzt": "Dynamic impedance Zzt"
+    },
+    "mode": {
+      "current": "I-sweep",
+      "voltage": "V-sweep"
+    },
+    "profiles": {
+      "actions": {
+        "delete": "Delete",
+        "edit": "Edit"
+      },
+      "addButton": "New IV profile",
+      "created": "IV profile created",
+      "deleteConfirm": {
+        "content": "This cannot be undone. Recorded sweeps are kept.",
+        "ok": "Yes, delete",
+        "title": "Delete profile “{{name}}”?"
+      },
+      "deleted": "IV profile deleted",
+      "empty": "No IV profiles yet — create your first",
+      "errors": {
+        "storageUnavailable": "Database unavailable — IV profiles cannot be changed right now",
+        "storageUnavailableTitle": "Storage unavailable"
+      },
+      "saved": "IV profile saved",
+      "table": {
+        "actions": "Actions",
+        "compliance": "Compliance",
+        "component": "Component",
+        "name": "Name",
+        "range": "Range",
+        "steps": "Steps"
+      },
+      "title": "IV profiles"
+    },
+    "run": {
+      "elapsed": "Elapsed",
+      "eta": "ETA",
+      "points": "Points",
+      "progress": "Progress",
+      "state": {
+        "aborted": "Aborted",
+        "completed": "Completed",
+        "failed": "Failed",
+        "running": "Tracing",
+        "stopped": "Stopped"
+      },
+      "stepOfTotal": "Step {{index}} of {{total}}",
+      "stop": "Stop"
+    },
+    "start": {
+      "compliance": "Compliance",
+      "component": "Component",
+      "confirmLabel": "The component is connected — I confirm energizing the output",
+      "energizeWarning": "Starting energizes the output. The compliance limit is written first — make sure the component is connected correctly.",
+      "estDuration": "Est. duration",
+      "range": "Range",
+      "start": "Start sweep",
+      "startFailedTitle": "Could not start the sweep",
+      "steps": "Steps",
+      "title": "Start sweep: {{name}}"
+    },
+    "sweeps": {
+      "detailError": "Could not load the sweep",
+      "detailTitle": "IV sweep",
+      "empty": "No IV sweeps yet",
+      "ended": "Ended",
+      "errors": {
+        "storageUnavailable": "IV history storage is unavailable, try again later",
+        "storageUnavailableTitle": "Storage unavailable"
+      },
+      "exportCsv": "Export CSV",
+      "noPoints": "No points recorded",
+      "reason": "Reason",
+      "table": {
+        "component": "Component",
+        "duration": "Duration",
+        "points": "Points",
+        "profile": "Profile",
+        "started": "Started",
+        "state": "State"
+      }
+    },
+    "tabs": {
+      "history": "History",
+      "live": "Trace",
+      "profiles": "Profiles"
+    },
+    "title": "IV curve tracer",
+    "toasts": {
+      "completed": "IV curve “{{name}}” traced",
+      "ended": "IV sweep “{{name}}”: {{state}} — {{reason}}",
+      "started": "IV sweep “{{name}}” started",
+      "stopRequested": "Stopping the sweep…",
+      "stopped": "IV sweep “{{name}}” stopped"
+    }
+  },
   "lang": {
     "switchLabel": "Interface language"
   },
@@ -416,6 +606,7 @@
     "dashboard": "Dashboard",
     "events": "Events",
     "history": "History",
+    "iv": "IV curve",
     "menu": "Menu",
     "profiles": "Profiles",
     "sequences": "Sequences",
@@ -723,6 +914,8 @@
     "ampHour": "Ah",
     "celsius": "°C",
     "milliampHour": "mAh",
+    "ohm": "Ω",
+    "second": "s",
     "volt": "V",
     "watt": "W",
     "wattHour": "Wh"

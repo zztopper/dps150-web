@@ -28,6 +28,7 @@ const NAV_ITEMS = [
   { key: '/automation', labelKey: 'nav.automation' },
   { key: '/sequences', labelKey: 'nav.sequences' },
   { key: '/charge', labelKey: 'nav.charge' },
+  { key: '/iv', labelKey: 'nav.iv' },
   { key: '/settings', labelKey: 'nav.settings' },
 ]
 
