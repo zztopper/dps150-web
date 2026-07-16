@@ -114,12 +114,15 @@ func New(hub HubReader, cfg Config, opts ...Option) *Service {
 func (s *Service) Run(ctx context.Context) {
 	s.runCtx = ctx
 	if s.broker == nil {
-		b, err := newPahoBroker(s.cfg, s.onConnect, s.log)
-		if err != nil {
+		b := newPahoBroker(s.cfg, s.onConnect, s.log)
+		// Assign BEFORE connecting: paho's OnConnect handler (→ onConnect →
+		// publishDiscovery) can fire synchronously inside Connect, and it
+		// publishes through s.broker — which must already be set.
+		s.broker = b
+		if err := b.Connect(); err != nil {
 			s.log.Error("mqtt: connect failed", "broker", s.cfg.Broker, "error", err)
 			return
 		}
-		s.broker = b
 	} else {
 		// Injected broker (tests): run the connect sequence once.
 		s.onConnect()
