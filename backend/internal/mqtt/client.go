@@ -23,10 +23,15 @@ type pahoBroker struct {
 	log    *slog.Logger
 }
 
-// newPahoBroker dials the broker described by cfg. onConnect runs on every
+// newPahoBroker builds a paho-backed broker for cfg. onConnect runs on every
 // (re)connect (republish discovery, resubscribe commands). An MQTT Last-Will
 // marks the service offline on the status topic if the connection drops.
-func newPahoBroker(cfg Config, onConnect func(), log *slog.Logger) (*pahoBroker, error) {
+//
+// It does NOT connect — the caller must assign the returned broker to the
+// Service FIRST and only then call Connect, so that paho's OnConnect callback
+// (which can fire synchronously inside Connect) never runs before the Service
+// has a non-nil broker to publish through.
+func newPahoBroker(cfg Config, onConnect func(), log *slog.Logger) *pahoBroker {
 	b := &pahoBroker{log: log}
 
 	opts := paho.NewClientOptions().
@@ -48,13 +53,18 @@ func newPahoBroker(cfg Config, onConnect func(), log *slog.Logger) (*pahoBroker,
 	})
 
 	b.client = paho.NewClient(opts)
+	return b
+}
+
+// Connect dials the broker. With SetConnectRetry the token completes once the
+// first attempt returns; a hard error (bad broker URL) surfaces here, a down
+// broker does not (it keeps retrying in the background).
+func (b *pahoBroker) Connect() error {
 	tok := b.client.Connect()
-	// With ConnectRetry the token completes once the first attempt returns;
-	// a hard error (bad broker URL) surfaces here, a down broker does not.
 	if tok.WaitTimeout(connectWait) && tok.Error() != nil {
-		return nil, tok.Error()
+		return tok.Error()
 	}
-	return b, nil
+	return nil
 }
 
 func (b *pahoBroker) Publish(topic string, qos byte, retained bool, payload []byte) error {
