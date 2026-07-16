@@ -55,6 +55,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docker/*` v4/v6/v7) to clear the Node.js 20 deprecation warning.
 
 ### Added
+- Battery charging mode (F-023, ADR-008, `internal/charger`): a backend-supervised
+  charge engine that turns the supply into a proper CC-CV charger for **Li-ion,
+  LiFePO4 and lead-acid** packs. A charge is an ordered list of phases
+  (precharge → CC/CV → Pb float) compiled from a per-chemistry preset; the
+  hardware does the CC/CV regulation while the engine watches telemetry and
+  terminates on the current tapering below the cutoff. New page **"Charge"** with
+  saved profiles, a live view (V+I chart with phase bands, phase/elapsed/ETA,
+  mAh delivered, safety-cap progress bars) and session history. REST
+  `/charge/profiles*`, `/charge/preflight`, `/charge/profiles/{id}/start`,
+  `/charge/stop`, `/charge/active`, `/charge/sessions*`; WS `chargeProgress`/
+  `chargeSession`; terminal Telegram summary. Strict, non-disable-able safety
+  envelope: a **pre-flight** measures the pack voltage with the output off and
+  refuses a reversed/absent battery or a cell-count mismatch; the start order
+  writes the protections and `Vset` **before** energizing (reverse-current
+  guard); a **telemetry-staleness watchdog** cuts the output if ticks stop (the
+  device hanging over ser2net does not surface as a link-loss); an absolute
+  per-chemistry voltage ceiling, a capacity cap and a hard timeout abort the
+  charge; a device Ah-counter reset is treated as a fault; and a shared
+  single-owner interlock makes a charge and a sequence mutually exclusive
+  (`409 charge_active`/`sequence_active`). Multi-cell lithium requires attesting
+  an external BMS. NiMH is intentionally deferred (no autonomous termination and
+  no battery-temperature sensor make it unsafe to leave unattended on this rig).
 - Russian README (`README.ru.md`) alongside the English one, cross-linked at
   the top of each; the screenshots were refreshed in the light theme and now
   include the Sequences page and its step-tree editor.

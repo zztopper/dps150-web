@@ -1,0 +1,25 @@
+/* Battery charging (F-023) view styles. */
+
+/* Large glanceable charge KPIs reuse the dashboard reading scale. */
+.charge-kpis {
+  gap: 8px 32px;
+}
+
+@media (max-width: 640px) {
+  .charge-kpis .reading-value {
+    font-size: clamp(2.25rem, 12vw, 3.25rem);
+  }
+
+  .charge-kpis {
+    justify-content: space-between;
+    gap: 4px 12px;
+  }
+}
+
+/* Respect prefers-reduced-motion: freeze the running Badge pulse so the live
+   view has no perpetual animation (the chart is separately throttled). */
+@media (prefers-reduced-motion: reduce) {
+  .ant-badge-status-processing::after {
+    animation: none;
+  }
+}

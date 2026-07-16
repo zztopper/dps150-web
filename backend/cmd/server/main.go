@@ -17,6 +17,7 @@ import (
 
 	"dps150-web/backend/internal/api"
 	"dps150-web/backend/internal/automation"
+	"dps150-web/backend/internal/charger"
 	"dps150-web/backend/internal/config"
 	"dps150-web/backend/internal/device"
 	"dps150-web/backend/internal/device/emulator"
@@ -49,7 +50,19 @@ func main() {
 	var dialer transport.Dialer
 	if strings.HasPrefix(cfg.TransportURI, "mock://") {
 		// Built-in device emulator: development and e2e without hardware.
-		dialer = emulator.New().Dialer()
+		// DPS_MOCK_BATTERY optionally attaches a simulated battery so the
+		// mock can be driven through a charge; an invalid value is logged
+		// and ignored (mock-only dev knob), never fatal.
+		var opts []emulator.Option
+		if s := os.Getenv(emulator.EnvBattery); s != "" {
+			if cfg, err := emulator.ParseBatteryConfig(s); err != nil {
+				slog.Warn("ignoring invalid DPS_MOCK_BATTERY", "value", s, "error", err)
+			} else {
+				opts = append(opts, emulator.WithBattery(cfg))
+				slog.Info("mock battery attached", "capacity_mah", cfg.CapacityMAh, "soc", cfg.SOC)
+			}
+		}
+		dialer = emulator.New(opts...).Dialer()
 	} else {
 		var err error
 		dialer, err = transport.NewDialer(cfg.TransportURI)
@@ -73,6 +86,7 @@ func main() {
 	models = append(models, &storage.AutomationRule{}, &storage.AutomationTrigger{})
 	models = append(models, &storage.ApiToken{})
 	models = append(models, &storage.Sequence{})
+	models = append(models, &storage.ChargeProfile{}, &storage.ChargeSession{})
 
 	store, err := storage.Open(storage.Config{
 		Driver: cfg.DBDriver,
@@ -157,6 +171,12 @@ func main() {
 	// dependency construction (hub and store are in scope) at its anchor and
 	// must not touch the other anchor.
 
+	// Shared device-output interlock (F-023): the single-owner guard both run
+	// engines acquire, so a sequence run and a charge run can never both
+	// energize the output. It is also the source of truth for the API's 409
+	// manual-mutation gate (409 sequence_active | charge_active).
+	interlock := &device.Interlock{}
+
 	// Programmable sequences (F-022): a start/stop-driven runner that executes
 	// a saved Program (setHold/ramp/loop) against the device, one run at a
 	// time. Only wired when storage is configured (sequences live in the
@@ -165,8 +185,27 @@ func main() {
 	// aborts an active run with the output off; it never auto-resumes.
 	var seqManager *sequence.Manager
 	if store != nil {
-		seqManager = sequence.New(hub, store, sequence.WithLogger(logger))
+		seqManager = sequence.New(hub, store,
+			sequence.WithLogger(logger), sequence.WithInterlock(interlock))
 		go seqManager.Run(ctx)
+	}
+
+	// Battery charging (F-023): a backend-supervised run engine that owns the
+	// output for a whole charge, mutually exclusive with the sequence runner via
+	// the shared interlock. Only wired when storage is configured (profiles and
+	// sessions live in the database). Like the sequence runner it uses the RAW
+	// hub and binds to ctx so a shutdown aborts an active charge with the output
+	// off (and reconciles any session orphaned by a crash on boot). The Telegram
+	// notifier is always a valid (possibly-unconfigured) *notify.Telegram, which
+	// the engine gates on Configured().
+	var chargeManager *charger.Manager
+	if store != nil {
+		chargeManager = charger.New(hub,
+			charger.WithInterlock(interlock),
+			charger.WithStore(chargeStore{store: store, log: logger}),
+			charger.WithNotifier(telegram),
+			charger.WithLogger(logger))
+		go chargeManager.Run(ctx)
 	}
 
 	// Auto-stop rules engine (F-018): a hub subscriber that evaluates
@@ -176,12 +215,14 @@ func main() {
 	// runs when storage is configured, since rules live in the database.
 	// Subscribes to the raw hub, not the metrics.InstrumentHub wrapper: that
 	// wrapper's Subscribe counts dps150_ws_clients, which must stay a count
-	// of actual WebSocket clients. While a sequence run is active it is
-	// suppressed (WithActiveSuppressor) so it does not fight the run.
+	// of actual WebSocket clients. While any run (sequence or charge) owns the
+	// output it is suppressed (WithActiveSuppressor) so it does not fight the
+	// run — the shared interlock is the single source of truth for "a run is
+	// active" now that both engines acquire it.
 	if store != nil {
 		engine := automation.New(hub, store,
 			automation.WithLogger(logger), automation.WithSender(telegram),
-			automation.WithActiveSuppressor(seqManager.IsRunning))
+			automation.WithActiveSuppressor(func() bool { return interlock.Busy() }))
 		go engine.Run(ctx)
 	}
 
@@ -195,7 +236,9 @@ func main() {
 	router := api.NewRouter(appMetrics.InstrumentHub(hub),
 		api.WithStore(store), api.WithHistory(hist),
 		api.WithAuthRequired(cfg.AuthRequired),
-		api.WithSequenceManager(seqManager))
+		api.WithSequenceManager(seqManager),
+		api.WithChargeManager(chargeManager),
+		api.WithInterlock(interlock))
 	// Serve the embedded frontend bundle (single-binary mode); a backend
 	// built without the bundle logs it and serves the API only.
 	webui.Register(router, logger)

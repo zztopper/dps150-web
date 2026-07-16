@@ -92,6 +92,192 @@
       "title": "Trigger history"
     }
   },
+  "charge": {
+    "chart": {
+      "ariaLabel": "Charge chart: voltage and current across phases.",
+      "pause": "Pause",
+      "resume": "Resume",
+      "title": "Current & voltage"
+    },
+    "chemistry": {
+      "liion": "Li-ion",
+      "lifepo4": "LiFePO4",
+      "pb": "Lead-acid"
+    },
+    "errors": {
+      "chargeActive": "A charge is already running — stop it to start a new one",
+      "invalidProfile": "Invalid charge profile: {{detail}}",
+      "preflightFailed": "Pre-flight check failed: {{detail}}",
+      "profileNotFound": "Charge profile not found",
+      "sequenceActive": "A sequence is running — stop it to start a charge",
+      "sessionNotFound": "Charge session not found",
+      "storageUnavailable": "Database unavailable — charge profiles and history are temporarily unavailable"
+    },
+    "form": {
+      "attestationRequired": "A multi-cell lithium pack requires BMS attestation",
+      "attestationRequiredHint": "A multi-cell lithium pack without a BMS can overcharge one cell invisibly to the pack-level OVP.",
+      "bmsAttested": "External BMS / balancer connected",
+      "capacityMah": "Capacity, mAh",
+      "cells": "Cell count (S)",
+      "cellsHint": "Full pack voltage ≈ {{volts}} V",
+      "cellsRange": "Cell count must be 1 to {{max}}",
+      "chargeCurrentA": "Charge current, A",
+      "chargeCurrentHint": "0 < I ≤ {{max}} A",
+      "chemistry": "Chemistry",
+      "chemistryHint": "Charge voltage ≈ {{perCell}} V per cell",
+      "name": "Name",
+      "nameMax": "Max 64 characters",
+      "nameRequired": "Enter a name",
+      "rangeError": "Value must be between {{min}} and {{max}}",
+      "required": "Enter a value",
+      "save": "Save",
+      "titleCreate": "New charge profile",
+      "titleEdit": "Edit charge profile"
+    },
+    "live": {
+      "deviceOffline": "Measuring and starting a charge is unavailable while the device is offline.",
+      "deviceOfflineTitle": "Device offline",
+      "goToProfiles": "Go to profiles",
+      "noProfiles": "No charge profiles yet — create one on the Profiles tab",
+      "prepare": "Pre-flight",
+      "profileOption": "{{name}} — {{chemistry}} {{cells}}S",
+      "safetyNote": "The output stays off. The charge only begins after the battery voltage is measured and you confirm.",
+      "selectPlaceholder": "Select a charge profile",
+      "selectProfile": "Charge profile",
+      "title": "Start a charge"
+    },
+    "phase": {
+      "absorb": "Absorb",
+      "cc": "Const. current (CC)",
+      "cv": "Const. voltage (CV)",
+      "done": "Done",
+      "float": "Float",
+      "precharge": "Precharge",
+      "preflight": "Pre-flight"
+    },
+    "preflight": {
+      "capacityCap": "Capacity cap",
+      "cellsMatch": "Cells",
+      "cellsMatchValue": "declared {{declared}} / detected {{detected}}",
+      "confirmLabel": "I connected a {{cells}}-cell {{chemistry}} pack",
+      "declaredCells": "Declared cells",
+      "deepConfirmLabel": "Battery is deeply discharged — I confirm starting with precharge",
+      "deepDischargeDetail": "Voltage is below the precharge threshold. The charge will begin at a low current in the precharge phase — a separate confirmation is required.",
+      "deepDischargeTitle": "Deep discharge",
+      "detectedCells": "Detected cells",
+      "icharge": "Charge current",
+      "limitsTitle": "Computed safety limits",
+      "measureFailedTitle": "Could not measure the battery",
+      "measuring": "Measuring battery voltage…",
+      "perCell": "Per cell",
+      "protections": "Protections",
+      "reasonDetail": {
+        "cell_count_mismatch": "The measured voltage matches a different cell count. Check the profile and connection.",
+        "no_battery_or_short": "No battery detected or a short circuit. Check the terminal connection.",
+        "reversed_polarity": "Reversed polarity. Swap the + and − terminals.",
+        "voltage_too_high_for_cells": "Voltage is too high for the declared cell count.",
+        "voltage_too_low_for_cells": "Voltage is too low for the declared cell count."
+      },
+      "reasonTitle": {
+        "cell_count_mismatch": "Cell count mismatch",
+        "no_battery_or_short": "No battery or short circuit",
+        "reversed_polarity": "Reversed polarity",
+        "voltage_too_high_for_cells": "Voltage too high",
+        "voltage_too_low_for_cells": "Voltage too low"
+      },
+      "recheck": "Re-check the battery and the connection, then retry the pre-flight.",
+      "retry": "Retry pre-flight",
+      "start": "Start charge",
+      "startFailedTitle": "Could not start the charge",
+      "timeout": "Timeout",
+      "title": "Pre-flight: {{name}}",
+      "vbat": "Battery voltage",
+      "vcharge": "Charge voltage",
+      "vmaxCeiling": "Voltage ceiling",
+      "warningsTitle": "Warnings"
+    },
+    "profiles": {
+      "actions": {
+        "delete": "Delete",
+        "edit": "Edit"
+      },
+      "addButton": "New charge profile",
+      "created": "Charge profile created",
+      "deleteConfirm": {
+        "content": "This cannot be undone. Completed sessions are kept.",
+        "ok": "Yes, delete",
+        "title": "Delete profile “{{name}}”?"
+      },
+      "deleted": "Charge profile deleted",
+      "empty": "No charge profiles yet — create your first",
+      "errors": {
+        "storageUnavailable": "Database unavailable — charge profiles cannot be changed right now",
+        "storageUnavailableTitle": "Storage unavailable"
+      },
+      "saved": "Charge profile saved",
+      "table": {
+        "actions": "Actions",
+        "bms": "BMS",
+        "bmsNo": "no",
+        "bmsYes": "yes",
+        "capacity": "Capacity",
+        "chemistry": "Chemistry",
+        "current": "Charge current",
+        "name": "Name"
+      },
+      "title": "Charge profiles"
+    },
+    "run": {
+      "capacityCap": "Delivered / capacity cap",
+      "cells": "{{n}}S",
+      "elapsed": "Elapsed",
+      "energy": "Energy",
+      "eta": "ETA",
+      "phaseOfTotal": "{{phase}} ({{index}} of {{total}})",
+      "state": {
+        "aborted": "Aborted",
+        "completed": "Completed",
+        "failed": "Failed",
+        "running": "Charging",
+        "stopped": "Stopped"
+      },
+      "stop": "Stop charge",
+      "timeout": "Elapsed / timeout"
+    },
+    "sessions": {
+      "detailError": "Could not load the session",
+      "detailTitle": "Charge session",
+      "empty": "No charge sessions yet",
+      "ended": "Ended",
+      "errors": {
+        "storageUnavailable": "Charge history storage is unavailable, try again later",
+        "storageUnavailableTitle": "Storage unavailable"
+      },
+      "peakVoltage": "Peak voltage",
+      "reason": "Reason",
+      "table": {
+        "delivered": "Delivered",
+        "duration": "Duration",
+        "pack": "Pack",
+        "profile": "Profile",
+        "started": "Started",
+        "state": "State"
+      }
+    },
+    "tabs": {
+      "history": "History",
+      "live": "Charge",
+      "profiles": "Profiles"
+    },
+    "title": "Battery charging",
+    "toasts": {
+      "completed": "Charge “{{name}}” completed",
+      "ended": "Charge “{{name}}”: {{state}} — {{reason}}",
+      "started": "Charge “{{name}}” started",
+      "stopRequested": "Stopping the charge…",
+      "stopped": "Charge “{{name}}” stopped"
+    }
+  },
   "chart": {
     "events": {
       "autoStop": "Auto-stop",
@@ -128,6 +314,8 @@
     "retry": "Retry"
   },
   "errors": {
+    "boundaryReset": "Reload this section",
+    "boundaryTitle": "Something went wrong on this page",
     "deviceOffline": "Device is offline — command not applied",
     "invalidSetpoint": "Setpoint is out of range: {{detail}}",
     "network": "Network unavailable — request not sent",
@@ -222,6 +410,7 @@
   },
   "nav": {
     "automation": "Automation",
+    "charge": "Charge",
     "dashboard": "Dashboard",
     "events": "Events",
     "history": "History",
@@ -530,6 +719,7 @@
     "amp": "A",
     "ampHour": "Ah",
     "celsius": "°C",
+    "milliampHour": "mAh",
     "volt": "V",
     "watt": "W",
     "wattHour": "Wh"

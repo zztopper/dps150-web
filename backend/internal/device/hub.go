@@ -376,6 +376,18 @@ func (h *Hub) SetOutput(ctx context.Context, on bool) error {
 	return h.write(ctx, protocol.SetByte(protocol.RegOutputEnable, b), protocol.GetAll())
 }
 
+// Refresh requests a full state dump (GetAll) without mutating any setpoint, so
+// an observer that issues no writes of its own — e.g. a charge run parked in a
+// long CV phase — can force the on-change registers (Mode, Protection) and the
+// metering counters to be re-pushed and its cache to re-sync. It returns
+// ErrOffline while the device is disconnected.
+func (h *Hub) Refresh(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return h.write(ctx, protocol.GetAll())
+}
+
 // ProtectionLimits selects the protection thresholds for SetProtections.
 // Nil fields are left untouched on the device.
 type ProtectionLimits struct {

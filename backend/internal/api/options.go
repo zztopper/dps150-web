@@ -1,6 +1,8 @@
 package api
 
 import (
+	"dps150-web/backend/internal/charger"
+	"dps150-web/backend/internal/device"
 	"dps150-web/backend/internal/sequence"
 	"dps150-web/backend/internal/storage"
 )
@@ -24,10 +26,19 @@ type routerDeps struct {
 	// the API is open. It is set true only in the cluster deployment, which
 	// sits behind Authelia on the UI host and issues tokens on the API host.
 	authRequired bool
-	// sequenceManager backs the F-022 run/stop/active routes and the 409 gate
-	// on manual device mutations; nil when storage is not configured, which
-	// makes the run routes answer 503 and the gate a no-op.
+	// sequenceManager backs the F-022 run/stop/active routes and (when no
+	// interlock is wired) the 409 gate on manual device mutations; nil when
+	// storage is not configured, which makes the run routes answer 503 and the
+	// gate a no-op.
 	sequenceManager *sequence.Manager
+	// chargeManager backs the F-023 charge preflight/run/stop/active routes;
+	// nil when storage is not configured, which makes those routes answer 503.
+	chargeManager *charger.Manager
+	// interlock is the shared single-owner device-output guard (F-023). When
+	// wired it is the source of truth for the 409 gate on manual device
+	// mutations (409 sequence_active | charge_active). Nil falls back to the
+	// sequence manager's IsRunning so older wiring / tests do not regress.
+	interlock *device.Interlock
 }
 
 // WithAuthRequired enables the ADR-006 authentication gate (Bearer token or
@@ -54,6 +65,21 @@ func WithStore(store *storage.Storage) RouterOption {
 // the run routes then answer 503 storage_unavailable and the gate is a no-op.
 func WithSequenceManager(mgr *sequence.Manager) RouterOption {
 	return func(d *routerDeps) { d.sequenceManager = mgr }
+}
+
+// WithChargeManager hands the F-023 charge runner to the preflight/run/stop/
+// active routes. A nil value is allowed: those routes then answer 503
+// storage_unavailable (the profile/session CRUD routes still work off the store).
+func WithChargeManager(mgr *charger.Manager) RouterOption {
+	return func(d *routerDeps) { d.chargeManager = mgr }
+}
+
+// WithInterlock hands the shared single-owner device-output interlock (F-023)
+// to the 409 gate, making it the source of truth for who owns the output
+// (409 sequence_active | charge_active). A nil value keeps the old
+// sequence-only gate behavior (fail-open when nothing is wired).
+func WithInterlock(il *device.Interlock) RouterOption {
+	return func(d *routerDeps) { d.interlock = il }
 }
 
 // profiles returns the store as the narrow surface the profile routes

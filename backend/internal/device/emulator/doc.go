@@ -31,6 +31,15 @@
 // Vset/R <= Iset (V = Vset, I = V/R) and in CC otherwise (I = Iset,
 // V = I*R); P = V*I. With the output off all measurements are zero.
 //
+// A simulated battery (WithBattery, or DPS_MOCK_BATTERY on the mock binary)
+// replaces the resistor for charge testing. Its terminal voltage is
+// OCV(SOC) + I·Rint, with OCV a straight line from empty to full. Off, it reads
+// its open-circuit voltage on the terminals (the DPS-150 senses the pack even
+// with the output off — the charge pre-flight relies on this) at zero current;
+// on, it charges CC (I = Iset) until the terminal reaches Vset then CV (current
+// tapering as it fills), flipping RegMode on the transition and integrating the
+// charge into SOC and the Ah/Wh counters one telemetry tick at a time.
+//
 // Protection thresholds D1–D5 are stored and enforced against the measured
 // values (OVP/OCP/OPP against V/I/P, OTP against the internal temperature,
 // LVP against the input voltage). A trip pushes a DC frame with the

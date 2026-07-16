@@ -286,3 +286,229 @@ New pages/components in their own files: `src/pages/AutomationPage.tsx`
 EventsPage (F-019), a tokens section in SettingsPage (F-020). i18n prefixes:
 `automation.*`, `export.*`, `tokens.*`. TD-002: consolidation of history/events
 types from components/chart/* into `src/api/`.
+
+---
+
+# API contract v4: Battery charging mode (ADR-008 / F-023)
+
+Fixed for parallel development of F-023 (backend `internal/charger` +
+`internal/storage/charge.go` + `internal/api/charge.go`; frontend ChargePage).
+The v1/v2/v3 rules apply (camelCase, unix millis, error format). All voltages
+are volts, currents amperes, capacity milliamp-hours (`mAh`), energy watt-hours.
+
+The charger is a backend-supervised run engine that owns the output for a whole
+charge (mirroring the F-022 sequence Manager). It is **mutually exclusive** with
+the sequence runner. New error codes:
+`charge_active` (409) — a charge run owns the device;
+`charge_preflight_failed` (409) — the safety pre-flight refused the start;
+`invalid_charge_profile` (400); `charge_profile_not_found` (404);
+`charge_session_not_found` (404). `storage_unavailable` (503) is reused
+(charge profiles/sessions live in the DB; run/stop/active answer 503 when the
+runner is not configured).
+
+## Coordination (extends the F-022 409 gate)
+
+The manual-mutation gate rejects `PUT /device/setpoints`, `PUT /device/output`,
+`PUT /device/protections`, `PUT /device/presets/{slot}` and
+`POST /profiles/{id}/apply` with **409 `charge_active`** while a charge run is
+active — exactly as it does with `sequence_active` for a sequence run (a run of
+either kind blocks manual control). Starting a charge while a sequence runs →
+`409 sequence_active`; starting a sequence while a charge runs → `409
+charge_active`. Reads, `POST /charge/stop` and `POST /sequences/stop` are never
+blocked.
+
+## Charge profiles (CRUD)
+
+`ChargeProfile`:
+```json
+{
+  "id": 1, "name": "18650 Li-ion 1S",
+  "chemistry": "liion", "cells": 1,
+  "capacityMah": 3400, "chargeCurrentA": 1.7,
+  "bmsAttested": false,
+  "params": null,
+  "createdAt": <ms>, "updatedAt": <ms>
+}
+```
+- `chemistry`: `"liion" | "lifepo4" | "pb"` (NiMH deferred out of v1 — see design §3.7).
+- `bmsAttested` (bool, default false) — attests an external BMS/balancer is
+  connected. Required for multi-cell lithium (validation below); ignored for 1S
+  and Pb.
+- `params` (nullable object) — optional per-cell overrides of the built-in
+  preset (design §3.7). Any subset of: `vchargePerCell`, `taperC`,
+  `prechargeThresholdPerCell`, `floatPerCell`, `vmaxPerCell`, `capacityCapPct`,
+  `timeoutFactor`. Omitted fields take the preset default; overrides are
+  re-validated against the device envelope and the chemistry's safe bounds, and
+  must keep `Vcharge ≤ ceiling − margin ≤ OVP − margin`.
+- Validation (`400 invalid_charge_profile`): non-empty name ≤ 64 chars;
+  `cells ≥ 1`; `capacityMah > 0`; `chargeCurrentA > 0`; and the device envelope —
+  `cells × Vcharge ≤ 30 V`, `chargeCurrentA ≤ 5 A`, `Vcharge × chargeCurrentA ≤
+  150 W`; **multi-cell lithium requires attestation** — `chemistry ∈ {liion,
+  lifepo4}` with `cells ≥ 2` must have `bmsAttested = true` (an imbalanced pack
+  can overcharge one cell invisibly to the pack-level OVP).
+- `GET /api/v1/charge/profiles` → `{"items": [ChargeProfile...]}` (by id, creation order).
+- `POST /api/v1/charge/profiles` (no id) → `201 ChargeProfile`.
+- `GET /api/v1/charge/profiles/{id}` → `200 ChargeProfile`; `404 charge_profile_not_found`.
+- `PUT /api/v1/charge/profiles/{id}` → `200 ChargeProfile`; `404 charge_profile_not_found`.
+- `DELETE /api/v1/charge/profiles/{id}` → `204`; `404 charge_profile_not_found`.
+  Deleting a profile does not affect past `ChargeSession` rows (they copy
+  `profileName`/`chemistry`/`cells`).
+
+## Pre-flight (safety measurement, output off)
+
+`POST /api/v1/charge/preflight` — body `{"profileId": 1}` OR an inline
+`{"chemistry","cells","capacityMah","chargeCurrentA","params"?}`. Reads the
+terminal voltage with the output **off** (the DPS-150 measures Vbat with no
+output), validates it against the declared chemistry×cells and returns the
+computed limits the UI must show before the confirmation step.
+
+`200`:
+```json
+{
+  "ok": true,
+  "vbat": 3.72, "vbatPerCell": 3.72, "suggestedCells": 1,
+  "chemistry": "liion", "cells": 1,
+  "needsConfirm": false,
+  "computed": {
+    "icharge": 1.70,
+    "vmaxCeiling": 4.25, "capacityCapMah": 3910, "timeoutMs": 10800000,
+    "protections": {"ovp": 4.30, "ocp": 2.04, "opp": 8.7, "otp": 75.0}
+  },
+  "warnings": []
+}
+```
+`needsConfirm` is `true` for a plausible-but-deeply-discharged pack (the caller
+must resend `start` with `confirmDeepDischarge: true`). `computed` mirrors the
+engine's enforced safety envelope (`charger.Limits`) plus the request's charge
+current (`icharge`). It does **not** carry a `vcharge`: the engine's
+`PreflightResult` exposes the ceiling / protections / caps it enforces, not the
+internal per-phase CV setpoint. The UI derives the displayed target from
+`vmaxCeiling` and the chemistry.
+- `ok: false` with a `reason` when the reading is unsafe but was measured — the
+  UI shows Vbat and the reason and disables Start: `vbat > vcharge`
+  (reverse current / wrong chemistry / wrong cell count), `vbat ≈ 0`
+  (no battery / short), `vbat < 0` (reversed polarity), a per-cell voltage
+  outside the chemistry's plausible range, or **`cells ≠ suggestedCells`** (a
+  cell-count mismatch is a hard refusal, never a soft warning — adjacent counts
+  alias: a full 2S at 8.4 V reads as a "discharged" 3S at 2.80 V/cell). Vbat is
+  read from a telemetry tick sampled *after* the output-off has settled
+  (surface-charge decay), not the cached on-load voltage. Deeply-discharged
+  Li-ion/LiFePO4 (below the precharge threshold, with a matching cell count) is
+  `ok: true` with a warning and requires a second explicit confirmation — the run
+  starts in the precharge phase.
+- `409 device_offline` (cannot measure), `409 charge_active` / `409
+  sequence_active` (device busy — a clean open-terminal reading is impossible),
+  `400 invalid_charge_profile` (bad inline params). `503 storage_unavailable`
+  only when `profileId` is given and storage is down.
+
+## Run / stop / active
+
+- `POST /api/v1/charge/profiles/{id}/start` — body `{"confirm": true}`
+  (the confirmation interlock; a missing/false `confirm` → `400
+  invalid_charge_profile`). The server re-runs the pre-flight guard, sets
+  OVP/OCP/OPP/OTP from the profile, writes `Vset = Vcharge` **before** output-on,
+  then energizes and runs. → `202 {"started": true}`.
+  Errors: `409 charge_active`, `409 sequence_active`, `409 device_offline`,
+  `409 charge_preflight_failed` (body `{"error":{"code":"charge_preflight_failed",
+  "message":"<which guard: reverse current / no battery / ...>"}}`),
+  `404 charge_profile_not_found`, `400 invalid_charge_profile`,
+  `503 storage_unavailable`.
+- `POST /api/v1/charge/stop` → `200 {"stopped": true}` — idempotent, `200` even
+  when idle (output off follows in the run goroutine). `503` when the runner is
+  not configured.
+- `GET /api/v1/charge/active` → `200 ChargeStatus`, or `{"active": false}` when
+  idle. `503` when the runner is not configured.
+
+`ChargeStatus`:
+```json
+{
+  "active": true,
+  "sessionId": 12, "profileId": 1, "profileName": "18650 Li-ion 1S",
+  "chemistry": "liion", "cells": 1, "startedAt": <ms>,
+  "state": "running",
+  "phase": "cc", "phaseIndex": 1, "totalPhases": 2, "mode": "cc",
+  "deliveredMah": 850.0, "deliveredWh": 3.1,
+  "peakVoltage": 4.05, "targetMah": 3400, "capacityCapMah": 3910, "ceilingVolts": 4.25,
+  "elapsedMs": 1830000, "etaMs": 2400000,
+  "measured": {"voltage": 4.05, "current": 1.7, "power": 6.9}
+}
+```
+- `state`: `"running" | "completed" | "stopped" | "aborted" | "failed"`
+  (`completed` = normal termination: taper / user-stop-in-float;
+  `aborted` = a safety fault: timeout / voltage ceiling / capacity cap / OTP /
+  reverse-guard / protection trip; `stopped` = user stop; `failed` = internal /
+  device error mid-run).
+- `phase`: `"precharge" | "cc" | "float"` (the engine's compiled phase kinds;
+  the hardware runs CC→CV under one setpoint, so `cc` covers both, and `mode`
+  reflects the live regulation mode `"cc" | "cv"`). `phaseIndex`/`totalPhases`
+  give "phase X of N".
+- `etaMs`: `-1` when unknown (in CV/float, or Pb float held until stop).
+- The **WS `chargeProgress`** event carries this exact same field set (minus
+  `active`) at ~1 Hz, so the frontend uses one shape for the live view whether it
+  polls `GET /charge/active` or consumes the push.
+
+## Charge session history
+
+- `GET /api/v1/charge/sessions?limit=50&offset=0` →
+  `{"items": [ChargeSession...], "total": 123}` (newest first).
+- `GET /api/v1/charge/sessions/{id}` → `200 ChargeSession`;
+  `404 charge_session_not_found`.
+
+`ChargeSession`:
+```json
+{
+  "id": 12, "profileId": 1, "profileName": "18650 Li-ion 1S",
+  "chemistry": "liion", "cells": 1,
+  "startedAt": <ms>, "endedAt": <ms>,
+  "state": "completed",
+  "reason": "current tapered below 0.05C in CV",
+  "deliveredMah": 3350.0, "deliveredWh": 12.4, "peakVoltage": 4.20,
+  "snapshot": {"preflight": {"vbat": 3.72}, "computed": {...}}
+}
+```
+- A row is created at start with `state:"running"`, `endedAt:null`, and finalized
+  at the terminal state — a leftover `running` row is the visible trace of a
+  backend crash. `state` matches `ChargeStatus.state`. Session persistence is
+  fail-soft (a down DB drops it with a warning and never affects the charge),
+  matching the sequence-run journal.
+
+## WS additions
+
+Two journal kinds ride the existing v1 `event` message (`data` = the journal
+fields + `kind` + `ts`); there are **no new message types**.
+- `chargeProgress` — throttled to ~1 Hz and emitted on every phase/state change;
+  the `ChargeStatus` field set (minus `active`) plus `kind`/`ts`:
+  `{kind:"chargeProgress", sessionId, profileId, profileName, chemistry, cells,
+  state, phase, phaseIndex, totalPhases, mode, deliveredMah, deliveredWh,
+  peakVoltage, targetMah, capacityCapMah, ceilingVolts,
+  measured:{voltage,current,power}, elapsedMs, etaMs, ts}`.
+- `chargeSession` — the terminal outcome, also appended to the `events` journal
+  (below): `{kind:"chargeSession", sessionId, profileName, chemistry, cells,
+  state, reason, deliveredMah, deliveredWh, durationMs, ts}`.
+
+The `events` journal (F-014) gains one kind:
+`chargeSession {sessionId, profileName, chemistry, cells, state, reason,
+deliveredMah, deliveredWh, durationMs}` (summary at each terminal state; feeds
+the Events page, CSV export and — best-effort, like autoStop — Telegram).
+
+## DB schema (all times unix millis, portable SQL)
+
+- `charge_profiles(id PK autoincr, name, chemistry, cells, capacity_mah,
+  charge_current_a, params TEXT/JSON, created_at, updated_at)`
+- `charge_sessions(id PK autoincr, profile_id INDEX, profile_name, chemistry,
+  cells, started_at INDEX, ended_at, state, reason, delivered_mah, delivered_wh,
+  peak_voltage, snapshot TEXT/JSON)`
+
+Both are feature-owned models wired via `storage.Config.Models` (a new anchor in
+`cmd/server/main.go`), auto-migrated on both sqlite and postgres — no dialect
+functions, no separate SQL migration.
+
+## Frontend file structure
+
+New page/components in their own files: `src/pages/ChargePage.tsx` (route
+`/charge` + menu item) with `src/components/ChargeProfiles.tsx` (CRUD),
+`src/components/ChargeLive.tsx` (pre-flight + confirmation + live V/I chart with
+phase bands, phase/elapsed/ETA, mAh delivered, safety-cap progress bars) and
+`src/components/ChargeSessions.tsx` (history). API types + TanStack Query hooks in
+`src/api/charge.ts`; MSW mocks for every route. i18n prefix `charge.*`. Visual
+design is handled separately (ui-ux skill).

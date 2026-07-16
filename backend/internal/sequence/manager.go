@@ -49,6 +49,10 @@ const callTimeout = 5 * time.Second
 // ever arrives faster, while the final endpoint is always written.
 const rampMinInterval = 100 * time.Millisecond
 
+// interlockOwner is this engine's ownership tag on the shared device.Interlock,
+// so a sequence run and a charge run can never both own the output.
+const interlockOwner = "sequence"
+
 // HubController is the device-hub surface the Manager consumes;
 // *device.Hub implements it.
 type HubController interface {
@@ -101,15 +105,31 @@ func WithClock(now func() time.Time) Option {
 	}
 }
 
+// WithInterlock wires the shared single-owner device-output interlock so a
+// sequence run and a charge run can never both own the output. When unset the
+// Manager's own single-run slot is the only guard (fine for isolated tests).
+func WithInterlock(il *device.Interlock) Option {
+	return func(m *Manager) { m.interlock = il }
+}
+
+// releaseInterlock frees the shared output interlock if wired; a no-op
+// otherwise. Safe to call on any teardown path.
+func (m *Manager) releaseInterlock() {
+	if m.interlock != nil {
+		m.interlock.Release(interlockOwner)
+	}
+}
+
 // Manager runs one Program at a time against the hub. Construct it with New;
 // bind its lifecycle to a context with Run so a backend shutdown aborts the
 // active run (output off). Start/Stop drive runs; IsRunning/ActiveStatus
 // expose the current run to the API.
 type Manager struct {
-	hub   HubController
-	store Store
-	log   *slog.Logger
-	now   func() time.Time
+	hub       HubController
+	store     Store
+	log       *slog.Logger
+	now       func() time.Time
+	interlock *device.Interlock
 
 	mu      sync.Mutex
 	baseCtx context.Context
@@ -194,9 +214,16 @@ func (m *Manager) Start(p Program) error {
 		return fmt.Errorf("%w: %s", ErrInvalidProgram, err.Error())
 	}
 
+	// Claim the shared output interlock before touching run state so a charge
+	// run (or a second sequence) can never race us onto the output.
+	if m.interlock != nil && !m.interlock.Acquire(interlockOwner) {
+		return ErrRunActive
+	}
+
 	m.mu.Lock()
 	if m.active != nil {
 		m.mu.Unlock()
+		m.releaseInterlock()
 		return ErrRunActive
 	}
 	base := m.baseCtx
@@ -230,6 +257,7 @@ func (m *Manager) Start(p Program) error {
 			m.active = nil
 		}
 		m.mu.Unlock()
+		m.releaseInterlock()
 		close(ar.done)
 		return err
 	}
@@ -490,6 +518,10 @@ func (r *run) finish(state string, err error) {
 		r.mgr.active = nil
 	}
 	r.mgr.mu.Unlock()
+	// Release the shared interlock only after outputOff (already run in execute)
+	// and after the active slot is cleared, so nothing can re-own an energized
+	// output.
+	r.mgr.releaseInterlock()
 
 	if state == StateFailed && err != nil {
 		r.mgr.log.Warn("sequence: run failed", "sequenceId", st.SequenceID, "name", st.SequenceName, "error", err)
@@ -518,13 +550,12 @@ func (r *run) terminalState(err error) string {
 	}
 }
 
-// outputOff switches the output off best-effort using a fresh context — the run
-// context is already cancelled on Stop/shutdown, and SetOutput fails fast on a
-// cancelled context, which must never leave the output energized.
+// outputOff switches the output off via the shared SafeOutputOff helper, which
+// always runs on a fresh context (the run context is already cancelled on
+// Stop/shutdown, and SetOutput fails fast on a cancelled context, which must
+// never leave the output energized) and retries before giving up.
 func (r *run) outputOff() {
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
-	defer cancel()
-	if err := r.mgr.hub.SetOutput(ctx, false); err != nil {
+	if err := device.SafeOutputOff(r.mgr.hub, r.mgr.log); err != nil {
 		r.mgr.log.Warn("sequence: output off failed", "error", err)
 	}
 }
