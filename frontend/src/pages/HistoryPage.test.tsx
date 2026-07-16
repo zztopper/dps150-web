@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '../test/render'
 import { HistoryPage } from './HistoryPage'
 
@@ -64,6 +64,13 @@ function historyCalls(fetchMock: ReturnType<typeof vi.fn>): string[] {
 }
 
 describe('HistoryPage', () => {
+  // The page mirrors the selected preset to a `?range=` param (History API);
+  // reset the shared jsdom URL between tests so a preset click in one test does
+  // not leak into the next one's initial range.
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/')
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
@@ -210,5 +217,32 @@ describe('HistoryPage', () => {
     const from = Number(url.searchParams.get('from'))
     const to = Number(url.searchParams.get('to'))
     expect(to - from).toBeCloseTo(60 * 60 * 1000, -3)
+  })
+
+  // Bookmarkable range: the initial fetch honors a `?range=` from the URL so a
+  // refresh/bookmark/share restores the selected preset.
+  it('restores the preset from the ?range= query param on mount', async () => {
+    window.history.replaceState(null, '', '/history?range=hour')
+    const fetchMock = stubFetch()
+    renderWithProviders(<HistoryPage />)
+
+    await waitFor(() => expect(historyCalls(fetchMock).length).toBeGreaterThan(0))
+    const url = new URL(historyCalls(fetchMock)[0], 'http://localhost')
+    const from = Number(url.searchParams.get('from'))
+    const to = Number(url.searchParams.get('to'))
+    expect(to - from).toBeCloseTo(60 * 60 * 1000, -3)
+  })
+
+  it('mirrors the selected preset to the ?range= query param', async () => {
+    const fetchMock = stubFetch()
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(historyCalls(fetchMock).length).toBeGreaterThan(0))
+
+    const presetGroup = screen.getByText('Час').closest('div')
+    within(presetGroup!).getByText('Час').click()
+
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get('range')).toBe('hour'),
+    )
   })
 })

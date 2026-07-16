@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- History page: the selected range preset is now bookmarkable — it is mirrored
+  to a `?range=` query param so a refresh, bookmark or shared link restores it.
+  The param is written with the History API (`replaceState`), not react-router's
+  `useSearchParams`, on purpose: `setSearchParams` performs a navigation whose
+  app-wide location-context re-render raced the chart's drag-to-zoom (leaving the
+  refetch spinner's `pointer-events:none` over the plot mid-drag), whereas
+  `replaceState` updates the URL with no React re-render, so the chart's
+  interaction is unchanged. The transient drag-zoom window stays local (a preset
+  is a coarse choice; a zoom is ephemeral exploration).
+
 ### Fixed
 - UX follow-ups (skill-guided): the dashboard live chart gained a pause/resume
   control and honors `prefers-reduced-motion` (throttled redraw), matching the
