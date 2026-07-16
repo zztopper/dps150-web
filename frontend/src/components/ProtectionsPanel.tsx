@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { App as AntApp, Button, Card, Flex, Form, InputNumber } from 'antd'
+import { App as AntApp, Button, Card, Flex, Form, InputNumber, theme } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { Protection, Protections } from '../api/types'
 import { useProtectionsMutation } from '../hooks/useProtections'
@@ -45,6 +45,7 @@ export function ProtectionsPanel({
 }: ProtectionsPanelProps) {
   const { t } = useTranslation()
   const { message } = AntApp.useApp()
+  const { token } = theme.useToken()
   const [form] = Form.useForm<Protections>()
   const mutation = useProtectionsMutation()
 
@@ -97,8 +98,8 @@ export function ProtectionsPanel({
                 style={{
                   padding: '4px 8px',
                   borderRadius: 4,
-                  border: tripped ? '1px solid #ff4d4f' : '1px solid transparent',
-                  background: tripped ? 'rgba(255, 77, 79, 0.08)' : undefined,
+                  border: tripped ? `1px solid ${token.colorError}` : '1px solid transparent',
+                  background: tripped ? token.colorErrorBg : undefined,
                 }}
               >
                 <Form.Item

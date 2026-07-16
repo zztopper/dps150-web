@@ -118,7 +118,7 @@ test('output on requires confirmation, off does not', async ({ page }) => {
   await openDashboard(page)
   // The header also has a dark/light theme switch (F-016) — disambiguate
   // by the output switch's own accessible name (its ON/OFF children).
-  const output = page.getByRole('switch', { name: 'ВКЛ ВЫКЛ' })
+  const output = page.getByRole('switch', { name: 'Переключить выход' })
   await expect(output).not.toBeChecked()
 
   // Turning ON opens a confirmation dialog; cancelling sends nothing.

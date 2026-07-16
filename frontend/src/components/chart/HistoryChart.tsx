@@ -5,7 +5,7 @@ import 'uplot/dist/uPlot.min.css'
 import { useTranslation } from 'react-i18next'
 import type { HistoryEvent } from '../../api/types'
 import { MINUTE_SERIES_INDEX, RAW_SERIES_INDEX } from './mapHistory'
-import { SERIES_COLOR, withAlpha } from './colors'
+import { modeFromBg, type SeriesColors, seriesColors, withAlpha } from './colors'
 import { isCanvas2DSupported } from './canvasSupported'
 import { useContainerSize } from './useContainerSize'
 import { EventMarkers } from './EventMarkers'
@@ -53,6 +53,7 @@ function buildRawOptions(
   width: number,
   visible: VisibleSeries,
   axis: AxisTheme,
+  colors: SeriesColors,
 ): uPlot.Options {
   return {
     width,
@@ -65,7 +66,7 @@ function buildRawOptions(
       {},
       {
         label: t('chart.series.voltage'),
-        stroke: SERIES_COLOR.voltage,
+        stroke: colors.voltage,
         width: 1.5,
         scale: 'V',
         show: visible.voltage,
@@ -73,7 +74,7 @@ function buildRawOptions(
       },
       {
         label: t('chart.series.current'),
-        stroke: SERIES_COLOR.current,
+        stroke: colors.current,
         width: 1.5,
         scale: 'A',
         show: visible.current,
@@ -81,7 +82,7 @@ function buildRawOptions(
       },
       {
         label: t('chart.series.power'),
-        stroke: SERIES_COLOR.power,
+        stroke: colors.power,
         width: 1.5,
         scale: 'W',
         show: visible.power,
@@ -89,7 +90,7 @@ function buildRawOptions(
       },
       {
         label: t('chart.series.temperature'),
-        stroke: SERIES_COLOR.temperature,
+        stroke: colors.temperature,
         width: 1.5,
         // Dashed so temperature is separable from the power line without
         // relying on color (they form a red/green colorblind pair).
@@ -131,6 +132,7 @@ function buildMinuteOptions(
   width: number,
   visible: VisibleSeries,
   axis: AxisTheme,
+  colors: SeriesColors,
 ): uPlot.Options {
   function bandSeries(
     quantity: 'voltage' | 'current' | 'power',
@@ -178,12 +180,12 @@ function buildMinuteOptions(
     scales: { x: { time: true } },
     series: [
       {},
-      ...bandSeries('voltage', 'V', SERIES_COLOR.voltage, visible.voltage, 2, t('units.volt')),
-      ...bandSeries('current', 'A', SERIES_COLOR.current, visible.current, 3, t('units.amp')),
-      ...bandSeries('power', 'W', SERIES_COLOR.power, visible.power, 2, t('units.watt')),
+      ...bandSeries('voltage', 'V', colors.voltage, visible.voltage, 2, t('units.volt')),
+      ...bandSeries('current', 'A', colors.current, visible.current, 3, t('units.amp')),
+      ...bandSeries('power', 'W', colors.power, visible.power, 2, t('units.watt')),
       {
         label: t('chart.series.temperature'),
-        stroke: SERIES_COLOR.temperature,
+        stroke: colors.temperature,
         width: 1.5,
         // Dashed to stay separable from the power line without color.
         dash: [6, 4],
@@ -195,15 +197,15 @@ function buildMinuteOptions(
     bands: [
       {
         series: [MINUTE_SERIES_INDEX.voltageMax, MINUTE_SERIES_INDEX.voltageMin],
-        fill: withAlpha(SERIES_COLOR.voltage, 0.12),
+        fill: withAlpha(colors.voltage, 0.12),
       },
       {
         series: [MINUTE_SERIES_INDEX.currentMax, MINUTE_SERIES_INDEX.currentMin],
-        fill: withAlpha(SERIES_COLOR.current, 0.12),
+        fill: withAlpha(colors.current, 0.12),
       },
       {
         series: [MINUTE_SERIES_INDEX.powerMax, MINUTE_SERIES_INDEX.powerMin],
-        fill: withAlpha(SERIES_COLOR.power, 0.12),
+        fill: withAlpha(colors.power, 0.12),
       },
     ],
     axes: [
@@ -256,6 +258,10 @@ export function HistoryChart({
     grid: token.colorSplit,
     ticks: token.colorBorderSecondary,
   }
+  // Same theme signal the axis colors use (colorBgContainer differs by mode);
+  // picks the per-theme series palette. Captured at creation like the axes,
+  // via the parent's theme+locale remount key.
+  const colors = seriesColors(modeFromBg(token.colorBgContainer))
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<uPlot | null>(null)
   const onZoomRef = useRef(onZoom)
@@ -278,8 +284,8 @@ export function HistoryChart({
     const width = Math.max(el.clientWidth, 300)
     const opts =
       resolution === '1m'
-        ? buildMinuteOptions(t, width, visibleSeries, axisTheme)
-        : buildRawOptions(t, width, visibleSeries, axisTheme)
+        ? buildMinuteOptions(t, width, visibleSeries, axisTheme, colors)
+        : buildRawOptions(t, width, visibleSeries, axisTheme, colors)
     opts.hooks = {
       init: [
         (u) => {
