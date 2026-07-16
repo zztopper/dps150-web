@@ -59,7 +59,8 @@ type Device struct {
 	mu   sync.Mutex
 	conn *conn // active connection, nil when none
 
-	load float64 // load resistance, Ω
+	load    float64  // load resistance, Ω
+	battery *battery // simulated pack on the terminals, nil ⇒ resistive load
 
 	vset, iset float32
 	presets    [protocol.PresetCount]protocol.Preset
@@ -231,10 +232,23 @@ func (d *Device) tick(c *conn) bool {
 	if !c.session {
 		return true
 	}
+	d.chargeStep()
 	d.refresh()
 	d.meter()
 	d.pushTelemetry(c)
 	return true
+}
+
+// chargeStep advances an attached battery by one telemetry period, integrating
+// the charge current into its state of charge. It runs off the tick, not a
+// wall clock, so the charge is deterministic under the test interval. Without a
+// battery, or with the output off, it is a no-op — the resistive load model
+// carries no charge.
+func (d *Device) chargeStep() {
+	if d.battery == nil || !d.output {
+		return
+	}
+	d.battery.advance(d.interval, float64(d.vset), float64(d.iset))
 }
 
 // handle applies one host frame received on c. Frames from a superseded
@@ -466,8 +480,13 @@ func (d *Device) refresh() {
 	}
 }
 
-// currentMode returns the regulation mode the load model settles in.
+// currentMode returns the regulation mode the load model settles in. With a
+// battery attached the mode follows its CC→CV charge; otherwise it follows the
+// resistive load.
 func (d *Device) currentMode() protocol.Mode {
+	if d.battery != nil {
+		return d.battery.mode(float64(d.vset), float64(d.iset))
+	}
 	if float64(d.vset)/d.load <= float64(d.iset) {
 		return protocol.ModeCV
 	}
@@ -508,7 +527,14 @@ func (d *Device) trip(p protocol.Protection) {
 // measure computes the load-model output values: with a resistive load R
 // the supply is in CV while Vset/R <= Iset (V = Vset, I = V/R) and in CC
 // otherwise (I = Iset, V = I*R). With the output off everything is zero.
+//
+// A battery on the terminals overrides the resistive model: it reads the
+// open-circuit voltage while the output is off (the charge pre-flight) and the
+// CC/CV charge operating point while it is on.
 func (d *Device) measure() (v, i, p float32) {
+	if d.battery != nil {
+		return d.battery.measure(d.output, float64(d.vset), float64(d.iset))
+	}
 	if !d.output {
 		return 0, 0, 0
 	}

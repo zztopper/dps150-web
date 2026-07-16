@@ -25,9 +25,14 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	})
 
 	// seqGate rejects manual device mutations (setpoints, output, presets,
-	// protections, profile apply) with 409 sequence_active while a sequence
-	// run owns the device (F-022). It is a no-op when no manager is wired.
+	// protections, profile apply) with 409 while a run owns the device. Once an
+	// interlock is wired (F-023) it is the single source of truth and names the
+	// owner in the code (sequence_active | charge_active); without one it falls
+	// back to the F-022 sequence-only gate (a no-op when no manager is wired).
 	seqGate := blockDuringSequenceRun(deps.sequenceManager)
+	if deps.interlock != nil {
+		seqGate = blockDuringInterlock(deps.interlock)
+	}
 
 	v1 := r.Group("/api/v1")
 	v1.Use(authGate(deps))
@@ -72,6 +77,12 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	// internal/sequence Manager (see wiring:sequence in cmd/server). A run
 	// blocks manual device mutations via seqGate above.
 	registerSequenceRoutes(v1, deps.store, deps.sequenceManager)
+
+	// Battery charging (F-023): CRUD + preflight/run/stop/active + session
+	// history, executed by the internal/charger Manager (see wiring:charge in
+	// cmd/server). A charge run blocks manual device mutations via seqGate above
+	// (which reads the shared interlock, so it 409s charge_active).
+	registerChargeRoutes(v1, deps.store, deps.chargeManager, deps.interlock)
 
 	// CSV export (F-019): streaming downloads mirroring the JSON
 	// /history and /events routes, without their point/page caps.

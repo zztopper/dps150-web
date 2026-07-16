@@ -599,3 +599,102 @@ func TestDialerString(t *testing.T) {
 		t.Fatalf("Dialer().String() = %q, want mock:// prefix", s)
 	}
 }
+
+// batteryLiIon is a small Li-ion-like cell (3.0–4.2 V open circuit) for the
+// charge tests. Its capacity and internal resistance are sized so a full CC→CV
+// charge to the 0.05C taper completes in ~100 telemetry ticks — fast enough for
+// a unit test, yet with a clearly visible CC phase before the CV knee.
+func batteryLiIon(soc float64) emulator.BatteryConfig {
+	return emulator.BatteryConfig{
+		SOC:         soc,
+		CapacityMAh: 0.03, // 30 µAh: tiny so the charge fills within the test
+		RintOhm:     0.4,
+		OCVEmpty:    3.0,
+		OCVFull:     4.2,
+		Cells:       1,
+	}
+}
+
+func TestBatteryOpenTerminalVoltage(t *testing.T) {
+	dev := emulator.New(emulator.WithTelemetryInterval(testTick),
+		emulator.WithBattery(batteryLiIon(0.5)))
+	b := connect(t, dev)
+	b.enableSession(t)
+
+	// Output stays off, yet the DPS-150 senses the pack on the terminals: the
+	// pre-flight reads its open-circuit voltage (OCV at SOC 0.5 = 3.0 + 0.5·1.2
+	// = 3.6 V) at zero current — not the plain zeros the resistive model reports
+	// with the output off.
+	m := b.waitMeasurement(t, func(m protocol.Measurement) bool { return m.Voltage != 0 })
+	if !near(m.Voltage, 3.6) || m.Current != 0 || m.Power != 0 {
+		t.Errorf("open-terminal measurement = %+v, want 3.6 V / 0 A / 0 W", m)
+	}
+}
+
+func TestBatteryChargeCCtoCV(t *testing.T) {
+	dev := emulator.New(emulator.WithTelemetryInterval(testTick),
+		emulator.WithBattery(batteryLiIon(0.2)))
+	b := connect(t, dev)
+	b.enableSession(t)
+
+	// Charge at 4.2 V / 1 A: metering on so the Ah counter runs, then output on.
+	b.sendBytes(t, protocol.SetByte(protocol.RegMeteringEnable, 1))
+	b.waitFrame(t, protocol.RegMeteringEnable)
+	b.sendBytes(t, protocol.SetFloat(protocol.RegVoltageSet, 4.2))
+	b.sendBytes(t, protocol.SetFloat(protocol.RegCurrentSet, 1))
+	b.sendBytes(t, protocol.SetByte(protocol.RegOutputEnable, 1))
+
+	// (a) A low pack starts in CC: the mode flips to CC on output-on and the
+	// current holds at Iset while the terminal climbs toward Vset.
+	if mode := b.waitFrame(t, protocol.RegMode); mode.Data[0] != byte(protocol.ModeCC) {
+		t.Fatalf("initial mode = % X, want CC", mode.Data)
+	}
+	b.waitMeasurement(t, func(m protocol.Measurement) bool { return near(m.Current, 1) })
+
+	// (d) The Ah counter accumulates from the charge current.
+	b.waitCapacity(t, 0)
+
+	// (b) As the pack fills the terminal reaches Vset and the mode flips CC→CV,
+	// pushed on change (the DD frame).
+	if mode := b.waitFrame(t, protocol.RegMode); mode.Data[0] != byte(protocol.ModeCV) {
+		t.Fatalf("mode after knee = % X, want CV", mode.Data)
+	}
+
+	// (c) In CV the current tapers as SOC→1, falling below the 0.05C termination
+	// threshold (0.05 × 30 µAh = 1.5 µA) the charger engine watches for. The
+	// voltage guard keeps this from matching the pre-output open-terminal read.
+	const taper = 1.5e-6 // 0.05C for the 30 µAh test cell
+	m := b.waitMeasurement(t, func(m protocol.Measurement) bool {
+		return m.Voltage > 4 && m.Current < taper
+	})
+	if m.Current >= taper {
+		t.Fatalf("taper current = %g A, want < %g A", m.Current, taper)
+	}
+}
+
+func TestParseBatteryConfig(t *testing.T) {
+	cfg, err := emulator.ParseBatteryConfig(" 0.2, 2000, 0.05, 3.0, 4.1 ")
+	if err != nil {
+		t.Fatalf("ParseBatteryConfig: %v", err)
+	}
+	want := emulator.BatteryConfig{SOC: 0.2, CapacityMAh: 2000, RintOhm: 0.05, OCVEmpty: 3.0, OCVFull: 4.1, Cells: 1}
+	if cfg != want {
+		t.Errorf("cfg = %+v, want %+v", cfg, want)
+	}
+
+	// The optional sixth field is the series cell count.
+	if got, err := emulator.ParseBatteryConfig("0.5,2600,0.03,3.0,4.2,3"); err != nil || got.Cells != 3 {
+		t.Errorf("cells = %d, %v; want 3, nil", got.Cells, err)
+	}
+
+	// Malformed lists and non-physical capacity/resistance are rejected so a
+	// mistyped DPS_MOCK_BATTERY surfaces at startup.
+	for _, bad := range []string{
+		"", "0.2,2000,0.05,3.0", "0.2,x,0.05,3.0,4.1",
+		"0.2,0,0.05,3.0,4.1", "0.2,2000,0,3.0,4.1",
+	} {
+		if _, err := emulator.ParseBatteryConfig(bad); err == nil {
+			t.Errorf("ParseBatteryConfig(%q): got nil error, want failure", bad)
+		}
+	}
+}

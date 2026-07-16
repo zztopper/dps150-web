@@ -116,7 +116,8 @@ enabled by config.
   time aggregation — by integer division of the timestamp.
 - Data: `samples` (2 Hz, 30-day retention), `samples_1m` (per-minute aggregates
   min/avg/max, 1-year retention), `profiles`, `events` (protections, connect/disconnect,
-  output toggles — who/when/what), `settings`, (Stage 3) `automation_rules`.
+  output toggles — who/when/what), `settings`, (Stage 3) `automation_rules`,
+  (ADR-008) `charge_profiles` + `charge_sessions`.
 - Volume: ~5.2 M rows/month — time-based partitions/indexes, no TSDB.
 
 ### 3.5 Security
@@ -158,6 +159,168 @@ the live telemetry as Prometheus gauges for a Grafana dashboard.
   setpoint_voltage_volts,setpoint_current_amps}` from the same telemetry
   stream. `deploy/grafana/dashboard.json` renders them plus the existing
   link/protection/latency series.
+
+### 3.7 Battery charging mode (ADR-008)
+
+Decision: add a first-class, backend-supervised battery charger as a **new
+independent hub subscriber** (`internal/charger`, alongside the sequence
+Manager and automation Engine), not built on the sequence interpreter and not
+a sequence node type. Charging needs several **simultaneous** safety cutoffs
+(taper *and* voltage ceiling *and* capacity cap *and* timeout *and* over-temp)
+that the sequence's single `advance` predicate cannot express, plus a first-class
+pre-flight/reporting UX. v1 ships **Li-ion, LiFePO4 and Pb**; **NiMH is deferred**
+(see the note after the preset table).
+
+- **Engine (`internal/charger`)** — a telemetry-driven run engine mirroring the
+  sequence Manager: one active run-slot (`Start`/`Stop`/`Run(ctx)`/`IsRunning`/
+  `ActiveStatus`), it `Subscribe`s to the hub (~2 Hz), owns the output for the
+  whole run, and broadcasts progress as `device.JournalEvent` (kind
+  `chargeProgress`), the terminal outcome as `chargeSession`. It is
+  chemistry-agnostic: a charge is an ordered list of **phases**
+  `{targetV, currentLimit, termination}`; a chemistry is *data* (a preset that
+  compiles to phases). Only wired when storage is configured (profiles live in
+  the DB), same as the sequence runner.
+- **Phases** (hardware does CC/CV regulation; the engine observes the measured
+  current/voltage, with `telemetry.Mode` advisory only):
+  - **Li-ion / LiFePO4** — optional precharge/trickle at 0.1C while the cell is
+    below the precharge threshold → main `{Vcharge, Icharge}`; terminate when the
+    measured current falls below the taper threshold **and** the measured voltage
+    is ≥ `Vcharge − ε`, held for a debounce window.
+  - **Pb** — `{Vabsorb, Icharge}`, terminate on taper (or timed absorption) →
+    optional float `{Vfloat}` held until the user stops.
+- **Termination reads measured values, not just `Mode`.** `telemetry.Mode`/
+  `Protection` are pushed on change only; an observer issues no writes, so it
+  never forces a `GetAll` and a dropped `DD`/`DC` frame would leave the cached
+  value stale (a taper gated on `Mode==CV` alone could never fire). The hub gains
+  a **`Refresh(ctx)`** method (a bare `GetAll`, no mutating write) so the charger
+  can re-poll `Mode`/`Protection`/counters during long observe-only phases.
+- **Strict safety envelope (non-disable-able on every charge)**: (1) **per-phase**
+  hard timeouts — precharge (0.1C into a deeply-discharged cell is slow) and the
+  CV taper tail budgeted separately, not one whole-run factor; Pb's indefinite
+  float phase does not disable the *other* limits → abort; (2) an absolute
+  per-chemistry×cells voltage ceiling, written into the hardware **OVP** *and*
+  checked in software → abort; (3) a per-chemistry capacity cap (115–125 % of
+  rated mAh) → abort; (4) the DPS-150 over-temperature protection (OTP) → abort;
+  (5) the start/pre-flight guard; (6) OVP/OCP/OPP/OTP always set from the profile
+  before output-on. Overrides are re-validated so `Vcharge ≤ ceiling − margin ≤
+  OVP − margin` always holds (an override can never invert the safety margins).
+  The engine distinguishes **normal termination** (taper / user-stop-in-float →
+  `completed`) from a **fault abort** (timeout / ceiling / cap / temp / trip →
+  `aborted`). **Delivered-charge accounting is reset-aware**: `deliveredMah` is a
+  delta from a session baseline of the device's free-running Ah counter, which
+  zeroes when metering is re-enabled (the hub sends `RegMeteringEnable=1` on every
+  reconnect) after a device power-cycle — so the charger tracks the last-seen
+  counter and treats **any decrease as a fault/abort**, never silently
+  re-baselining.
+- **Critical hardware facts.** (a) The DPS-150 temperature sensor measures the
+  *supply*, not the battery — there is **no battery-temperature cutoff** (a
+  dT/dt/battery-temperature-rise termination is not available on this rig; it is
+  the reason NiMH is deferred). (b) The DPS-150 reads terminal voltage with the
+  output **off**, so every charge begins with a **pre-flight**: it measures Vbat
+  (from a telemetry tick timestamped *after* the output-off has settled — surface
+  charge decays — not the cached on-load voltage), validates it against the
+  declared chemistry×cells, suggests a cell count, and **hard-refuses** the start
+  when `Vbat > Vcharge` (reverse current / wrong chemistry / wrong cell count),
+  `Vbat ≈ 0` (no battery / short), `Vbat < 0` (reversed polarity), **or
+  `declaredCells ≠ suggestedCells`** — adjacent cell counts alias (a full 2S at
+  8.4 V reads as a "discharged" 3S at 2.80 V/cell → would drive to 6.3 V/cell), so
+  a cell-count mismatch is a hard refusal, never a soft warning; the genuinely
+  deeply-discharged case needs a second explicit confirmation. Start requires the
+  confirmation step showing the computed limits. (c) **Start order is an
+  invariant**: (1) confirm output off → (2) `SetProtections` → (3)
+  `SetVoltage(Vcharge)` (≥ any valid battery, so reverse current is impossible at
+  energize) → (4) `SetCurrent(Icharge)` → (5) **only then** `SetOutput(true)`,
+  each step error-checked. The charger must **not** inherit the sequence Manager's
+  energize-first structure (which sets V/I later, inside the step, and would
+  energize with a stale `Vset`); a test asserts the on-the-wire frame order via
+  the emulator's tx-parser.
+- **Multi-cell lithium requires an attested external BMS.** The DPS-150 charges
+  the *pack* with no per-cell sensing or balancing, so an imbalanced pack can
+  drive one cell to 4.3 V while the pack average looks fine and the pack-level OVP
+  cannot see it. A profile with `chemistry ∈ {liion, lifepo4}` and `cells ≥ 2`
+  requires `bmsAttested = true` or it is invalid (`400 invalid_charge_profile`)
+  and cannot start; 1S needs no attestation. The UI shows a loud warning on the
+  attestation checkbox.
+- **Watchdog — telemetry-staleness, backend-supervised.** The whole safety net
+  runs in the backend engine, so closing the browser is safe. The **primary**
+  trigger is telemetry staleness: **no `device.Telemetry` tick for > 3–5 s**
+  (6–10 missed ticks) → fault → `SafeOutputOff`. Link-loss (`StatusChange`) is only
+  a *secondary* trigger, because the deploy transport is ser2net raw TCP: if the
+  DPS-150 hangs or power-cycles the TCP socket stays up while `hub.session()` (no
+  read-idle timeout after handshake) never emits `Connected:false` — so a
+  link-loss-only watchdog would never fire and the output would stay energized.
+  (Separately, the hub *should* gain a session read-idle timeout, but the charger
+  must not depend on it.) A backend hard-crash is an acknowledged residual risk
+  (the DPS-150 has no comms-watchdog); a graceful shutdown cuts the output, the
+  hardware OVP/OCP set from the profile are the last line of defence, and startup
+  reconciliation (below) bounds the exposure to one pod restart.
+- **Coordination.** The charger and the sequence runner both own the output and
+  are **mutually exclusive** via a **single shared device-ownership interlock**
+  (one lock/owner token acquired atomically at start) — not two independent
+  `IsRunning()` checks, which race (both could read the other idle and both
+  energize). The 409 gate is extended with a new error code `charge_active`
+  mirroring `sequence_active`; the shared gate rejects manual
+  device/profile/preset/protection mutations while *either* run is active, and
+  starting one while the other is active is rejected symmetrically
+  (`charge_active` / `sequence_active`). The automation-engine suppressor becomes
+  `seq.IsRunning() || charger.IsRunning()`.
+- **`device.SafeOutputOff` — the shared teardown helper.** Output-off on every
+  terminal path and on a protection trip goes through one helper reused by both
+  the sequence Manager and the charger (the Manager's `run.outputOff` is
+  refactored onto it). It **always creates its own fresh bounded
+  `context.Background()` context** and ignores the (possibly cancelled) caller
+  context — otherwise `hub.SetOutput` returns `ctx.Err()` and no-ops, leaving the
+  battery energized. On failure it **retries, raises a fault and fires an
+  alarm/Telegram** — never log-and-continue. There is **no pause/resume in v1** —
+  stop then restart re-runs the pre-flight.
+- **Storage, reconciliation & UI.** Two feature-owned models registered through
+  `Config.Models`: `charge_profiles` (saved CRUD profiles) and `charge_sessions`
+  (session history, a row per run, created at start `running` and finalized at the
+  terminal state). **Startup reconciliation**: on boot, if the output is on and a
+  `charge_sessions` row is `running` with no active runner, the charger forces
+  `SafeOutputOff` and finalizes the row as `failed` (pattern:
+  `notify/metering.go:resumeSessionOnConnect`) — turning "energized indefinitely
+  after a crash" into "energized only until the pod restarts". The charger's
+  `chargeSession` notification **suppresses** the overlapping
+  `notify/metering.go` `meteringSession` Telegram while a charge owns the output
+  (no double-notify). A dedicated **Charge** page (like Sequences): saved profiles,
+  the live process (V+I chart with phase bands, phase/elapsed/ETA, mAh delivered,
+  safety-cap progress bars) and session history.
+- **Chemistry presets (per cell — safety-critical, cite sources).** Values below
+  are validated against Battery University; every one is a first-class safety
+  parameter compiled into a phase or a cutoff.
+
+  | Chemistry | CC default | Precharge → threshold | CV target | Taper (terminate) | Float | Abs. ceiling (SW abort / HW OVP) | Capacity cap |
+  |---|---|---|---|---|---|---|---|
+  | Li-ion | 0.5–1C | Vcell<3.0 V → 0.1C | 4.20 (±0.05) | I<0.05C (3–5 %) in CV | — | 4.25 / 4.30 | 115 % |
+  | LiFePO4 | 0.2–0.5C (≤1C) | Vcell<2.5 V → 0.1C | 3.65 | I<0.05C in CV | none (opt. ≤3.40) | 3.70 / 3.80 | 115 % |
+  | Pb | 0.1–0.3C | — | 2.40 (absorb) | I<~C/20 or timed absorb | 2.25 | 2.50 / 2.55 | 125 % |
+
+  Corrections applied to the first-cut draft (each safety-critical): LiFePO4 has
+  **no float** stage — a 3.60 V/cell "float" holds the cell near-full and stresses
+  it; if a rest is ever used it must be ≤3.40 V/cell (BU-409b). The Pb abort
+  ceiling is raised from 2.45 (the *top of the normal* 2.30–2.45 absorb band) to
+  ~2.50 V/cell so a normal absorb does not nuisance-trip. The capacity cap is made
+  per-chemistry (a flat 120 % would be needlessly loose for the ~99 %-efficient
+  Li-ion chemistries). The device envelope (30 V / 5 A / 150 W) additionally bounds
+  every profile:
+  `cells × Vcharge ≤ 30 V`, `Icharge ≤ 5 A`, `Vcharge × Icharge ≤ 150 W`.
+
+  **NiMH is deferred out of v1** (revisit only with an external
+  battery-temperature probe). On this rig NiMH cannot be made safe: the DPS-150 has
+  no autonomous charge termination, and a NiMH overcharge is a *constant-voltage
+  thermal* failure — voltage does not climb, so the hardware OVP never trips, the
+  current is nominal so OCP never trips, and OTP is the *supply's* temperature, not
+  the cell's. A backend crash mid-CC therefore has **no** hardware backstop (unlike
+  Li-ion/Pb, whose crash residual is benign — the supply holds CV and the current
+  tapers under HW OVP). The −ΔV signal (≈5–10 mV/cell) is also at/below the ~10 mV
+  readout resolution at 2 Hz and is masked in multi-cell packs. Deferring NiMH also
+  drops the −ΔV/dV/dt derivative-termination module from v1.
+
+  Sources: Battery University [BU-403 Lead Acid](https://www.batteryuniversity.com/article/bu-403-charging-lead-acid/),
+  [BU-408 NiMH](https://www.batteryuniversity.com/article/bu-408-charging-nickel-metal-hydride/),
+  [BU-409 Li-ion](https://www.batteryuniversity.com/article/bu-409-charging-lithium-ion),
+  [BU-409b LiFePO4](https://www.batteryuniversity.com/article/bu-409b-charging-lithium-iron-phosphate/).
 
 ## 4. Deploy and environments
 
