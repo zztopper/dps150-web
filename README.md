@@ -9,6 +9,8 @@ and script it over a token-authenticated REST API.
 ![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8.svg)
 ![React 19](https://img.shields.io/badge/react-19-61DAFB.svg)
 
+📖 **[Русская версия README →](README.ru.md)**
+
 The device connects directly over a serial port, over a serial-over-TCP bridge
 (ser2net), or to a built-in emulator — so you can run and develop the whole
 stack with no hardware attached.
@@ -32,6 +34,13 @@ stack with no hardware attached.
 - **Auto-stop rules** — stop the output on a condition (current below a
   threshold for N seconds, after a charge/energy total, or after a time limit),
   backed by the hardware protections.
+- **Programmable sequences** — build test programs from a tree of steps:
+  *set-and-hold* (drive V/I until a condition holds), *ramp* (sweep V or I
+  over time) and nested *loop* blocks. Run them for battery charge/discharge
+  cycling, burn-in or characterisation; starting a run energises the output
+  and every exit path (finish, stop, protection trip, restart) switches it off
+  again, with live step-by-step progress and a 409 guard that blocks manual
+  control while a program owns the device.
 - **CSV export** — download the current history or event view as CSV.
 - **API tokens** — Bearer-token access for scripts (scoped `read` / `control`),
   see the auth model below.
@@ -44,7 +53,8 @@ stack with no hardware attached.
 
 ## Screenshots
 
-Live control panel, driven by the built-in device emulator (dark theme).
+Live control panel, driven by the built-in device emulator (light theme; a dark
+theme ships too).
 
 ### Dashboard — live readings, setpoints, protections, quick profiles and metering
 
@@ -53,6 +63,14 @@ Live control panel, driven by the built-in device emulator (dark theme).
 ### History — a month of telemetry with uPlot charts, range presets and CSV export
 
 ![History](docs/screenshots/history.png)
+
+### Sequences — programmable test programs (set-and-hold / ramp / nested loops)
+
+![Sequences](docs/screenshots/sequences.png)
+
+The step-tree editor — a CC-CV charge, a discharge, then a 3× ramp/hold loop:
+
+![Sequence editor](docs/screenshots/sequences-editor.png)
 
 ### Automation — auto-stop rules over the telemetry stream
 
