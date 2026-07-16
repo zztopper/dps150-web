@@ -180,7 +180,7 @@ export function EventsPage() {
         <Alert
           type="error"
           showIcon
-          message={t('events.errors.storageUnavailableTitle')}
+          title={t('events.errors.storageUnavailableTitle')}
           description={t('events.errors.storageUnavailable')}
           action={
             <Button size="small" onClick={() => void query.refetch()}>
@@ -200,6 +200,8 @@ export function EventsPage() {
               onChange={selectExportRange}
               placeholder={[t('export.customFrom'), t('export.customTo')]}
               aria-label={t('export.range')}
+              className="dps-range-picker"
+              classNames={{ popup: { root: 'dps-range-popup' } }}
             />
           </Space>
           <Button onClick={handleExport}>{t('export.button')}</Button>

@@ -109,7 +109,7 @@ export function ChargeSessions() {
           type="error"
           showIcon
           role="alert"
-          message={t('charge.sessions.errors.storageUnavailableTitle')}
+          title={t('charge.sessions.errors.storageUnavailableTitle')}
           description={t('charge.sessions.errors.storageUnavailable')}
           action={
             <Button size="small" onClick={() => void sessionsQuery.refetch()}>
@@ -155,7 +155,7 @@ export function ChargeSessions() {
             type="error"
             showIcon
             role="alert"
-            message={t('charge.sessions.detailError')}
+            title={t('charge.sessions.detailError')}
             action={
               <Button size="small" onClick={() => void detailQuery.refetch()}>
                 {t('common.retry')}

@@ -174,7 +174,7 @@ export function ChargeProfiles() {
           type="error"
           showIcon
           role="alert"
-          message={t('charge.profiles.errors.storageUnavailableTitle')}
+          title={t('charge.profiles.errors.storageUnavailableTitle')}
           description={t('charge.profiles.errors.storageUnavailable')}
           action={
             <Button

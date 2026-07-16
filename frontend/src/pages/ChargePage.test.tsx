@@ -44,4 +44,21 @@ describe('ChargePage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'История' }))
     expect(await screen.findByText('3350 мАч')).toBeInTheDocument()
   })
+
+  it('restores the active tab from the ?tab query param', async () => {
+    const store = { items: [makeChargeProfile()] }
+    stubFetchRoutes([
+      chargeProfilesListRoute(store),
+      chargeActiveRoute({ active: false }),
+      chargeSessionsListRoute([makeChargeSession()]),
+    ])
+
+    // Deep-link straight to the Profiles tab (as a bookmark/refresh would).
+    renderWithProviders(<ChargePage />, { route: '/charge?tab=profiles' })
+
+    // The Profiles pane is active on mount (its saved pack is listed) rather
+    // than the default Live pane's start card.
+    expect(await screen.findByText('18650 Li-ion 1S')).toBeInTheDocument()
+    expect(screen.queryByText('Запуск заряда')).not.toBeInTheDocument()
+  })
 })

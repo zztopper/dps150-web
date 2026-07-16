@@ -45,6 +45,22 @@ describe('LiveChart', () => {
     expect(screen.getByText('Телеметрия')).toBeInTheDocument()
   })
 
+  it('toggles the pause/resume control (aria-pressed + label swap)', () => {
+    renderWithProviders(<LiveChart />)
+
+    // Accessible name includes the icon's aria-label, so match the visible
+    // label as a substring rather than exactly.
+    const pauseBtn = screen.getByRole('button', { name: /Пауза/ })
+    expect(pauseBtn).toHaveAttribute('aria-pressed', 'false')
+
+    act(() => {
+      pauseBtn.click()
+    })
+
+    const resumeBtn = screen.getByRole('button', { name: /Продолжить/ })
+    expect(resumeBtn).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('switching the window preset does not crash', () => {
     renderWithProviders(<LiveChart />)
     act(() => {

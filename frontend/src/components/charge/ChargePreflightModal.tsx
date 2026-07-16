@@ -141,7 +141,7 @@ export function ChargePreflightModal({
           type="error"
           showIcon
           role="alert"
-          message={t('charge.preflight.measureFailedTitle')}
+          title={t('charge.preflight.measureFailedTitle')}
           description={
             <Flex vertical gap={4}>
               <span>{errorText(t, preflightError)}</span>
@@ -158,7 +158,7 @@ export function ChargePreflightModal({
             showIcon
             role="alert"
             icon={<WarningOutlined />}
-            message={t('charge.preflight.reasonTitle.' + result.reason)}
+            title={t('charge.preflight.reasonTitle.' + result.reason)}
             description={
               <Flex vertical gap={4}>
                 <span>{t('charge.preflight.reasonDetail.' + result.reason)}</span>
@@ -289,7 +289,7 @@ export function ChargePreflightModal({
               type="warning"
               showIcon
               role="alert"
-              message={t('charge.preflight.warningsTitle')}
+              title={t('charge.preflight.warningsTitle')}
               description={
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
                   {result.warnings.map((w, i) => (
@@ -305,7 +305,7 @@ export function ChargePreflightModal({
               type="warning"
               showIcon
               role="alert"
-              message={t('charge.preflight.deepDischargeTitle')}
+              title={t('charge.preflight.deepDischargeTitle')}
               description={t('charge.preflight.deepDischargeDetail')}
             />
           )}
@@ -315,7 +315,7 @@ export function ChargePreflightModal({
               type="error"
               showIcon
               role="alert"
-              message={t('charge.preflight.startFailedTitle')}
+              title={t('charge.preflight.startFailedTitle')}
               description={
                 <Flex vertical gap={4}>
                   <span>{errorText(t, startError)}</span>

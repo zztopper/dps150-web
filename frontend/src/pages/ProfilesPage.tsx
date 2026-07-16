@@ -270,7 +270,7 @@ export function ProfilesPage() {
         <Alert
           type="error"
           showIcon
-          message={t('profiles.errors.storageUnavailableTitle')}
+          title={t('profiles.errors.storageUnavailableTitle')}
           description={t('profiles.errors.storageUnavailable')}
           action={
             <Button size="small" onClick={() => void profilesQuery.refetch()}>

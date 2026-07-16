@@ -85,7 +85,15 @@ export function ProtectionsPanel({
 
   return (
     <Card title={t('protections.title')} className="protections-panel">
-      <Form form={form} layout="vertical" disabled={disabled} onFinish={onFinish}>
+      <Form
+        form={form}
+        layout="vertical"
+        disabled={disabled}
+        onFinish={onFinish}
+        // Validate on blur (and on submit), not on every keystroke, so a
+        // valid-in-progress threshold doesn't flash a transient range error.
+        validateTrigger="onBlur"
+      >
         <Flex wrap gap="middle" align="flex-end">
           {FIELDS.map((field) => {
             const tripped = activeProtection === field.key

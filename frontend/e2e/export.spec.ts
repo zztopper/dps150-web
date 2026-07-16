@@ -51,6 +51,9 @@ test('history export narrows to the drag-zoomed range', async ({ page }) => {
   await page.getByText('Час', { exact: true }).click()
 
   const over = page.locator('.dps-history-chart .u-over')
+  // Wait for the plot area to be laid out (a range click re-renders the page,
+  // and uPlot resizes its overlay on the next frame) before measuring it.
+  await expect(over).toBeVisible()
   const box = await over.boundingBox()
   if (box === null) {
     throw new Error('chart plot area has no bounding box')
