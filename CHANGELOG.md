@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- IV curve tracer (ВАХ, F-024): a new backend-supervised run engine
+  (`internal/ivtrace`, a third sibling to the charge and sequence engines) that
+  sweeps voltage (or current) across a two-terminal component under a current (or
+  voltage) compliance and records the measured `(V,I)` operating point at each
+  step, building a live I(V) curve plus per-component analysis (LED/diode Vf,
+  ideality `n`, series/dynamic resistance; resistor R/R²/max-dev; Zener Vz/Zzt;
+  lamp cold/hot R). Sweeps are mutually exclusive with charge/sequence via the
+  shared interlock (owner `iv`); the output energizes with the compliance already
+  written and is protected by `SafeOutputOff`, a telemetry-staleness watchdog and
+  a per-sweep timeout. The analysis never fabricates a number — each metric is
+  nullable with a `quality`/`notes` explanation (conduction gate, current-based
+  region selection, min-support/conditioning guards, `n` reported as approximate,
+  Zener "breakdown reached" gate). New "ВАХ" page (profiles CRUD, live sweep with
+  an I(V) uPlot, sweep history, CSV export). Formalized in ADR-009
+  (`docs/architecture/design.md §3.8`, `api-contract.md v5`). The DPS-150
+  emulator gains a passive DUT model (`DPS_MOCK_DUT`) so a sweep is testable
+  end-to-end on `mock://`.
 - History page: the selected range preset is now bookmarkable — it is mirrored
   to a `?range=` query param so a refresh, bookmark or shared link restores it.
   The param is written with the History API (`replaceState`), not react-router's
