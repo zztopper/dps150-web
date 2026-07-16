@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Responsive header/navigation: the top bar no longer wraps its nav tabs onto a
+  second row at intermediate widths. It is now a single non-wrapping row where
+  the horizontal menu fills the middle and folds overflowing items into a "…"
+  dropdown (AntD overflow) as the window narrows; below 768px the nav collapses
+  to the burger + Drawer as before, and the language/theme controls move into
+  the Drawer footer so the mobile header stays on one line (the title
+  ellipsizes rather than pushing the connection status off-screen). Verified
+  320–1440px with no horizontal overflow.
 - Home Assistant MQTT discovery reliability (F-021): discovery configs are now
   published synchronously (waiting for the broker ack) with a connect log for
   visibility, and the publisher subscribes to the HA birth topic
