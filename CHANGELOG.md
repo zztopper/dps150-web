@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docker/*` v4/v6/v7) to clear the Node.js 20 deprecation warning.
 
 ### Added
+- Russian README (`README.ru.md`) alongside the English one, cross-linked at
+  the top of each; the screenshots were refreshed in the light theme and now
+  include the Sequences page and its step-tree editor.
 - Programmable sequences (F-022, `internal/sequence`): test programs built
   from a tree of steps — `setHold` (set V/I, advance when a condition holds),
   `ramp` (linearly sweep V or I over time) and nestable `loop` blocks — run by

@@ -1,0 +1,327 @@
+# dps150-web
+
+Веб-панель управления программируемым лабораторным блоком питания **FNIRSI
+DPS-150** (0–30 В / 0–5 А / 150 Вт, USB-CDC serial). Управляйте БП с компьютера
+или телефона, наблюдайте живую телеметрию и историю за месяц, получайте
+уведомления в Telegram и управляйте по REST API с токен-аутентификацией.
+
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8.svg)
+![React 19](https://img.shields.io/badge/react-19-61DAFB.svg)
+
+📖 **[English README →](README.md)**
+
+Устройство подключается напрямую через последовательный порт, через мост
+serial-over-TCP (ser2net) или к встроенному эмулятору — так что весь стек можно
+запускать и разрабатывать без подключённого железа.
+
+## Возможности
+
+- **Полное управление БП** — уставки напряжения/тока, включение/выключение
+  выхода (с подтверждением), пороги защит (OVP / OCP / OPP / OTP / LVP) и
+  аппаратные пресеты M1–M6.
+- **Именованные профили** — храните наборы V + I + защиты в БД и назначайте их
+  в ячейки памяти устройства M1–M6. Применение профиля само по себе никогда не
+  включает выход.
+- **Живые графики + история** — телеметрия 2 Гц (V/I/P, входное напряжение,
+  температура, режим CC/CV, состояние защит) на uPlot, плюс месяц хранимой
+  истории с поминутной агрегацией, зумом и панорамированием.
+- **Журнал событий** — срабатывания защит, переключения выхода,
+  подключения/отключения, всё с метками времени.
+- **Уведомления в Telegram** — срабатывания защит, потеря/восстановление связи
+  с устройством и события автостопа; типы уведомлений настраиваются в UI.
+- **Учёт энергии** — счётчики Ач / Втч прямо с устройства.
+- **Правила автостопа** — выключить выход по условию (ток ниже порога в течение
+  N секунд, по достижении заряда/энергии или по истечении времени), с опорой на
+  аппаратные защиты.
+- **Программируемые последовательности** — тестовые программы из дерева шагов:
+  *set-and-hold* (держать V/I до выполнения условия), *ramp* (линейно менять V
+  или I во времени) и вложенные блоки *loop*. Для циклирования заряд/разряд
+  аккумуляторов, burn-in или характеризации; старт программы подаёт напряжение
+  на выход, а любой путь завершения (финиш, стоп, срабатывание защиты,
+  перезапуск) снова его выключает; есть пошаговый прогресс в реальном времени и
+  409-гейт, блокирующий ручное управление, пока устройством владеет программа.
+- **Экспорт CSV** — выгрузка текущей истории или журнала событий в CSV.
+- **API-токены** — доступ по Bearer-токену для скриптов (скоупы `read` /
+  `control`), см. модель аутентификации ниже.
+- **Мобильный режим + тёмная тема** — крупные цифры «стендового» вида для
+  телефона и полный десктопный UI, в светлой или тёмной теме.
+- **i18n** — русский и английский.
+- **Home Assistant + метрики** — MQTT Discovery публикует БП как сенсоры HA (и,
+  опционально, управляемый выход и уставки); телеметрийные гейджи Prometheus
+  питают готовый дашборд Grafana.
+
+## Скриншоты
+
+Панель управления, работающая на встроенном эмуляторе устройства (светлая тема;
+тёмная тоже есть).
+
+### Dashboard — живые показания, уставки, защиты, быстрые профили и учёт энергии
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+### History — месяц телеметрии с графиками uPlot, пресетами диапазона и экспортом CSV
+
+![History](docs/screenshots/history.png)
+
+### Sequences — программируемые тестовые программы (set-and-hold / ramp / вложенные loop)
+
+![Sequences](docs/screenshots/sequences.png)
+
+Редактор дерева шагов — CC-CV заряд, разряд, затем 3× цикл ramp/hold:
+
+![Редактор программы](docs/screenshots/sequences-editor.png)
+
+### Automation — правила автостопа поверх потока телеметрии
+
+![Automation](docs/screenshots/automation.png)
+
+<details>
+<summary>Ещё экраны — Profiles, Events, Settings</summary>
+
+**Profiles** — именованные пресеты V/I + защиты, применение к устройству или в аппаратную ячейку M1–M6
+
+![Profiles](docs/screenshots/profiles.png)
+
+**Events** — журнал устройства (срабатывания защит, изменения выхода, подключения, автостопы)
+
+![Events](docs/screenshots/events.png)
+
+**Settings** — настройки Telegram-уведомлений и API-токены для скриптового доступа
+
+![Settings](docs/screenshots/settings.png)
+
+</details>
+
+## Быстрый старт
+
+### Из исходников (единый бинарь)
+
+Требования: **Go 1.25+**, **Node.js 20+**.
+
+```bash
+# Собрать фронтенд-бандл и бэкенд-бинарь с вшитым UI.
+make build
+```
+
+`make build` создаёт `backend/bin/dps150-server` с продакшн-бандлом фронтенда,
+вшитым через `go:embed`, так что единый бинарь отдаёт и API, и веб-UI на
+`:8080`.
+
+Запуск на встроенном эмуляторе (железо не нужно):
+
+```bash
+./backend/bin/dps150-server -transport mock://
+# открыть http://localhost:8080
+```
+
+Запуск с реальным DPS-150, подключённым по USB:
+
+```bash
+./backend/bin/dps150-server -transport serial:///dev/ttyUSB0
+# пример для macOS: -transport serial:///dev/tty.usbmodem101
+```
+
+Или с удалённым мостом serial-over-TCP (см. `docs/runbooks/ser2net-pve.md`):
+
+```bash
+./backend/bin/dps150-server -transport tcp://192.0.2.10:2150
+```
+
+### Standalone-контейнер (SQLite, без PostgreSQL)
+
+Единый контейнер, отдающий UI и API из одного бинаря и хранящий историю в
+SQLite — больше ничего запускать не нужно. Собирается из
+[`deploy/docker/Dockerfile.standalone`](deploy/docker/Dockerfile.standalone):
+
+```bash
+docker build -f deploy/docker/Dockerfile.standalone -t dps150-web .
+docker run --rm -p 8080:8080 -v dps150-data:/data dps150-web
+# открыть http://localhost:8080  (по умолчанию эмулятор)
+```
+
+Том `dps150-data` сохраняет базу SQLite между перезапусками. Для реального БП:
+`--device /dev/ttyUSB0 -e DPS_TRANSPORT=serial:///dev/ttyUSB0`.
+
+### Docker Compose (PostgreSQL, готовые образы)
+
+Поднимает бэкенд, фронтенд на nginx и PostgreSQL, вытягивая образы,
+опубликованные CI в Docker Hub:
+
+```bash
+docker compose pull
+docker compose up -d
+open http://localhost:8081
+```
+
+По умолчанию стек работает на эмуляторе (`DPS_TRANSPORT=mock://`). Чтобы
+пробросить реальное USB-устройство в контейнер:
+
+```bash
+BACKEND_UPSTREAM=backend-serial:8080 docker compose --profile serial up -d
+```
+
+Хранилище отказоустойчиво: бэкенд стартует и управляет устройством, даже если
+PostgreSQL недоступен; фичи с хранилищем отвечают `503`, пока БД не поднимется.
+
+## Конфигурация
+
+Бэкенд настраивается флагами командной строки или переменными окружения (флаг
+имеет приоритет над переменной). Креды уведомлений — только через окружение.
+
+| Переменная | Флаг | По умолчанию | Описание |
+|---|---|---|---|
+| `DPS_TRANSPORT` | `-transport` | `mock://` | Транспорт устройства: `serial:///dev/ttyUSB0`, `tcp://host:port` или `mock://` |
+| `DPS_LISTEN_ADDR` | `-listen` | `:8080` | Адрес прослушивания HTTP |
+| `DPS_LOG_LEVEL` | `-log-level` | `info` | `debug`, `info`, `warn` или `error` |
+| `DPS_DB_DRIVER` | `-db-driver` | `sqlite` | Бэкенд хранилища: `sqlite` или `postgres` |
+| `DPS_DB_DSN` | `-db-dsn` | `dps150.db` | Путь к файлу для sqlite, `postgres://user:pass@host:port/db` для postgres |
+| `DPS_AUTH_REQUIRED` | `-auth-required` | `false` | Требовать Bearer-токен или заголовок Authelia `Remote-User` на `/api` |
+| `DPS_TELEGRAM_TOKEN` | — | _(пусто)_ | Токен Telegram-бота; при пустом — уведомления выключены |
+| `DPS_TELEGRAM_CHAT_ID` | — | _(пусто)_ | Telegram chat ID для уведомлений |
+| `DPS_MQTT_BROKER` | — | _(пусто)_ | URL MQTT-брокера (`tcp://host:1883`); при пустом интеграция с Home Assistant выключена |
+| `DPS_MQTT_USERNAME` / `DPS_MQTT_PASSWORD` | — | _(пусто)_ | Креды MQTT-брокера |
+| `DPS_MQTT_CONTROL` | — | `false` | Разрешить Home Assistant управлять выходом и уставками (иначе только чтение) |
+| `DPS_MQTT_TOPIC_PREFIX` | — | `dps150` | Префикс MQTT-топиков состояния/команд |
+| `DPS_MQTT_DISCOVERY_PREFIX` | — | `homeassistant` | Префикс MQTT Discovery для Home Assistant |
+
+Неизвестные флаги и лишние аргументы прерывают запуск — опечатка никогда не
+скатится молча к эмулятору.
+
+## Архитектура
+
+```
+serial:// ─┐
+tcp://   ──┤ транспорт ─ драйвер устройства ─ hub ──┬── REST API + WebSocket
+mock://  ─┘  (reconnect)   (единый владелец)        ├── запись истории ── хранилище
+                                                    ├── правила автостопа  (SQLite / PostgreSQL)
+                                                    └── Telegram-нотификатор
+```
+
+- **Транспорты** — драйвер DPS-150 работает поверх интерфейса транспорта с
+  семантикой переподключения. Три реализации, выбираются `DPS_TRANSPORT`:
+  `serial://` (прямой порт), `tcp://` (raw-TCP мост ser2net) и `mock://`
+  (эмулятор на уровне кадров для e2e в CI и разработки без железа).
+- **Hub** — порт устройства single-client, поэтому бэкенд — его единственный
+  владелец. Все потребители (REST, WebSocket, история, правила) общаются с
+  устройством через внутренний hub, который ещё и разносит записи во времени
+  (DPS-150 молча теряет команды, идущие подряд).
+- **Хранилище** — SQLite (чистый Go, без cgo) для самодостаточного локального
+  бинаря или PostgreSQL для общего развёртывания. Схема портируемая (время —
+  unix-миллисекунды, без диалектных функций). Хранилище отказоустойчиво.
+- **Модель аутентификации (ADR-006)** — при `DPS_AUTH_REQUIRED=true` маршруты
+  `/api/*` принимают запрос, несущий либо валидный `Authorization: Bearer
+  <token>` (скоуп `control` для мутаций, `read`/`control` для чтения), **либо**
+  доверенный заголовок `Remote-User`. Этот заголовок доверяется безусловно, что
+  верно только за двуххостовым разделением: хост браузерного UI держит перед
+  сервисом forward-auth Authelia, а хост для скриптов срезает любой
+  клиентский `Remote-User` до того, как запрос дойдёт до бэкенда. Само
+  управление токенами доступно только через браузерный (Authelia) путь, так что
+  утёкший токен никогда не сможет создавать или отзывать другие токены.
+
+Полный дизайн — в `docs/architecture/design.md` и
+`docs/architecture/api-contract.md`, справочник по протоколу —
+`docs/FNIRSI_DPS-150_Protocol.md`.
+
+## Home Assistant (MQTT)
+
+Задайте `DPS_MQTT_BROKER`, и БП появится в Home Assistant автоматически через
+MQTT Discovery — сенсоры напряжения, тока, мощности, температуры, входного
+напряжения, заряда (Ач) и энергии (Втч), плюс режим CC/CV, активная защита и
+сенсор связи с устройством. Состояние публикуется в retained JSON-топик
+`dps150/state`; MQTT Last-Will на `dps150/status` помечает сервис офлайн, если
+связь пропала.
+
+Управление **по умолчанию выключено**. При `DPS_MQTT_CONTROL=true` интеграция
+дополнительно публикует `switch` для выхода и `number`-сущности для уставок
+напряжения и тока. Учтите: MQTT-команды полностью минуют браузерный SSO /
+токен-аутентификацию (ADR-006) — граница доверия — собственная
+аутентификация и ACL брокера, а подача энергии на выход через MQTT не имеет шага
+подтверждения. Включайте управление только против брокера, которым владеете сами.
+
+```bash
+DPS_MQTT_BROKER=tcp://mqtt.example:1883 \
+DPS_MQTT_USERNAME=dps150 DPS_MQTT_PASSWORD=… \
+DPS_MQTT_CONTROL=true \
+  ./backend/bin/dps150-server -transport mock://
+```
+
+## Метрики и Grafana
+
+Бэкенд экспортирует метрики Prometheus на `GET /metrics`, включая живые
+телеметрийные гейджи (`dps150_voltage_volts`, `dps150_current_amps`,
+`dps150_power_watts`, `dps150_temperature_celsius`, `dps150_output_enabled`, …)
+вместе с рядами связи, защит и латентности команд. Импортируйте
+[`deploy/grafana/dashboard.json`](deploy/grafana/dashboard.json) в Grafana
+(см. [`deploy/grafana/README.md`](deploy/grafana/README.md)) для готового
+дашборда.
+
+## Контейнерные образы
+
+GitHub Actions ([`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml))
+собирает и публикует оба образа в Docker Hub на каждый push в дефолтную ветку
+(теги `latest` + короткий commit SHA) и на теги `v*` (semver):
+
+```
+docker pull <dockerhub-user>/dps150-web-backend
+docker pull <dockerhub-user>/dps150-web-frontend
+```
+
+Для публикации нужны два секрета репозитория — `DOCKERHUB_USERNAME` (он же
+namespace образов) и `DOCKERHUB_TOKEN` (access-токен Docker Hub). Pull-реквесты
+собирают образы без публикации, так что Dockerfile'ы остаются проверенными даже
+без кредов.
+
+## Развёртывание
+
+- **Локально / homelab** — единый бинарь (SQLite + вшитый UI),
+  standalone-контейнер (`Dockerfile.standalone`, SQLite) или
+  `docker-compose.yml` (бэкенд + фронтенд + PostgreSQL).
+- **Kubernetes** — Helm-чарт, разворачиваемый через ArgoCD (GitOps, ADR-005).
+  Чарт — бэкенд с одной репликой и стратегией `Recreate` (порт устройства
+  single-client) за фронтендом nginx и Ingress; хост браузера — за forward-auth
+  SSO. Чарт лежит в **отдельном платформенном репозитории**, не здесь, а
+  релизы — это бампы image-тега там.
+
+## Разработка
+
+```bash
+make lint    # gofmt + go vet + golangci-lint, oxlint + tsc -b
+make test    # go test + vitest
+make build   # бэкенд-бинарь (с вшитым фронтендом) + фронтенд-бандл
+make run     # запустить бэкенд на :8080 (по умолчанию эмулятор)
+```
+
+End-to-end тесты гоняют дашборд в Chromium против реального бэкенда на
+эмуляторе — железо не нужно. Playwright сам поднимает оба сервера:
+
+```bash
+cd backend && go build -o bin/dps150-server ./cmd/server
+cd frontend
+npx playwright install chromium   # однократно
+npm run e2e
+```
+
+Структура репозитория:
+
+| Путь | Описание |
+|---|---|
+| `backend/` | Go-бэкенд: драйвер устройства, REST API, WebSocket, хранилище, нотификатор |
+| `frontend/` | React 19 SPA (TypeScript, Vite, Ant Design, TanStack Query, uPlot) |
+| `docs/` | Дизайн-доки, контракт API, runbook'и, вендоренный справочник по протоколу |
+
+Контрибьюции приветствуются — см. [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Благодарности
+
+Протокол DPS-150 был реверс-инжинирен сообществом:
+
+- Справочник по протоколу: [cho45/fnirsi-dps-150](https://github.com/cho45/fnirsi-dps-150) (MIT) — вендорен как `docs/FNIRSI_DPS-150_Protocol.md`
+- Оригинальная CLI-утилита: [svenk123/dps150tool](https://github.com/svenk123/dps150tool) (MIT)
+
+FNIRSI и DPS-150 — торговые марки соответствующих владельцев. Проект не
+аффилирован с FNIRSI и не одобрен ей.
+
+## Лицензия
+
+[MIT](LICENSE) © 2026 участники dps150-web
