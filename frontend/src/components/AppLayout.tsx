@@ -162,10 +162,36 @@ function AppShell({ mode, onToggleTheme }: AppShellProps) {
     label: <Link to={key}>{t(labelKey)}</Link>,
   }))
 
+  // Language + theme controls, shared between the header (desktop) and the
+  // Drawer (mobile, where they move off the header to keep it on one row).
+  const langSwitch = (
+    <Segmented
+      className="lang-switch"
+      size="small"
+      value={(i18n.language.split('-')[0] as Lang) === 'en' ? 'en' : 'ru'}
+      onChange={(value) => setLang(value as Lang)}
+      options={[
+        { label: 'RU', value: 'ru' },
+        { label: 'EN', value: 'en' },
+      ]}
+      aria-label={t('lang.switchLabel')}
+    />
+  )
+  const themeSwitch = (
+    <Switch
+      className="theme-toggle"
+      checked={mode === 'dark'}
+      onChange={onToggleTheme}
+      checkedChildren={t('theme.dark')}
+      unCheckedChildren={t('theme.light')}
+      aria-label={t('theme.toggleLabel')}
+    />
+  )
+
   return (
     <Layout className="app-layout app-shell" data-theme={mode}>
       <Layout.Header className="app-header">
-        <Flex align="center" wrap gap="small">
+        <Flex align="center" gap="small" className="app-header-bar">
           <button
             type="button"
             className="app-burger"
@@ -179,33 +205,22 @@ function AppShell({ mode, onToggleTheme }: AppShellProps) {
           <Typography.Title level={3} className="app-title" style={{ margin: 0 }}>
             {t('app.title')}
           </Typography.Title>
+          {/* Horizontal nav fills the middle and collapses overflowing items
+              into a "more" (…) dropdown instead of wrapping onto a second row;
+              below the mobile breakpoint it is hidden for the burger + Drawer. */}
           <Menu
             className="app-nav app-nav-desktop"
             mode="horizontal"
-            disabledOverflow
             selectedKeys={[selectedKey]}
             items={menuItems}
           />
-          <Badge status={badge.status} text={badge.text} />
-          <Segmented
-            className="lang-switch"
-            size="small"
-            value={(i18n.language.split('-')[0] as Lang) === 'en' ? 'en' : 'ru'}
-            onChange={(value) => setLang(value as Lang)}
-            options={[
-              { label: 'RU', value: 'ru' },
-              { label: 'EN', value: 'en' },
-            ]}
-            aria-label={t('lang.switchLabel')}
-          />
-          <Switch
-            className="theme-toggle"
-            checked={mode === 'dark'}
-            onChange={onToggleTheme}
-            checkedChildren={t('theme.dark')}
-            unCheckedChildren={t('theme.light')}
-            aria-label={t('theme.toggleLabel')}
-          />
+          <Flex align="center" gap="small" className="app-header-right">
+            <Badge status={badge.status} text={badge.text} className="app-status" />
+            <Flex align="center" gap="small" className="app-header-controls">
+              {langSwitch}
+              {themeSwitch}
+            </Flex>
+          </Flex>
         </Flex>
       </Layout.Header>
       <Drawer
@@ -221,6 +236,10 @@ function AppShell({ mode, onToggleTheme }: AppShellProps) {
           items={menuItems}
           onClick={() => setDrawerOpen(false)}
         />
+        <Flex align="center" gap="middle" wrap className="app-drawer-controls">
+          {langSwitch}
+          {themeSwitch}
+        </Flex>
       </Drawer>
       <Layout.Content className="app-content">
         <Outlet />

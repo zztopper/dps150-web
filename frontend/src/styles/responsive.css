@@ -28,8 +28,34 @@
   border-radius: 1px;
 }
 
-.theme-toggle {
+/* Header bar: a single non-wrapping row. The nav fills the middle and folds
+   overflowing items into a "…" dropdown (AntD horizontal overflow) instead of
+   wrapping onto a second line; the title and the right-hand controls (status,
+   language, theme) stay grouped and never shrink. */
+.app-header-bar {
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.app-title {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.app-nav-desktop {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-header-right {
+  flex-shrink: 0;
   margin-left: auto;
+}
+
+/* Language + theme moved into the Drawer on mobile: a footer under the nav. */
+.app-drawer-controls {
+  padding: 16px;
+  border-top: 1px solid rgba(128, 128, 128, 0.15);
 }
 
 /* Bench-top defaults: the shell fills the theme's page background so the
@@ -50,7 +76,7 @@
   color-scheme: light;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .app-nav-desktop {
     display: none;
   }
@@ -65,6 +91,14 @@
 
   .app-header .app-title {
     font-size: 1.1rem;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Language + theme live in the Drawer on mobile, not the header row. */
+  .app-header-controls {
+    display: none;
   }
 
   .app-content {
