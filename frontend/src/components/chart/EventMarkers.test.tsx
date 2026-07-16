@@ -1,9 +1,18 @@
-import { screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type uPlot from 'uplot'
 import { renderWithProviders } from '../../test/render'
 import type { HistoryEvent } from '../../api/types'
 import { EventMarkers } from './EventMarkers'
+
+// Spy on navigation without a real router transition: EventMarkers reads
+// useNavigate() and we assert the deep-link it produces. Everything else
+// (MemoryRouter used by renderWithProviders) keeps working via `...actual`.
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }))
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return { ...actual, useNavigate: () => navigateMock }
+})
 
 const PLOT_WIDTH = 300
 
@@ -32,6 +41,10 @@ function markerLefts(): number[] {
 }
 
 describe('EventMarkers', () => {
+  afterEach(() => {
+    navigateMock.mockClear()
+  })
+
   it('renders nothing when the chart instance is not mounted yet', () => {
     renderWithProviders(
       <EventMarkers chart={null} events={[]} viewRange={{ from: 0, to: 1 }} />,
@@ -102,5 +115,30 @@ describe('EventMarkers', () => {
 
     const lefts = markerLefts().sort((a, b) => a - b)
     expect(lefts).toEqual([50, 150, 250])
+  })
+
+  // Accessibility (item 5): the marker announces role="button", so it must
+  // also be keyboard-focusable and operable. Enter/Space must run the same
+  // deep-link as the click (the geometry/click are unchanged and stay
+  // covered by e2e history.spec).
+  it('is keyboard-focusable and follows the deep-link on Enter and Space', () => {
+    const chart = fakeChart(() => 100)
+    const events = [makeEvent(1, 1_500, 'outputOff')]
+    renderWithProviders(
+      <EventMarkers chart={chart} events={events} viewRange={{ from: 1_000, to: 2_000 }} />,
+    )
+
+    const marker = screen.getByRole('button', { name: 'Выход выключен' })
+    expect(marker).toHaveAttribute('tabindex', '0')
+
+    fireEvent.keyDown(marker, { key: 'Enter' })
+    expect(navigateMock).toHaveBeenCalledWith('/events?kind=outputOff')
+
+    fireEvent.keyDown(marker, { key: ' ' })
+    expect(navigateMock).toHaveBeenCalledTimes(2)
+
+    // A non-activation key does nothing.
+    fireEvent.keyDown(marker, { key: 'Tab' })
+    expect(navigateMock).toHaveBeenCalledTimes(2)
   })
 })

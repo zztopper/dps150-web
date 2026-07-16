@@ -201,7 +201,7 @@ export function SequencesPage() {
         <Alert
           type="error"
           showIcon
-          message={t('sequences.errors.storageUnavailableTitle')}
+          title={t('sequences.errors.storageUnavailableTitle')}
           description={t('sequences.errors.storageUnavailable')}
           action={
             <Button

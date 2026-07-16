@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useDevice } from '../state/useDevice'
 import { type Lang, setLang } from '../i18n'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { ErrorBoundary } from './ErrorBoundary'
 import '../styles/responsive.css'
 
@@ -154,9 +155,15 @@ function AppShell({ mode, onToggleTheme }: AppShellProps) {
       ? { status: 'warning' as const, text: t('header.deviceOffline') }
       : { status: 'success' as const, text: t('header.online') }
 
-  const selectedKey =
-    NAV_ITEMS.find((item) => item.key !== '/' && pathname.startsWith(item.key))
-      ?.key ?? '/'
+  // Resolve the active nav item (index 0 = Dashboard, key '/') and drive the
+  // per-route browser-tab title from its localized label, so refresh/history
+  // and bookmarks all read e.g. "История · DPS-150". Re-localizes on language
+  // switch because `t(labelKey)` changes with `i18n.language`.
+  const selectedItem =
+    NAV_ITEMS.find((item) => item.key !== '/' && pathname.startsWith(item.key)) ??
+    NAV_ITEMS[0]
+  const selectedKey = selectedItem.key
+  usePageTitle(t(selectedItem.labelKey))
 
   const menuItems = NAV_ITEMS.map(({ key, labelKey }) => ({
     key,

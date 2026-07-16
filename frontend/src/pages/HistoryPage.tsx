@@ -153,6 +153,8 @@ export function HistoryPage() {
             value={customRange}
             onChange={selectCustomRange}
             placeholder={[t('history.customFrom'), t('history.customTo')]}
+            className="dps-range-picker"
+            classNames={{ popup: { root: 'dps-range-popup' } }}
           />
           <Button onClick={handleResetZoom} disabled={!isZoomed}>
             {t('history.resetZoom')}

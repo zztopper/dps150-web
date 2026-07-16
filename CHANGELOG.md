@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- UX follow-ups (skill-guided): the dashboard live chart gained a pause/resume
+  control and honors `prefers-reduced-motion` (throttled redraw), matching the
+  charge live view; the History/Events date-range picker popup now fits small
+  phones (panels stack, pinned inside the viewport) instead of overflowing;
+  chart event markers are keyboard-focusable (Enter/Space follows the same
+  `/events?kind=…` deep link as a click) with a visible focus ring; setpoint and
+  protection forms validate on blur instead of on every keystroke; the Charge
+  page's active tab is deep-linked (`?tab=`) so refresh/bookmark restore it; each
+  route sets a descriptive `document.title`; and every `Alert` uses the AntD 6
+  `title` prop (the `message` alias is deprecated). (History range-preset URL
+  persistence was evaluated but left local — it destabilized the chart's
+  drag-to-zoom.)
 - UX/accessibility pass (skill-guided audit): chart series colors are now
   theme-aware — the voltage/current/power/temperature traces use darker,
   higher-contrast variants on the light theme instead of washing out on white;

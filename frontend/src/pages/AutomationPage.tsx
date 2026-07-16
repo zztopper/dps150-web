@@ -243,7 +243,7 @@ export function AutomationPage() {
       <Alert
         type="info"
         showIcon
-        message={t('automation.disclaimer.title')}
+        title={t('automation.disclaimer.title')}
         description={t('automation.disclaimer.content')}
       />
 
@@ -251,7 +251,7 @@ export function AutomationPage() {
         <Alert
           type="error"
           showIcon
-          message={t('automation.errors.storageUnavailableTitle')}
+          title={t('automation.errors.storageUnavailableTitle')}
           description={t('automation.errors.storageUnavailable')}
           action={
             <Button

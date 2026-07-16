@@ -524,7 +524,7 @@ export function StepTreeEditor({ value, onChange, showErrors }: StepTreeEditorPr
           type="error"
           showIcon
           style={{ marginBottom: 12 }}
-          message={t('sequences.form.tooDeep', { max: MAX_NESTING_DEPTH })}
+          title={t('sequences.form.tooDeep', { max: MAX_NESTING_DEPTH })}
         />
       )}
       {showErrors && issues.tooMany && (
@@ -532,7 +532,7 @@ export function StepTreeEditor({ value, onChange, showErrors }: StepTreeEditorPr
           type="error"
           showIcon
           style={{ marginBottom: 12 }}
-          message={t('sequences.form.tooMany', { max: MAX_NODE_COUNT })}
+          title={t('sequences.form.tooMany', { max: MAX_NODE_COUNT })}
         />
       )}
       {value.length === 0 && (

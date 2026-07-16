@@ -135,7 +135,7 @@ export function ChargeLive({ onManageProfiles }: ChargeLiveProps) {
           type="error"
           showIcon
           role="alert"
-          message={t('charge.profiles.errors.storageUnavailableTitle')}
+          title={t('charge.profiles.errors.storageUnavailableTitle')}
           description={t('charge.profiles.errors.storageUnavailable')}
           action={
             <Button size="small" onClick={() => void profilesQuery.refetch()}>
@@ -158,14 +158,14 @@ export function ChargeLive({ onManageProfiles }: ChargeLiveProps) {
           </Empty>
         ) : (
           <Flex vertical gap="middle">
-            <Alert type="info" showIcon message={t('charge.live.safetyNote')} />
+            <Alert type="info" showIcon title={t('charge.live.safetyNote')} />
 
             {!connected && (
               <Alert
                 type="warning"
                 showIcon
                 role="alert"
-                message={t('charge.live.deviceOfflineTitle')}
+                title={t('charge.live.deviceOfflineTitle')}
                 description={t('charge.live.deviceOffline')}
               />
             )}

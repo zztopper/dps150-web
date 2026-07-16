@@ -104,17 +104,29 @@ export function EventMarkers({ chart, events, viewRange }: EventMarkersProps) {
       timeStyle: 'medium',
     }).format(new Date(ev.ts))
 
+    const goToEvents = () => navigate(`/events?kind=${ev.kind}`)
+
     return (
       <Tooltip key={ev.id} title={`${time} — ${describeEvent(t, ev)}`}>
         {/* 2px marker line. Deep-links to /events?kind — the Events table
-            has no from/to filter, so no time range is carried. (A wider
-            touch hit-area was tried but overlapped adjacent markers sharing
-            a timestamp and intercepted their clicks; keyboard/touch access
-            to events is covered by the Events table.) */}
+            has no from/to filter, so no time range is carried. The hit-area
+            geometry is deliberately left at the raw 2px width: a wider touch
+            area was tried but overlapped adjacent markers sharing a timestamp
+            and intercepted their clicks. Keyboard operability is added
+            without touching geometry: tabIndex + Enter/Space run the same
+            deep-link as the click, with a focus-visible outline (below). */}
         <div
+          className="dps-event-marker"
           role="button"
+          tabIndex={0}
           aria-label={describeEvent(t, ev)}
-          onClick={() => navigate(`/events?kind=${ev.kind}`)}
+          onClick={goToEvents}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              goToEvents()
+            }
+          }}
           style={{
             position: 'absolute',
             left,
@@ -132,5 +144,20 @@ export function EventMarkers({ chart, events, viewRange }: EventMarkersProps) {
     )
   })
 
-  return createPortal(<>{markers}</>, chart.over)
+  return createPortal(
+    <>
+      {/* Focus ring for keyboard users. Scoped to the marker; the inline
+          opacity is overridden so the outline reads clearly on both themes.
+          Does not affect the marker's size/hit-area. */}
+      <style>{`
+        .dps-event-marker:focus-visible {
+          outline: 2px solid #1677ff;
+          outline-offset: 2px;
+          opacity: 1 !important;
+        }
+      `}</style>
+      {markers}
+    </>,
+    chart.over,
+  )
 }

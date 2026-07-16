@@ -297,6 +297,8 @@
     },
     "live": {
       "ariaLabel": "Live telemetry chart: voltage, current, power.",
+      "pause": "Pause",
+      "resume": "Resume",
       "title": "Telemetry",
       "windowLabel": "{{count}} min"
     },

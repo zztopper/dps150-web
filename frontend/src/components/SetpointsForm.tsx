@@ -61,6 +61,10 @@ export function SetpointsForm({ setpoints, limits, disabled }: SetpointsFormProp
       disabled={disabled}
       onFinish={onFinish}
       className="setpoints-form"
+      // Validate on blur (and on submit), not on every keystroke, so a
+      // valid-in-progress number (e.g. "1" while typing "12.5") doesn't
+      // flash a transient range error.
+      validateTrigger="onBlur"
     >
       <Form.Item
         name="voltage"

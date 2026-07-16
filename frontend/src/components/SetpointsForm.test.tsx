@@ -56,6 +56,26 @@ describe('SetpointsForm', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('validates on blur, not only on submit', async () => {
+    stubFetch()
+    renderWithProviders(
+      <SetpointsForm setpoints={setpoints} limits={limits} disabled={false} />,
+    )
+
+    const voltage = screen.getByLabelText('Напряжение, В')
+    // Typing alone (validateTrigger="onBlur") must not surface the error yet…
+    fireEvent.change(voltage, { target: { value: '100' } })
+    expect(
+      screen.queryByText('Напряжение должно быть от 0 до 19.8 В'),
+    ).not.toBeInTheDocument()
+
+    // …but leaving the field (blur) runs validation.
+    fireEvent.blur(voltage)
+    expect(
+      await screen.findByText('Напряжение должно быть от 0 до 19.8 В'),
+    ).toBeInTheDocument()
+  })
+
   it('applies valid setpoints with a PUT payload', async () => {
     const fetchMock = stubFetch()
     renderWithProviders(
