@@ -61,6 +61,7 @@ type Device struct {
 
 	load    float64  // load resistance, Ω
 	battery *battery // simulated pack on the terminals, nil ⇒ resistive load
+	dut     *dut     // passive device-under-test on the terminals, nil ⇒ resistive load
 
 	vset, iset float32
 	presets    [protocol.PresetCount]protocol.Preset
@@ -481,11 +482,14 @@ func (d *Device) refresh() {
 }
 
 // currentMode returns the regulation mode the load model settles in. With a
-// battery attached the mode follows its CC→CV charge; otherwise it follows the
-// resistive load.
+// battery or a DUT attached the mode follows its operating point; otherwise it
+// follows the resistive load.
 func (d *Device) currentMode() protocol.Mode {
 	if d.battery != nil {
 		return d.battery.mode(float64(d.vset), float64(d.iset))
+	}
+	if d.dut != nil {
+		return d.dut.mode(float64(d.vset), float64(d.iset))
 	}
 	if float64(d.vset)/d.load <= float64(d.iset) {
 		return protocol.ModeCV
@@ -530,10 +534,16 @@ func (d *Device) trip(p protocol.Protection) {
 //
 // A battery on the terminals overrides the resistive model: it reads the
 // open-circuit voltage while the output is off (the charge pre-flight) and the
-// CC/CV charge operating point while it is on.
+// CC/CV charge operating point while it is on. A passive DUT (F-024) likewise
+// overrides it: 0 V open-circuit with the output off, the solved (V,I) operating
+// point while it is on. The battery wins if both are somehow set (they are
+// mutually exclusive; the composition root attaches at most one).
 func (d *Device) measure() (v, i, p float32) {
 	if d.battery != nil {
 		return d.battery.measure(d.output, float64(d.vset), float64(d.iset))
+	}
+	if d.dut != nil {
+		return d.dut.measure(d.output, float64(d.vset), float64(d.iset))
 	}
 	if !d.output {
 		return 0, 0, 0

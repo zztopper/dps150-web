@@ -22,6 +22,7 @@ import (
 	"dps150-web/backend/internal/device"
 	"dps150-web/backend/internal/device/emulator"
 	"dps150-web/backend/internal/history"
+	"dps150-web/backend/internal/ivtrace"
 	"dps150-web/backend/internal/journal"
 	"dps150-web/backend/internal/metrics"
 	"dps150-web/backend/internal/mqtt"
@@ -54,12 +55,32 @@ func main() {
 		// mock can be driven through a charge; an invalid value is logged
 		// and ignored (mock-only dev knob), never fatal.
 		var opts []emulator.Option
+		hasBattery := false
 		if s := os.Getenv(emulator.EnvBattery); s != "" {
 			if cfg, err := emulator.ParseBatteryConfig(s); err != nil {
 				slog.Warn("ignoring invalid DPS_MOCK_BATTERY", "value", s, "error", err)
 			} else {
 				opts = append(opts, emulator.WithBattery(cfg))
+				hasBattery = true
 				slog.Info("mock battery attached", "capacity_mah", cfg.CapacityMAh, "soc", cfg.SOC)
+			}
+		}
+		// DPS_MOCK_DUT optionally attaches a passive device-under-test so the mock
+		// can be driven through an IV-curve sweep (F-024). A DUT and a battery are
+		// mutually exclusive (both claim the terminals); the DUT is ignored with a
+		// warning if a battery is configured. An invalid value is logged and
+		// ignored (mock-only dev knob), never fatal.
+		if s := os.Getenv(emulator.EnvDUT); s != "" {
+			switch {
+			case hasBattery:
+				slog.Warn("ignoring DPS_MOCK_DUT: a battery is configured (both claim the terminals)", "value", s)
+			default:
+				if cfg, err := emulator.ParseDUTConfig(s); err != nil {
+					slog.Warn("ignoring invalid DPS_MOCK_DUT", "value", s, "error", err)
+				} else {
+					opts = append(opts, emulator.WithDUT(cfg))
+					slog.Info("mock DUT attached", "kind", cfg.Kind)
+				}
 			}
 		}
 		dialer = emulator.New(opts...).Dialer()
@@ -87,6 +108,7 @@ func main() {
 	models = append(models, &storage.ApiToken{})
 	models = append(models, &storage.Sequence{})
 	models = append(models, &storage.ChargeProfile{}, &storage.ChargeSession{})
+	models = append(models, &storage.IVProfile{}, &storage.IVSweep{})
 
 	store, err := storage.Open(storage.Config{
 		Driver: cfg.DBDriver,
@@ -208,6 +230,24 @@ func main() {
 		go chargeManager.Run(ctx)
 	}
 
+	// IV curve tracer (F-024): a backend-supervised run engine that owns the
+	// output for a whole sweep, mutually exclusive with the charge and sequence
+	// runners via the shared interlock (owner "iv"). Only wired when storage is
+	// configured (profiles and sweeps live in the database). Like the charger it
+	// uses the RAW hub and binds to ctx so a shutdown aborts an active sweep with
+	// the output off (and reconciles any sweep orphaned by a crash on boot). The
+	// Telegram notifier is always a valid (possibly-unconfigured) *notify.Telegram,
+	// which the engine gates on Configured().
+	var ivManager *ivtrace.Manager
+	if store != nil {
+		ivManager = ivtrace.New(hub,
+			ivtrace.WithInterlock(interlock),
+			ivtrace.WithStore(ivStore{store: store, log: logger}),
+			ivtrace.WithNotifier(telegram),
+			ivtrace.WithLogger(logger))
+		go ivManager.Run(ctx)
+	}
+
 	// Auto-stop rules engine (F-018): a hub subscriber that evaluates
 	// enabled rules against the telemetry stream and switches the output
 	// off when one fires (journaled as autoStop, mirrored to WS, optional
@@ -238,6 +278,7 @@ func main() {
 		api.WithAuthRequired(cfg.AuthRequired),
 		api.WithSequenceManager(seqManager),
 		api.WithChargeManager(chargeManager),
+		api.WithIVManager(ivManager),
 		api.WithInterlock(interlock))
 	// Serve the embedded frontend bundle (single-binary mode); a backend
 	// built without the bundle logs it and serves the API only.

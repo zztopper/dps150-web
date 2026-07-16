@@ -662,7 +662,11 @@ sweep runs → `409 iv_active`. Reads, `POST /iv/stop`, `POST /charge/stop` and
 }
 ```
 - `endedAt` is `null` while a run is in flight. `points` is a JSON array of the
-  measured `{v,i}` samples (empty `[]` until the first step completes).
+  measured `{v,i}` samples, **persisted at finalize** (the `running` row carries
+  `[]`, matching the charge-session finalize-only model) — so a mid-run
+  `GET /iv/sweeps/{id}` returns the running row with no points; the live curve is
+  rebuilt client-side from the incremental `ivProgress` frames, and the
+  authoritative full `points` + `metrics` land on the terminal `ivSweep`.
 - `metrics` (null until finalized) is component-specific — only the relevant keys
   are present. **Every numeric metric is `number | null`**: it is `null` (or
   omitted) when the guards (design §3.8) could not compute it reliably —

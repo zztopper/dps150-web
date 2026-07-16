@@ -3,6 +3,7 @@ package api
 import (
 	"dps150-web/backend/internal/charger"
 	"dps150-web/backend/internal/device"
+	"dps150-web/backend/internal/ivtrace"
 	"dps150-web/backend/internal/sequence"
 	"dps150-web/backend/internal/storage"
 )
@@ -34,6 +35,9 @@ type routerDeps struct {
 	// chargeManager backs the F-023 charge preflight/run/stop/active routes;
 	// nil when storage is not configured, which makes those routes answer 503.
 	chargeManager *charger.Manager
+	// ivManager backs the F-024 IV-curve-tracer run/stop/active routes; nil when
+	// storage is not configured, which makes those routes answer 503.
+	ivManager *ivtrace.Manager
 	// interlock is the shared single-owner device-output guard (F-023). When
 	// wired it is the source of truth for the 409 gate on manual device
 	// mutations (409 sequence_active | charge_active). Nil falls back to the
@@ -72,6 +76,13 @@ func WithSequenceManager(mgr *sequence.Manager) RouterOption {
 // storage_unavailable (the profile/session CRUD routes still work off the store).
 func WithChargeManager(mgr *charger.Manager) RouterOption {
 	return func(d *routerDeps) { d.chargeManager = mgr }
+}
+
+// WithIVManager hands the F-024 IV-curve-tracer runner to the run/stop/active
+// routes. A nil value is allowed: those routes then answer 503
+// storage_unavailable (the profile/sweep CRUD routes still work off the store).
+func WithIVManager(mgr *ivtrace.Manager) RouterOption {
+	return func(d *routerDeps) { d.ivManager = mgr }
 }
 
 // WithInterlock hands the shared single-owner device-output interlock (F-023)

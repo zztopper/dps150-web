@@ -84,6 +84,12 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	// (which reads the shared interlock, so it 409s charge_active).
 	registerChargeRoutes(v1, deps.store, deps.chargeManager, deps.interlock)
 
+	// IV curve tracer (F-024): CRUD + run/stop/active + sweep history + CSV
+	// export, executed by the internal/ivtrace Manager (see wiring:iv in
+	// cmd/server). A sweep run blocks manual device mutations via seqGate above
+	// (which reads the shared interlock, so it 409s iv_active).
+	registerIVRoutes(v1, deps.store, deps.ivManager, deps.interlock)
+
 	// CSV export (F-019): streaming downloads mirroring the JSON
 	// /history and /events routes, without their point/page caps.
 	v1.GET("/history.csv", getHistoryCSV(deps.history))
