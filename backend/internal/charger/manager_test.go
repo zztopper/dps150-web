@@ -151,10 +151,14 @@ func (s *fakeStore) lastFinish() (SessionResult, bool) {
 	return s.finished[len(s.finished)-1], true
 }
 
+// testManager uses a generous stale timeout so tests that park on nextTerm (e.g.
+// the stop test) are robust under a CPU-starved CI runner; the taper hold stays
+// short (1 s of telemetry time) so the happy-path completes quickly. The
+// staleness test builds its own manager with a short stale timeout.
 func testManager(hub HubController, store Store) *Manager {
 	return New(hub,
 		WithStore(store),
-		WithTimings(200*time.Millisecond, time.Second, 5*time.Millisecond, 10*time.Second),
+		WithTimings(3*time.Second, time.Second, 5*time.Millisecond, 10*time.Second),
 	)
 }
 
@@ -338,7 +342,9 @@ func TestProtectionTripAborts(t *testing.T) {
 func TestTelemetryStalenessAborts(t *testing.T) {
 	hub := newFakeHub(3.7)
 	store := &fakeStore{}
-	m := testManager(hub, store) // staleTimeout 200 ms; push nothing
+	// Short stale timeout for this test only; push nothing so it fires.
+	m := New(hub, WithStore(store),
+		WithTimings(200*time.Millisecond, time.Second, 5*time.Millisecond, 10*time.Second))
 	if err := m.Start(context.Background(), liion1S(), false); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
