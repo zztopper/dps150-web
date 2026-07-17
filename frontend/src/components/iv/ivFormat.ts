@@ -1,6 +1,7 @@
 // Pure presentation helpers for the IV tracer feature (F-024). Kept free of
 // React/AntD so they are unit-testable without a DOM, and so the .tsx views stay
 // component-only (react/only-export-components).
+import type { TFunction } from 'i18next'
 import type { IVComponent, IVMetrics, IVState, MetricQuality } from '../../api/iv'
 
 export type BadgeStatus = 'processing' | 'success' | 'default' | 'error' | 'warning'
@@ -79,14 +80,32 @@ export function metricQuality(metrics: IVMetrics, key: string): MetricQuality {
 /** Physical unit appended to a metric value (localized in the view). */
 export type MetricUnit = 'volt' | 'amp' | 'ohm' | 'none'
 
-/** A single analysis-metric row, resolved for one component's sweep. */
-export interface MetricRow {
+/** The localized unit suffix (with a leading space) for a metric value; '' for `none`. */
+export function metricUnitSuffix(t: TFunction, unit: MetricUnit): string {
+  switch (unit) {
+    case 'volt':
+      return ' ' + t('units.volt')
+    case 'amp':
+      return ' ' + t('units.amp')
+    case 'ohm':
+      return ' ' + t('units.ohm')
+    case 'none':
+      return ''
+  }
+}
+
+/** The static spec of one analysis-metric row — independent of any sweep's values. */
+export interface MetricRowSpec {
   /** key into IVMetrics + its quality map + the i18n label `iv.metrics.<key>`. */
-  key: string
-  value: number | null | undefined
+  key: keyof IVMetrics
   unit: MetricUnit
   /** Formats the numeric value (unit is appended separately by the view). */
   format: (n: number) => string
+}
+
+/** A single analysis-metric row, resolved for one component's sweep. */
+export interface MetricRow extends MetricRowSpec {
+  value: number | null | undefined
 }
 
 const fixed = (digits: number) => (n: number) => n.toFixed(digits)
@@ -96,40 +115,54 @@ const percent = (n: number) => `${n.toFixed(1)} %`
 const ratio = (n: number) => `${n.toFixed(1)}×`
 
 /**
- * The ordered analysis rows to show for a component, per design §3.8. Only the
- * metric keys relevant to the component are listed; each may still be `null`
- * (rendered as "—"). Pure so the mapping is unit-testable without a DOM.
+ * The ordered analysis-row specs for a component, per design §3.8 — the key/unit/
+ * format triples, WITHOUT any sweep values. Shared by the single-sweep view
+ * ({@link metricRows}) and the F-025 comparison table (which needs the specs to
+ * build one row per metric across many sweeps). Pure + value-free so both can
+ * reuse it. `generic` has no computed analysis → `[]`.
  */
-export function metricRows(metrics: IVMetrics, component: IVComponent): MetricRow[] {
+export function metricRowSpecs(component: IVComponent): MetricRowSpec[] {
   switch (component) {
     case 'led':
     case 'diode':
       return [
-        { key: 'vfAtRef', value: metrics.vfAtRef, unit: 'volt', format: fixed(3) },
-        { key: 'ideality', value: metrics.ideality, unit: 'none', format: fixed(2) },
-        { key: 'satCurrentA', value: metrics.satCurrentA, unit: 'amp', format: sci },
-        { key: 'seriesR', value: metrics.seriesR, unit: 'ohm', format: fixed(2) },
-        { key: 'dynamicR', value: metrics.dynamicR, unit: 'ohm', format: fixed(2) },
+        { key: 'vfAtRef', unit: 'volt', format: fixed(3) },
+        { key: 'ideality', unit: 'none', format: fixed(2) },
+        { key: 'satCurrentA', unit: 'amp', format: sci },
+        { key: 'seriesR', unit: 'ohm', format: fixed(2) },
+        { key: 'dynamicR', unit: 'ohm', format: fixed(2) },
       ]
     case 'resistor':
       return [
-        { key: 'resistance', value: metrics.resistance, unit: 'ohm', format: fixed(2) },
-        { key: 'rSquared', value: metrics.rSquared, unit: 'none', format: fixed(4) },
-        { key: 'maxDevPct', value: metrics.maxDevPct, unit: 'none', format: percent },
+        { key: 'resistance', unit: 'ohm', format: fixed(2) },
+        { key: 'rSquared', unit: 'none', format: fixed(4) },
+        { key: 'maxDevPct', unit: 'none', format: percent },
       ]
     case 'zener':
       return [
-        { key: 'vz', value: metrics.vz, unit: 'volt', format: fixed(3) },
-        { key: 'iztA', value: metrics.iztA, unit: 'amp', format: fixed(4) },
-        { key: 'zzt', value: metrics.zzt, unit: 'ohm', format: fixed(2) },
+        { key: 'vz', unit: 'volt', format: fixed(3) },
+        { key: 'iztA', unit: 'amp', format: fixed(4) },
+        { key: 'zzt', unit: 'ohm', format: fixed(2) },
       ]
     case 'lamp':
       return [
-        { key: 'rCold', value: metrics.rCold, unit: 'ohm', format: fixed(2) },
-        { key: 'rHot', value: metrics.rHot, unit: 'ohm', format: fixed(2) },
-        { key: 'rHotColdRatio', value: metrics.rHotColdRatio, unit: 'none', format: ratio },
+        { key: 'rCold', unit: 'ohm', format: fixed(2) },
+        { key: 'rHot', unit: 'ohm', format: fixed(2) },
+        { key: 'rHotColdRatio', unit: 'none', format: ratio },
       ]
     case 'generic':
       return []
   }
+}
+
+/**
+ * The ordered analysis rows to show for a component's sweep, per design §3.8.
+ * Only the metric keys relevant to the component are listed; each may still be
+ * `null` (rendered as "—"). Pure so the mapping is unit-testable without a DOM.
+ */
+export function metricRows(metrics: IVMetrics, component: IVComponent): MetricRow[] {
+  return metricRowSpecs(component).map((spec) => ({
+    ...spec,
+    value: metrics[spec.key] as number | null | undefined,
+  }))
 }

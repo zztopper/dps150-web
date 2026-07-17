@@ -194,6 +194,12 @@ export interface IVSweep {
   /** null until finalized at the terminal state. */
   metrics: IVMetrics | null
   snapshot: IVSweepSnapshot | null
+  /**
+   * Library membership (F-025, additive): the `iv_components` row this sweep is
+   * assigned to, or `null` when unassigned. Pre-F-025 sweeps read back `null`
+   * (the backend `0`/omitempty ⇒ `null` on the wire).
+   */
+  componentId: number | null
 }
 
 export interface IVSweepsPage {
@@ -410,15 +416,126 @@ export async function getIVActive(): Promise<IVStatus> {
   }
 }
 
-/** GET /api/v1/iv/sweeps?limit=&offset= — newest first. */
-export function listIVSweeps(limit = 50, offset = 0): Promise<IVSweepsPage> {
+/**
+ * GET /api/v1/iv/sweeps?limit=&offset=&componentId= — newest first. A positive
+ * `componentId` filters to that library component's sweeps (F-025); omit it (or
+ * pass ≤ 0) for the full list — the contract has no "unassigned" filter, and `0`
+ * never matches unassigned rows.
+ */
+export function listIVSweeps(limit = 50, offset = 0, componentId?: number): Promise<IVSweepsPage> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (componentId !== undefined && componentId > 0) {
+    params.set('componentId', String(componentId))
+  }
   return apiRequest<IVSweepsPage>(`/api/v1/iv/sweeps?${params.toString()}`)
 }
 
 /** GET /api/v1/iv/sweeps/{id} — the authoritative points + metrics. 404. */
 export function getIVSweep(id: number): Promise<IVSweep> {
   return apiRequest<IVSweep>(`/api/v1/iv/sweeps/${id}`)
+}
+
+/**
+ * POST /api/v1/iv/sweeps/{id}/component — assign the sweep to library component
+ * `componentId`, or unassign with `null`. Returns the updated sweep. The sweep
+ * must be `completed` and its F-024 `component` type must equal the target
+ * component's `kind` (a `generic` component accepts any type) — otherwise
+ * `400 invalid_iv_component`. `404 iv_sweep_not_found`.
+ */
+export function assignSweepComponent(
+  sweepId: number,
+  componentId: number | null,
+): Promise<IVSweep> {
+  return apiRequest<IVSweep>(`/api/v1/iv/sweeps/${sweepId}/component`, {
+    method: 'POST',
+    body: JSON.stringify({ componentId }),
+  })
+}
+
+/**
+ * DELETE /api/v1/iv/sweeps/{id} — prune a stored sweep from the library. `204`;
+ * `404 iv_sweep_not_found`; a `running` sweep (owned by the active run) cannot be
+ * deleted → `409 iv_active`. If it was a component's ref, the ref auto-reassigns
+ * server-side.
+ */
+export function deleteSweep(sweepId: number): Promise<void> {
+  return apiRequest<void>(`/api/v1/iv/sweeps/${sweepId}`, { method: 'DELETE' })
+}
+
+// -- Component library (F-025 / ADR-010) -----------------------------------
+
+/**
+ * A characterized component in the library (contract v6 wire type `IVComponent`;
+ * named `IVLibComponent` here so it does not collide with the F-024 DUT-class
+ * union {@link IVComponent}, which is this object's immutable `kind`).
+ */
+export interface IVLibComponent {
+  id: number
+  name: string
+  /** The F-024 DUT class — fixed at creation, immutable thereafter. */
+  kind: IVComponent
+  partNumber: string
+  notes: string
+  /** The pinned canonical characterization; `null` when the component has no sweeps. */
+  refSweepId: number | null
+  /** Derived count of sweeps with this `component_id`. */
+  sweepCount: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** Body of POST /iv/components — a new component starts unpinned + empty. */
+export interface IVComponentInput {
+  name: string
+  kind: IVComponent
+  partNumber?: string
+  notes?: string
+}
+
+/**
+ * Body of PUT /iv/components/{id}. `kind` is immutable (omitted here). Setting
+ * `refSweepId` re-pins the reference; `refSweepId: null` clears the pin.
+ */
+export interface IVComponentUpdate {
+  name?: string
+  partNumber?: string
+  notes?: string
+  refSweepId?: number | null
+}
+
+export interface IVComponentsPage {
+  items: IVLibComponent[]
+}
+
+/** GET /api/v1/iv/components — by id, creation order. */
+export function listIVComponents(): Promise<IVComponentsPage> {
+  return apiRequest<IVComponentsPage>('/api/v1/iv/components')
+}
+
+/** POST /api/v1/iv/components — 400 invalid_iv_component on a bad name/kind. */
+export function createIVComponent(input: IVComponentInput): Promise<IVLibComponent> {
+  return apiRequest<IVLibComponent>('/api/v1/iv/components', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+/** GET /api/v1/iv/components/{id} — 404 iv_component_not_found. */
+export function getIVComponent(id: number): Promise<IVLibComponent> {
+  return apiRequest<IVLibComponent>(`/api/v1/iv/components/${id}`)
+}
+
+/** PUT /api/v1/iv/components/{id} — 400 invalid_iv_component | 404. */
+export function updateIVComponent(id: number, patch: IVComponentUpdate): Promise<IVLibComponent> {
+  return apiRequest<IVLibComponent>(`/api/v1/iv/components/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  })
+}
+
+/** DELETE /api/v1/iv/components/{id} — 204; nulls component_id on its sweeps. */
+export function deleteIVComponent(id: number): Promise<void> {
+  return apiRequest<void>(`/api/v1/iv/components/${id}`, { method: 'DELETE' })
 }
 
 /**

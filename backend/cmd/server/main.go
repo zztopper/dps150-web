@@ -108,7 +108,7 @@ func main() {
 	models = append(models, &storage.ApiToken{})
 	models = append(models, &storage.Sequence{})
 	models = append(models, &storage.ChargeProfile{}, &storage.ChargeSession{})
-	models = append(models, &storage.IVProfile{}, &storage.IVSweep{})
+	models = append(models, &storage.IVProfile{}, &storage.IVSweep{}, &storage.IVComponent{})
 
 	store, err := storage.Open(storage.Config{
 		Driver: cfg.DBDriver,

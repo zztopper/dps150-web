@@ -46,6 +46,38 @@ export function modeFromBg(bg: string): 'light' | 'dark' {
   return 0.299 * r + 0.587 * g + 0.114 * b < 128 ? 'dark' : 'light'
 }
 
+// An 8-hue qualitative palette for the F-025 comparison overlay (up to 8 curves,
+// the contract cap). Distinct, roughly evenly-spaced hues; the light variants are
+// darkened to keep ≥3:1 against the white surface, the dark variants brightened
+// for the #141414 surface. Series are ALSO differentiated by an on-point marker
+// and a labelled legend, never colour alone (accessibility: color-not-only).
+const DARK_OVERLAY: readonly string[] = [
+  '#4dabf7', // blue
+  '#f5a623', // amber
+  '#51cf66', // green
+  '#ff6b6b', // red
+  '#cc5de8', // violet
+  '#22b8cf', // cyan
+  '#ff922b', // orange
+  '#a9e34b', // lime
+]
+
+const LIGHT_OVERLAY: readonly string[] = [
+  '#0958d9', // blue
+  '#d46b08', // amber
+  '#237804', // green
+  '#cf1322', // red
+  '#9c36b5', // violet
+  '#0c8599', // cyan
+  '#d9480f', // orange
+  '#5c940d', // lime
+]
+
+/** The qualitative overlay palette for the active theme (see {@link modeFromBg}). */
+export function overlaySeriesColors(mode: 'light' | 'dark'): readonly string[] {
+  return mode === 'dark' ? DARK_OVERLAY : LIGHT_OVERLAY
+}
+
 export function withAlpha(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1), 16)
   const r = (n >> 16) & 0xff

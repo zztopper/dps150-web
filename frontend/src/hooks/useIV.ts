@@ -5,17 +5,26 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { ApiError } from '../api/client'
 import {
+  assignSweepComponent,
+  createIVComponent,
   createIVProfile,
+  deleteIVComponent,
   deleteIVProfile,
+  deleteSweep,
   getIVActive,
+  getIVComponent,
   isTerminalIVState,
   ivProgressFrom,
   ivSweepEventFrom,
+  listIVComponents,
   listIVProfiles,
   listIVSweeps,
   startSweep,
   stopSweep,
+  updateIVComponent,
   updateIVProfile,
+  type IVComponentInput,
+  type IVComponentUpdate,
   type IVProfileInput,
   type IVStatus,
   type StartSweepBody,
@@ -25,6 +34,7 @@ import { useDevice } from '../state/useDevice'
 export const IV_PROFILES_QUERY_KEY = ['iv', 'profiles'] as const
 export const IV_ACTIVE_QUERY_KEY = ['iv', 'active'] as const
 export const IV_SWEEPS_QUERY_KEY = ['iv', 'sweeps'] as const
+export const IV_COMPONENTS_QUERY_KEY = ['iv', 'components'] as const
 
 /** GET /api/v1/iv/profiles. 503 storage_unavailable surfaces via `.error`. */
 export function useIVProfilesQuery() {
@@ -36,11 +46,28 @@ export function useIVActiveQuery() {
   return useQuery({ queryKey: IV_ACTIVE_QUERY_KEY, queryFn: getIVActive })
 }
 
-/** GET /api/v1/iv/sweeps — newest first. */
-export function useIVSweepsQuery(limit = 50, offset = 0) {
+/**
+ * GET /api/v1/iv/sweeps — newest first. A positive `componentId` scopes the list
+ * to one library component's sweeps (F-025); omit it for the full history.
+ */
+export function useIVSweepsQuery(limit = 50, offset = 0, componentId?: number) {
   return useQuery({
-    queryKey: [...IV_SWEEPS_QUERY_KEY, limit, offset],
-    queryFn: () => listIVSweeps(limit, offset),
+    queryKey: [...IV_SWEEPS_QUERY_KEY, limit, offset, componentId ?? null],
+    queryFn: () => listIVSweeps(limit, offset, componentId),
+  })
+}
+
+/** GET /api/v1/iv/components — the library list (F-025). */
+export function useIVComponentsQuery() {
+  return useQuery({ queryKey: IV_COMPONENTS_QUERY_KEY, queryFn: listIVComponents })
+}
+
+/** GET /api/v1/iv/components/{id} — one library component. */
+export function useIVComponentQuery(id: number | null) {
+  return useQuery({
+    queryKey: [...IV_COMPONENTS_QUERY_KEY, id],
+    queryFn: () => getIVComponent(id as number),
+    enabled: id !== null,
   })
 }
 
@@ -53,6 +80,10 @@ export function ivErrorMessage(t: TFunction, err: ApiError): string {
       return t('iv.errors.profileNotFound')
     case 'iv_sweep_not_found':
       return t('iv.errors.sweepNotFound')
+    case 'invalid_iv_component':
+      return t('iv.errors.invalidComponent', { detail: err.message })
+    case 'iv_component_not_found':
+      return t('iv.errors.componentNotFound')
     case 'iv_active':
       return t('iv.errors.ivActive')
     case 'charge_active':
@@ -114,6 +145,80 @@ export function useDeleteIVProfile() {
     onError,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: IV_PROFILES_QUERY_KEY })
+    },
+  })
+}
+
+// -- Component library (F-025) mutations -----------------------------------
+
+export function useCreateIVComponent() {
+  const queryClient = useQueryClient()
+  const onError = useIVMutationError()
+  return useMutation({
+    mutationFn: (input: IVComponentInput) => createIVComponent(input),
+    onError,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: IV_COMPONENTS_QUERY_KEY })
+    },
+  })
+}
+
+export function useUpdateIVComponent() {
+  const queryClient = useQueryClient()
+  const onError = useIVMutationError()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: IVComponentUpdate }) =>
+      updateIVComponent(id, patch),
+    onError,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: IV_COMPONENTS_QUERY_KEY })
+    },
+  })
+}
+
+export function useDeleteIVComponent() {
+  const queryClient = useQueryClient()
+  const onError = useIVMutationError()
+  return useMutation({
+    mutationFn: (id: number) => deleteIVComponent(id),
+    onError,
+    onSuccess: () => {
+      // Deleting a component nulls component_id on its sweeps → both lists change.
+      void queryClient.invalidateQueries({ queryKey: IV_COMPONENTS_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: IV_SWEEPS_QUERY_KEY })
+    },
+  })
+}
+
+/**
+ * POST /iv/sweeps/{id}/component — assign/unassign a sweep. Refreshes both the
+ * sweep history and the component library (membership + derived sweepCount + a
+ * possible ref-pin auto-reassign all change server-side).
+ */
+export function useAssignSweepComponent() {
+  const queryClient = useQueryClient()
+  const onError = useIVMutationError()
+  return useMutation({
+    mutationFn: ({ sweepId, componentId }: { sweepId: number; componentId: number | null }) =>
+      assignSweepComponent(sweepId, componentId),
+    onError,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: IV_SWEEPS_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: IV_COMPONENTS_QUERY_KEY })
+    },
+  })
+}
+
+/** DELETE /iv/sweeps/{id} — prune a stored sweep; refreshes history + library. */
+export function useDeleteSweep() {
+  const queryClient = useQueryClient()
+  const onError = useIVMutationError()
+  return useMutation({
+    mutationFn: (sweepId: number) => deleteSweep(sweepId),
+    onError,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: IV_SWEEPS_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: IV_COMPONENTS_QUERY_KEY })
     },
   })
 }
