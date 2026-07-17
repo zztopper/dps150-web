@@ -20,7 +20,7 @@ func openIVStorage(t *testing.T, driver, dsn string) *Storage {
 	s, err := Open(Config{
 		Driver:     driver,
 		DSN:        dsn,
-		Models:     []any{&IVProfile{}, &IVSweep{}},
+		Models:     []any{&IVProfile{}, &IVSweep{}, &IVComponent{}},
 		BackoffMin: backoffMin,
 		BackoffMax: time.Second,
 	})
@@ -192,7 +192,7 @@ func runIVSuite(t *testing.T, s *Storage) {
 		t.Fatalf("CreateIVSweep(second): %v", err)
 	}
 
-	sweeps, total, err := s.ListIVSweeps(ctx, 0, 0)
+	sweeps, total, err := s.ListIVSweeps(ctx, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("ListIVSweeps(all): %v", err)
 	}
@@ -206,7 +206,7 @@ func runIVSuite(t *testing.T, s *Storage) {
 	}
 
 	// Limit/offset page through the result; total stays unpaged.
-	page, total, err := s.ListIVSweeps(ctx, 1, 1)
+	page, total, err := s.ListIVSweeps(ctx, 1, 1, 0)
 	if err != nil {
 		t.Fatalf("ListIVSweeps(limit=1, offset=1): %v", err)
 	}
@@ -286,11 +286,40 @@ func TestIVUnavailable(t *testing.T) {
 	if _, err := s.GetIVSweep(ctx, 1); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("GetIVSweep error = %v, want ErrUnavailable", err)
 	}
-	if _, _, err := s.ListIVSweeps(ctx, 0, 0); !errors.Is(err, ErrUnavailable) {
+	if _, _, err := s.ListIVSweeps(ctx, 0, 0, 0); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("ListIVSweeps error = %v, want ErrUnavailable", err)
 	}
 	if _, err := s.MarkRunningIVSweepsFailed(ctx, "x"); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("MarkRunningIVSweepsFailed error = %v, want ErrUnavailable", err)
+	}
+
+	// F-025 component/association methods also fail soft with ErrUnavailable.
+	if _, err := s.ListIVComponents(ctx); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("ListIVComponents error = %v, want ErrUnavailable", err)
+	}
+	if _, err := s.IVComponentSweepCounts(ctx); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("IVComponentSweepCounts error = %v, want ErrUnavailable", err)
+	}
+	if _, err := s.CountIVComponentSweeps(ctx, 1); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("CountIVComponentSweeps error = %v, want ErrUnavailable", err)
+	}
+	if _, err := s.GetIVComponent(ctx, 1); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("GetIVComponent error = %v, want ErrUnavailable", err)
+	}
+	if err := s.CreateIVComponent(ctx, &IVComponent{Name: "x", Kind: "led"}); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("CreateIVComponent error = %v, want ErrUnavailable", err)
+	}
+	if _, err := s.UpdateIVComponent(ctx, 1, IVComponentUpdate{}); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("UpdateIVComponent error = %v, want ErrUnavailable", err)
+	}
+	if err := s.DeleteIVComponent(ctx, 1); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("DeleteIVComponent error = %v, want ErrUnavailable", err)
+	}
+	if _, err := s.AssignSweepComponent(ctx, 1, 1); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("AssignSweepComponent error = %v, want ErrUnavailable", err)
+	}
+	if err := s.DeleteSweep(ctx, 1); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("DeleteSweep error = %v, want ErrUnavailable", err)
 	}
 }
 

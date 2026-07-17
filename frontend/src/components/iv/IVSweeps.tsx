@@ -13,9 +13,11 @@ import {
   Space,
   Table,
   Tag,
+  Typography,
   theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import type { Key } from 'react'
 import { DownloadOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -25,6 +27,7 @@ import { triggerDownload } from '../../api/export'
 import { useIVSweepsQuery } from '../../hooks/useIV'
 import { IVChart } from './IVChart'
 import { IVMetricsView } from './IVMetrics'
+import { IVAssignComponentModal } from './IVAssignComponentModal'
 import { formatDuration, ivStateBadge } from './ivFormat'
 
 const PAGE_SIZE = 20
@@ -36,13 +39,24 @@ function sweepDuration(s: IVSweep): string {
   return formatDuration(s.endedAt - s.startedAt)
 }
 
-/** IV sweep history tab (F-024): newest-first table + a detail drawer with the
- * I(V) curve, the annotated metrics and a CSV export of the point dataset. */
-export function IVSweeps() {
+export interface IVSweepsProps {
+  /** Open the Сравнение tab with the given sweep ids (multi-select entry point). */
+  onCompare: (ids: number[]) => void
+}
+
+/**
+ * IV sweep history tab (F-024 + F-025): a newest-first table with a detail drawer
+ * (I(V) curve, annotated metrics, per-sweep CSV) plus the F-025 library actions —
+ * multi-select → overlay comparison (writes `?ids=`), and a per-sweep "assign to
+ * component". Only completed sweeps are assignable.
+ */
+export function IVSweeps({ onCompare }: IVSweepsProps) {
   const { t, i18n } = useTranslation()
   const { token } = theme.useToken()
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedKeys, setSelectedKeys] = useState<Key[]>([])
+  const [assignSweep, setAssignSweep] = useState<IVSweep | null>(null)
 
   const sweepsQuery = useIVSweepsQuery(PAGE_SIZE, (page - 1) * PAGE_SIZE)
 
@@ -72,8 +86,12 @@ export function IVSweeps() {
     },
     {
       title: t('iv.sweeps.table.profile'),
-      dataIndex: 'profileName',
       key: 'profile',
+      render: (_: unknown, s: IVSweep) => (
+        <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => setSelectedId(s.id)}>
+          {s.profileName}
+        </Button>
+      ),
     },
     {
       title: t('iv.sweeps.table.component'),
@@ -100,6 +118,15 @@ export function IVSweeps() {
       key: 'duration',
       render: (_: unknown, s: IVSweep) => <span className="tabular">{sweepDuration(s)}</span>,
     },
+    {
+      title: t('iv.sweeps.table.actions'),
+      key: 'actions',
+      render: (_: unknown, s: IVSweep) => (
+        <Button size="small" disabled={s.state !== 'completed'} onClick={() => setAssignSweep(s)}>
+          {t('iv.sweeps.assign')}
+        </Button>
+      ),
+    },
   ]
 
   const selected = detailQuery.data ?? null
@@ -123,25 +150,41 @@ export function IVSweeps() {
       )}
 
       <Card>
-        <Table<IVSweep>
-          rowKey="id"
-          columns={columns}
-          dataSource={sweepsQuery.data?.items ?? []}
-          loading={sweepsQuery.isLoading}
-          onRow={(record) => ({
-            onClick: () => setSelectedId(record.id),
-            style: { cursor: 'pointer' },
-          })}
-          pagination={{
-            current: page,
-            pageSize: PAGE_SIZE,
-            total: sweepsQuery.data?.total ?? 0,
-            onChange: setPage,
-            showSizeChanger: false,
-          }}
-          scroll={{ x: 'max-content' }}
-          locale={{ emptyText: <Empty description={t('iv.sweeps.empty')} /> }}
-        />
+        <Flex vertical gap="small">
+          <Flex align="center" justify="space-between" wrap gap="small">
+            <Typography.Text type="secondary">
+              {selectedKeys.length > 0
+                ? t('iv.sweeps.selectedCount', { count: selectedKeys.length })
+                : t('iv.sweeps.selectHint')}
+            </Typography.Text>
+            <Button
+              type="primary"
+              disabled={selectedKeys.length < 2}
+              onClick={() => onCompare(selectedKeys.map((k) => Number(k)))}
+            >
+              {t('iv.sweeps.compareSelected', { count: selectedKeys.length })}
+            </Button>
+          </Flex>
+          <Table<IVSweep>
+            rowKey="id"
+            columns={columns}
+            dataSource={sweepsQuery.data?.items ?? []}
+            loading={sweepsQuery.isLoading}
+            rowSelection={{
+              selectedRowKeys: selectedKeys,
+              onChange: setSelectedKeys,
+            }}
+            pagination={{
+              current: page,
+              pageSize: PAGE_SIZE,
+              total: sweepsQuery.data?.total ?? 0,
+              onChange: setPage,
+              showSizeChanger: false,
+            }}
+            scroll={{ x: 'max-content' }}
+            locale={{ emptyText: <Empty description={t('iv.sweeps.empty')} /> }}
+          />
+        </Flex>
       </Card>
 
       <Drawer
@@ -241,6 +284,10 @@ export function IVSweeps() {
           </Flex>
         ) : null}
       </Drawer>
+
+      {assignSweep !== null && (
+        <IVAssignComponentModal sweep={assignSweep} onClose={() => setAssignSweep(null)} />
+      )}
     </Flex>
   )
 }

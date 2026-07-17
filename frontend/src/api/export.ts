@@ -59,3 +59,32 @@ export function triggerDownload(url: string): void {
   link.click()
   link.remove()
 }
+
+/**
+ * Saves an in-memory string as a file via a transient `<a download>` (F-025's
+ * client-side comparison CSV, which has no backend route). Prefers a Blob object
+ * URL; falls back to a `data:` URI where `URL.createObjectURL` is unavailable
+ * (e.g. jsdom). The object URL is revoked after the click to avoid a leak.
+ */
+export function triggerTextDownload(
+  filename: string,
+  text: string,
+  mime = 'text/csv;charset=utf-8',
+): void {
+  const canObjectUrl =
+    typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+  const url = canObjectUrl
+    ? URL.createObjectURL(new Blob([text], { type: mime }))
+    : `data:${mime},${encodeURIComponent(text)}`
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.rel = 'noopener'
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  if (canObjectUrl) {
+    URL.revokeObjectURL(url)
+  }
+}

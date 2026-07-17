@@ -24,7 +24,17 @@ const (
 
 	defaultIVSweepsLimit = 50
 	maxIVSweepsLimit     = 500
+
+	// ivComponentMaxName bounds an F-025 library component name (looser than the
+	// tracer profile name: components carry a full human label).
+	ivComponentMaxName = 200
 )
+
+// ivComponentKinds is the fixed set of valid component kinds (the F-024
+// component enum), enforced at creation; the kind is immutable thereafter.
+var ivComponentKinds = map[string]bool{
+	"led": true, "diode": true, "zener": true, "resistor": true, "lamp": true, "generic": true,
+}
 
 // registerIVRoutes registers the F-024 IV-curve-tracer endpoints. mgr may be nil
 // (storage not configured): the run/stop/active routes then answer 503.
@@ -46,6 +56,18 @@ func registerIVRoutes(v1 *gin.RouterGroup, store *storage.Storage, mgr *ivtrace.
 	// GET /iv/sweeps/{id}.csv (export); gin's :id segment captures "7.csv", so
 	// the handler branches on the suffix (a param cannot carry a literal ".csv").
 	v1.GET("/iv/sweeps/:id", getIVSweepOrCSV(store))
+
+	// F-025: component library (CRUD) + sweep<->component association. These are
+	// a pure read-and-storage layer with no device/run-engine/interlock surface,
+	// so none of them takes the seqGate and none touches ivtrace.
+	v1.GET("/iv/components", listIVComponents(store))
+	v1.POST("/iv/components", createIVComponent(store))
+	v1.GET("/iv/components/:id", getIVComponent(store))
+	v1.PUT("/iv/components/:id", updateIVComponent(store))
+	v1.DELETE("/iv/components/:id", deleteIVComponent(store))
+
+	v1.POST("/iv/sweeps/:id/component", assignIVSweepComponent(store))
+	v1.DELETE("/iv/sweeps/:id", deleteIVSweep(store))
 }
 
 // ivProfileDTO mirrors the IVProfile object of the F-024 contract. Params is
@@ -515,6 +537,7 @@ func activeIV(mgr *ivtrace.Manager) gin.HandlerFunc {
 type ivSweepDTO struct {
 	ID          int64           `json:"id"`
 	ProfileID   int64           `json:"profileId"`
+	ComponentID *int64          `json:"componentId"`
 	ProfileName string          `json:"profileName"`
 	Component   string          `json:"component"`
 	Mode        string          `json:"mode"`
@@ -546,9 +569,15 @@ func ivSweepJSON(s storage.IVSweep) ivSweepDTO {
 	if s.Snapshot != "" {
 		snapshot = json.RawMessage(s.Snapshot)
 	}
+	var componentID *int64
+	if s.ComponentID != 0 {
+		cid := s.ComponentID
+		componentID = &cid
+	}
 	return ivSweepDTO{
 		ID:          s.ID,
 		ProfileID:   s.ProfileID,
+		ComponentID: componentID,
 		ProfileName: s.ProfileName,
 		Component:   s.Component,
 		Mode:        s.Mode,
@@ -581,7 +610,21 @@ func listIVSweeps(store *storage.Storage) gin.HandlerFunc {
 		if !ok {
 			return
 		}
-		items, total, err := store.ListIVSweeps(c.Request.Context(), int(limit), int(offset))
+		// Optional componentId filter (F-025): a positive integer filters to that
+		// component's sweeps; omitted or <= 0 imposes no filter (0 never matches
+		// the unassigned rows). A non-numeric value is a 400 bad_request.
+		componentID := int64(0)
+		if raw := c.Query("componentId"); raw != "" {
+			n, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				writeError(c, http.StatusBadRequest, "bad_request", fmt.Sprintf("componentId must be an integer, got %q", raw))
+				return
+			}
+			if n > 0 {
+				componentID = n
+			}
+		}
+		items, total, err := store.ListIVSweeps(c.Request.Context(), int(limit), int(offset), componentID)
 		if err != nil {
 			writeIVStoreError(c, err, "iv_sweep_not_found")
 			return
@@ -640,4 +683,354 @@ func writeIVSweepCSV(c *gin.Context, s storage.IVSweep) {
 	}
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fmt.Sprintf("dps150-iv-sweep-%d.csv", s.ID)))
 	c.Data(http.StatusOK, "text/csv; charset=utf-8", []byte(b.String()))
+}
+
+// --- F-025: component library + sweep association ---
+
+// ivComponentDTO mirrors the IVComponent object of the F-025 contract.
+// RefSweepID maps the int64-zero storage value to null; SweepCount is derived.
+type ivComponentDTO struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	PartNumber string `json:"partNumber"`
+	Notes      string `json:"notes"`
+	RefSweepID *int64 `json:"refSweepId"`
+	SweepCount int64  `json:"sweepCount"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
+}
+
+// ivComponentJSON maps a stored component + its derived sweepCount onto the
+// contract's IVComponent (RefSweepID 0 => null).
+func ivComponentJSON(c storage.IVComponent, sweepCount int64) ivComponentDTO {
+	var ref *int64
+	if c.RefSweepID != 0 {
+		r := c.RefSweepID
+		ref = &r
+	}
+	return ivComponentDTO{
+		ID:         c.ID,
+		Name:       c.Name,
+		Kind:       c.Kind,
+		PartNumber: c.PartNumber,
+		Notes:      c.Notes,
+		RefSweepID: ref,
+		SweepCount: sweepCount,
+		CreatedAt:  c.CreatedAt,
+		UpdatedAt:  c.UpdatedAt,
+	}
+}
+
+// ivComponentCreateRequest is the POST /iv/components body.
+type ivComponentCreateRequest struct {
+	Name       *string `json:"name"`
+	Kind       *string `json:"kind"`
+	PartNumber *string `json:"partNumber"`
+	Notes      *string `json:"notes"`
+}
+
+// ivComponentUpdateRequest is the PUT /iv/components/{id} body. Kind is present
+// only to reject an edit (immutable). RefSweepID is a raw message so an omitted
+// key (leave), an explicit null (clear), and a number (pin) are distinguishable.
+type ivComponentUpdateRequest struct {
+	Name       *string         `json:"name"`
+	Kind       *string         `json:"kind"`
+	PartNumber *string         `json:"partNumber"`
+	Notes      *string         `json:"notes"`
+	RefSweepID json.RawMessage `json:"refSweepId"`
+}
+
+// ivComponentID parses the {id} path parameter of the component routes. An
+// unparseable id cannot match any component, so it reports
+// 404 iv_component_not_found.
+func ivComponentID(c *gin.Context) (int64, bool) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(c, http.StatusNotFound, "iv_component_not_found", "iv component not found")
+		return 0, false
+	}
+	return id, true
+}
+
+// ivSweepID parses the {id} path parameter of the sweep mutation routes,
+// stripping no suffix (unlike the CSV read route). An unparseable id reports
+// 404 iv_sweep_not_found.
+func ivSweepID(c *gin.Context) (int64, bool) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(c, http.StatusNotFound, "iv_sweep_not_found", "iv sweep not found")
+		return 0, false
+	}
+	return id, true
+}
+
+// writeIVComponentError maps storage errors of the component/association
+// mutations onto the contract's error responses. notFoundCode names the resource
+// whose ErrNotFound is expected (iv_component_not_found | iv_sweep_not_found).
+func writeIVComponentError(c *gin.Context, err error, notFoundCode string) {
+	switch {
+	case errors.Is(err, storage.ErrUnavailable):
+		writeError(c, http.StatusServiceUnavailable, "storage_unavailable", "database is unavailable")
+	case errors.Is(err, storage.ErrIVComponentInvalid):
+		writeError(c, http.StatusBadRequest, "invalid_iv_component", err.Error())
+	case errors.Is(err, storage.ErrIVSweepRunning):
+		writeError(c, http.StatusConflict, "iv_active", "a running sweep cannot be deleted")
+	case errors.Is(err, storage.ErrNotFound):
+		writeError(c, http.StatusNotFound, notFoundCode, "not found")
+	default:
+		writeError(c, http.StatusInternalServerError, "internal", err.Error())
+	}
+}
+
+// listIVComponents handles GET /api/v1/iv/components. The derived sweepCount is
+// fetched with a single GROUP BY (no N+1) and zipped onto each component.
+func listIVComponents(store *storage.Storage) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requireIVStore(c, store) {
+			return
+		}
+		items, err := store.ListIVComponents(c.Request.Context())
+		if err != nil {
+			writeIVComponentError(c, err, "iv_component_not_found")
+			return
+		}
+		counts, err := store.IVComponentSweepCounts(c.Request.Context())
+		if err != nil {
+			writeIVComponentError(c, err, "iv_component_not_found")
+			return
+		}
+		dtos := make([]ivComponentDTO, 0, len(items))
+		for _, comp := range items {
+			dtos = append(dtos, ivComponentJSON(comp, counts[comp.ID]))
+		}
+		c.JSON(http.StatusOK, gin.H{"items": dtos})
+	}
+}
+
+// getIVComponent handles GET /api/v1/iv/components/{id}.
+func getIVComponent(store *storage.Storage) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requireIVStore(c, store) {
+			return
+		}
+		id, ok := ivComponentID(c)
+		if !ok {
+			return
+		}
+		comp, err := store.GetIVComponent(c.Request.Context(), id)
+		if err != nil {
+			writeIVComponentError(c, err, "iv_component_not_found")
+			return
+		}
+		count, err := store.CountIVComponentSweeps(c.Request.Context(), id)
+		if err != nil {
+			writeIVComponentError(c, err, "iv_component_not_found")
+			return
+		}
+		c.JSON(http.StatusOK, ivComponentJSON(comp, count))
+	}
+}
+
+// createIVComponent handles POST /api/v1/iv/components. A new component starts
+// unpinned (refSweepId null) with sweepCount 0.
+func createIVComponent(store *storage.Storage) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requireIVStore(c, store) {
+			return
+		}
+		fail := func(msg string) {
+			writeError(c, http.StatusBadRequest, "invalid_iv_component", msg)
+		}
+		var req ivComponentCreateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			fail("request body must be a JSON object with name and kind")
+			return
+		}
+		if req.Name == nil {
+			fail("name is required")
+			return
+		}
+		name := strings.TrimSpace(*req.Name)
+		if name == "" || utf8.RuneCountInString(name) > ivComponentMaxName {
+			fail(fmt.Sprintf("name must be non-empty and at most %d characters", ivComponentMaxName))
+			return
+		}
+		if req.Kind == nil {
+			fail("kind is required")
+			return
+		}
+		kind := strings.TrimSpace(*req.Kind)
+		if !ivComponentKinds[kind] {
+			fail(fmt.Sprintf("kind %q is not a valid component kind", kind))
+			return
+		}
+		comp := storage.IVComponent{
+			Name:       name,
+			Kind:       kind,
+			PartNumber: strings.TrimSpace(strOr(req.PartNumber, "")),
+			Notes:      strOr(req.Notes, ""),
+		}
+		if err := store.CreateIVComponent(c.Request.Context(), &comp); err != nil {
+			writeIVComponentError(c, err, "iv_component_not_found")
+			return
+		}
+		c.JSON(http.StatusCreated, ivComponentJSON(comp, 0))
+	}
+}
+
+// updateIVComponent handles PUT /api/v1/iv/components/{id}. Kind is immutable and
+// the reference pin is validated in the storage transaction.
+func updateIVComponent(store *storage.Storage) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requireIVStore(c, store) {
+			return
+		}
+		id, ok := ivComponentID(c)
+		if !ok {
+			return
+		}
+		fail := func(msg string) {
+			writeError(c, http.StatusBadRequest, "invalid_iv_component", msg)
+		}
+		var req ivComponentUpdateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			fail("request body must be a JSON object")
+			return
+		}
+		var upd storage.IVComponentUpdate
+		if req.Name != nil {
+			name := strings.TrimSpace(*req.Name)
+			if name == "" || utf8.RuneCountInString(name) > ivComponentMaxName {
+				fail(fmt.Sprintf("name must be non-empty and at most %d characters", ivComponentMaxName))
+				return
+			}
+			upd.Name = &name
+		}
+		if req.PartNumber != nil {
+			pn := strings.TrimSpace(*req.PartNumber)
+			upd.PartNumber = &pn
+		}
+		if req.Notes != nil {
+			upd.Notes = req.Notes
+		}
+		if req.Kind != nil {
+			k := strings.TrimSpace(*req.Kind)
+			upd.Kind = &k // storage rejects a changed kind (immutable)
+		}
+		// refSweepId is three-state: absent (leave), null (clear), number (pin).
+		if req.RefSweepID != nil {
+			trimmed := strings.TrimSpace(string(req.RefSweepID))
+			switch trimmed {
+			case "null":
+				upd.SetRef = true
+				upd.RefSweepID = 0
+			default:
+				n, err := strconv.ParseInt(trimmed, 10, 64)
+				if err != nil || n <= 0 {
+					fail("refSweepId must be a positive integer or null")
+					return
+				}
+				upd.SetRef = true
+				upd.RefSweepID = n
+			}
+		}
+		comp, err := store.UpdateIVComponent(c.Request.Context(), id, upd)
+		if err != nil {
+			writeIVComponentError(c, err, "iv_component_not_found")
+			return
+		}
+		count, err := store.CountIVComponentSweeps(c.Request.Context(), id)
+		if err != nil {
+			writeIVComponentError(c, err, "iv_component_not_found")
+			return
+		}
+		c.JSON(http.StatusOK, ivComponentJSON(comp, count))
+	}
+}
+
+// deleteIVComponent handles DELETE /api/v1/iv/components/{id}. Its sweeps are
+// unassigned (component_id nulled), not deleted — history is preserved.
+func deleteIVComponent(store *storage.Storage) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requireIVStore(c, store) {
+			return
+		}
+		id, ok := ivComponentID(c)
+		if !ok {
+			return
+		}
+		if err := store.DeleteIVComponent(c.Request.Context(), id); err != nil {
+			writeIVComponentError(c, err, "iv_component_not_found")
+			return
+		}
+		c.Status(http.StatusNoContent)
+	}
+}
+
+// assignComponentRequest is the POST /iv/sweeps/{id}/component body: componentId
+// N assigns, null unassigns.
+type assignComponentRequest struct {
+	ComponentID *int64 `json:"componentId"`
+}
+
+// assignIVSweepComponent handles POST /api/v1/iv/sweeps/{id}/component. It runs
+// the membership change and the reference fixup in one storage transaction and
+// returns the updated sweep.
+func assignIVSweepComponent(store *storage.Storage) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requireIVStore(c, store) {
+			return
+		}
+		id, ok := ivSweepID(c)
+		if !ok {
+			return
+		}
+		var req assignComponentRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_iv_component", "request body must be a JSON object with componentId (a positive integer or null)")
+			return
+		}
+		var target int64
+		if req.ComponentID != nil {
+			if *req.ComponentID <= 0 {
+				writeError(c, http.StatusBadRequest, "invalid_iv_component", "componentId must be a positive integer or null")
+				return
+			}
+			target = *req.ComponentID
+		}
+		sweep, err := store.AssignSweepComponent(c.Request.Context(), id, target)
+		if err != nil {
+			writeIVComponentError(c, err, "iv_sweep_not_found")
+			return
+		}
+		c.JSON(http.StatusOK, ivSweepJSON(sweep))
+	}
+}
+
+// deleteIVSweep handles DELETE /api/v1/iv/sweeps/{id}. A running sweep answers
+// 409 iv_active; a finalized sweep is deleted with the reference fixup.
+func deleteIVSweep(store *storage.Storage) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requireIVStore(c, store) {
+			return
+		}
+		id, ok := ivSweepID(c)
+		if !ok {
+			return
+		}
+		if err := store.DeleteSweep(c.Request.Context(), id); err != nil {
+			writeIVComponentError(c, err, "iv_sweep_not_found")
+			return
+		}
+		c.Status(http.StatusNoContent)
+	}
+}
+
+// strOr returns *p or fallback when p is nil.
+func strOr(p *string, fallback string) string {
+	if p != nil {
+		return *p
+	}
+	return fallback
 }

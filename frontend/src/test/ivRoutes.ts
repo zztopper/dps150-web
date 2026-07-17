@@ -4,7 +4,7 @@
 // backs the CRUD routes so create/delete round-trip like the real API;
 // active/sweeps are scripted per test.
 import type { RouteHandler } from './fetchRouter'
-import type { ActiveIVStatus, IVProfile, IVSweep } from '../api/iv'
+import type { ActiveIVStatus, IVLibComponent, IVProfile, IVSweep } from '../api/iv'
 
 export function makeIVProfile(overrides: Partial<IVProfile> = {}): IVProfile {
   return {
@@ -91,6 +91,23 @@ export function makeIVSweep(overrides: Partial<IVSweep> = {}): IVSweep {
       complianceA: 0.02,
       protections: { ovp: 6.6, ocp: 0.03, opp: 0.2, otp: 60.0 },
     },
+    componentId: null,
+    ...overrides,
+  }
+}
+
+/** A library component (F-025) fixture — an LED with a pinned reference sweep. */
+export function makeIVLibComponent(overrides: Partial<IVLibComponent> = {}): IVLibComponent {
+  return {
+    id: 3,
+    name: 'Red LED 5mm (Kingbright)',
+    kind: 'led',
+    partNumber: 'WP7113ID',
+    notes: 'bench reference, bin A',
+    refSweepId: 7,
+    sweepCount: 4,
+    createdAt: 1784000000000,
+    updatedAt: 1784000000000,
     ...overrides,
   }
 }
@@ -163,11 +180,23 @@ export function ivStopRoute(): RouteHandler {
   }
 }
 
-export function ivSweepsListRoute(items: IVSweep[], total = items.length): RouteHandler {
+/**
+ * GET /iv/sweeps — honors the F-025 `componentId` filter: when the query carries a
+ * positive `componentId`, only sweeps with that `componentId` are returned (and
+ * `total` reflects the filtered count when not overridden), matching the real API.
+ */
+export function ivSweepsListRoute(items: IVSweep[], total?: number): RouteHandler {
   return {
     method: 'GET',
     match: (u) => u.startsWith('/api/v1/iv/sweeps?'),
-    respond: () => ({ status: 200, body: { items, total } }),
+    respond: (u) => {
+      const cid = new URL(`http://x${u}`).searchParams.get('componentId')
+      const filtered =
+        cid !== null && Number(cid) > 0
+          ? items.filter((s) => s.componentId === Number(cid))
+          : items
+      return { status: 200, body: { items: filtered, total: total ?? filtered.length } }
+    },
   }
 }
 
@@ -176,5 +205,133 @@ export function ivSweepDetailRoute(sweep: IVSweep): RouteHandler {
     method: 'GET',
     match: (u) => /^\/api\/v1\/iv\/sweeps\/\d+$/.test(u),
     respond: () => ({ status: 200, body: sweep }),
+  }
+}
+
+/**
+ * GET /iv/sweeps/{id} resolved against a set of sweeps — returns the matching row
+ * or 404 iv_sweep_not_found. Drives the Сравнение loader (fetch each id, skip a
+ * deleted/stale id).
+ */
+export function ivSweepByIdRoute(sweeps: IVSweep[]): RouteHandler {
+  return {
+    method: 'GET',
+    match: (u) => /^\/api\/v1\/iv\/sweeps\/\d+$/.test(u),
+    respond: (u) => {
+      const id = Number(u.split('/').pop())
+      const sweep = sweeps.find((s) => s.id === id)
+      if (sweep === undefined) {
+        return {
+          status: 404,
+          body: { error: { code: 'iv_sweep_not_found', message: 'not found' } },
+        }
+      }
+      return { status: 200, body: sweep }
+    },
+  }
+}
+
+/** POST /iv/sweeps/{id}/component — echoes the sweep with the assigned componentId. */
+export function ivSweepAssignRoute(base: IVSweep = makeIVSweep()): RouteHandler {
+  return {
+    method: 'POST',
+    match: (u) => /^\/api\/v1\/iv\/sweeps\/\d+\/component$/.test(u),
+    respond: (u, init) => {
+      const id = Number(u.split('/')[5])
+      const body = JSON.parse(String(init?.body)) as { componentId: number | null }
+      return { status: 200, body: { ...base, id, componentId: body.componentId } }
+    },
+  }
+}
+
+/** DELETE /iv/sweeps/{id} — 204. */
+export function ivSweepDeleteRoute(): RouteHandler {
+  return {
+    method: 'DELETE',
+    match: (u) => /^\/api\/v1\/iv\/sweeps\/\d+$/.test(u),
+    respond: () => ({ status: 204 }),
+  }
+}
+
+// -- Component library (F-025) routes --------------------------------------
+
+/** GET /iv/components backed by a mutable in-memory store. */
+export function ivComponentsListRoute(store: { items: IVLibComponent[] }): RouteHandler {
+  return {
+    method: 'GET',
+    match: (u) => u === '/api/v1/iv/components',
+    respond: () => ({ status: 200, body: { items: store.items } }),
+  }
+}
+
+/** POST /iv/components — appends to the store, 201 (unpinned, sweepCount 0). */
+export function ivComponentsCreateRoute(store: { items: IVLibComponent[] }): RouteHandler {
+  return {
+    method: 'POST',
+    match: (u) => u === '/api/v1/iv/components',
+    respond: (_u, init) => {
+      const input = JSON.parse(String(init?.body)) as Partial<IVLibComponent>
+      const created = makeIVLibComponent({
+        ...input,
+        id: store.items.length + 10,
+        refSweepId: null,
+        sweepCount: 0,
+      })
+      store.items.push(created)
+      return { status: 201, body: created }
+    },
+  }
+}
+
+/** GET /iv/components/{id} — from the store, 404 iv_component_not_found. */
+export function ivComponentDetailRoute(store: { items: IVLibComponent[] }): RouteHandler {
+  return {
+    method: 'GET',
+    match: (u) => /^\/api\/v1\/iv\/components\/\d+$/.test(u),
+    respond: (u) => {
+      const id = Number(u.split('/').pop())
+      const found = store.items.find((c) => c.id === id)
+      if (found === undefined) {
+        return {
+          status: 404,
+          body: { error: { code: 'iv_component_not_found', message: 'not found' } },
+        }
+      }
+      return { status: 200, body: found }
+    },
+  }
+}
+
+/** PUT /iv/components/{id} — merges the patch into the stored component. */
+export function ivComponentUpdateRoute(store: { items: IVLibComponent[] }): RouteHandler {
+  return {
+    method: 'PUT',
+    match: (u) => /^\/api\/v1\/iv\/components\/\d+$/.test(u),
+    respond: (u, init) => {
+      const id = Number(u.split('/').pop())
+      const patch = JSON.parse(String(init?.body)) as Partial<IVLibComponent>
+      const idx = store.items.findIndex((c) => c.id === id)
+      if (idx < 0) {
+        return {
+          status: 404,
+          body: { error: { code: 'iv_component_not_found', message: 'not found' } },
+        }
+      }
+      store.items[idx] = { ...store.items[idx], ...patch }
+      return { status: 200, body: store.items[idx] }
+    },
+  }
+}
+
+/** DELETE /iv/components/{id} — removes from the store, 204. */
+export function ivComponentDeleteRoute(store: { items: IVLibComponent[] }): RouteHandler {
+  return {
+    method: 'DELETE',
+    match: (u) => /^\/api\/v1\/iv\/components\/\d+$/.test(u),
+    respond: (u) => {
+      const id = Number(u.split('/').pop())
+      store.items = store.items.filter((c) => c.id !== id)
+      return { status: 204 }
+    },
   }
 }

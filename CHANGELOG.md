@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- IV sweep comparison + component library (ВАХ, F-025): a read-only analytics
+  layer over the F-024 tracer with **zero device/run-engine/interlock/safety
+  surface**. A **component library** (`iv_components`) of characterized physical
+  parts — each with a pinned reference sweep whose stored metrics become the
+  component's characterization — plus post-hoc assignment of finished sweeps to
+  components (`POST /iv/sweeps/{id}/component`) and sweep deletion
+  (`DELETE /iv/sweeps/{id}`) for pruning; the reference pin never dangles
+  (auto-reassigns to the newest remaining completed member, in one transaction,
+  on every membership change). A frontend-only **comparison / overlay**: any set
+  of sweeps (held in the URL as `?tab=compare&ids=`, bookmarkable) drawn on one
+  I(V) chart with a lin/log Y toggle, a per-curve legend and a same-type metrics
+  table with min/max/spread, plus a long-format comparison CSV. Two new tabs on
+  the ВАХ page (Библиотека, Сравнение). Additive migration (new table + nullable
+  `component_id` on `iv_sweeps`). Formalized in ADR-010
+  (`docs/architecture/design.md §3.9`, `api-contract.md v6`). (Solar/PV cell
+  analysis was evaluated and dropped — infeasible on a source-only supply that
+  cannot sink a cell's photocurrent.)
 - IV curve tracer (ВАХ, F-024): a new backend-supervised run engine
   (`internal/ivtrace`, a third sibling to the charge and sequence engines) that
   sweeps voltage (or current) across a two-terminal component under a current (or

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { theme } from 'antd'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Segmented, theme } from 'antd'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useTranslation } from 'react-i18next'
@@ -186,10 +186,18 @@ export function IVChart({ points, mode, component, complianceA, complianceV, met
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<uPlot | null>(null)
   const annotationsRef = useRef<readonly Annotation[]>([])
+  // Log-scale the current axis (§3.9). Rebuilds the chart (scale distribution is
+  // captured at creation) — a rare, deliberate user action, unlike the streaming
+  // data which flows through setData.
+  const [logY, setLogY] = useState(false)
   // Read the live compliance/mode through a ref so the static uPlot config (built
-  // once) always sees the current values without a rebuild.
+  // once per scale) always sees the current values without a rebuild.
   const complianceRef = useRef({ mode, complianceA, complianceV })
   complianceRef.current = { mode, complianceA, complianceV }
+  // The freshest points, so a scale rebuild can immediately reseed the new chart
+  // (the [points] effect only fires on a points change, not on a logY toggle).
+  const pointsRef = useRef(points)
+  pointsRef.current = points
   const size = useContainerSize(containerRef)
 
   const annotations = useMemo(
@@ -197,6 +205,12 @@ export function IVChart({ points, mode, component, complianceA, complianceV, met
     [metrics, component, t],
   )
   annotationsRef.current = annotations
+
+  // On a log axis a non-positive current is unplottable → drop it (null).
+  const toSeriesData = (pts: readonly IVPoint[], log: boolean): [number[], (number | null)[]] => [
+    pts.map((p) => p.v),
+    pts.map((p) => (log && p.i <= 0 ? null : p.i)),
+  ]
 
   useEffect(() => {
     const el = containerRef.current
@@ -210,7 +224,7 @@ export function IVChart({ points, mode, component, complianceA, complianceV, met
       legend: { live: true },
       cursor: { points: { show: true } },
       // The x-axis is voltage, not time — disable uPlot's time formatting.
-      scales: { x: { time: false } },
+      scales: { x: { time: false }, y: logY ? { distr: 3, log: 10 } : { distr: 1 } },
       plugins: [
         overlayPlugin(() => complianceRef.current, annotationsRef, band, (k) => t(k)),
       ],
@@ -223,6 +237,7 @@ export function IVChart({ points, mode, component, complianceA, complianceV, met
           label: t('chart.series.current'),
           stroke: colors.current,
           width: 1.5,
+          spanGaps: true,
           points: { show: true, size: 5 },
           value: (_u, v) => (v == null ? '—' : `${v.toFixed(4)} ${t('units.amp')}`),
         },
@@ -243,14 +258,14 @@ export function IVChart({ points, mode, component, complianceA, complianceV, met
         },
       ],
     }
-    const chart = new uPlot(opts, [[], []], el)
+    const chart = new uPlot(opts, toSeriesData(pointsRef.current, logY), el)
     chartRef.current = chart
     return () => {
       chart.destroy()
       chartRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- static config, built once
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild only on the scale toggle; theme/locale rebuild via the parent key
+  }, [logY])
 
   useEffect(() => {
     if (chartRef.current === null || size.width === 0) {
@@ -263,8 +278,9 @@ export function IVChart({ points, mode, component, complianceA, complianceV, met
     if (chartRef.current === null) {
       return
     }
-    chartRef.current.setData([points.map((p) => p.v), points.map((p) => p.i)])
-  }, [points])
+    chartRef.current.setData(toSeriesData(points, logY))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toSeriesData is a stable local; logY reseed handled by the rebuild effect
+  }, [points, logY])
 
   return (
     <div className="dps-iv-chart" role="img" aria-label={t('iv.chart.ariaLabel')}>
@@ -274,6 +290,18 @@ export function IVChart({ points, mode, component, complianceA, complianceV, met
         }
         .dps-iv-chart .u-legend { font-size: 12px; }
       `}</style>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+        <Segmented
+          size="small"
+          value={logY ? 'log' : 'linear'}
+          onChange={(v) => setLogY(v === 'log')}
+          aria-label={t('iv.chart.scale.label')}
+          options={[
+            { label: t('iv.chart.scale.linear'), value: 'linear' },
+            { label: t('iv.chart.scale.log'), value: 'log' },
+          ]}
+        />
+      </div>
       <div ref={containerRef} style={{ width: '100%' }} />
     </div>
   )

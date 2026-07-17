@@ -748,3 +748,189 @@ the compliance band and annotated metrics — plus the step-progress indicator) 
 `src/components/IVSweeps.tsx` (history + CSV export). API types + TanStack Query
 hooks in `src/api/iv.ts`; MSW mocks for every route. i18n prefix `iv.*`. Visual
 design is handled separately (ui-ux skill).
+
+---
+
+# API contract v6: IV comparison + component library (ADR-010 / F-025)
+
+Fixed for parallel development of F-025 (backend `internal/storage/iv.go` +
+`internal/api/iv.go` extensions; frontend IVPage Библиотека + Сравнение tabs).
+The v1/v2/v3 rules apply (camelCase, unix millis, error format). All voltages are
+volts, currents amperes, power watts, resistances ohms.
+
+F-025 is a **read-and-storage + frontend** layer on top of the F-024 tracer: a
+**library of characterized components** and a **client-side comparison / overlay**
+of recorded sweeps. It has **no device, run-engine, interlock or emulator
+surface** — it never energizes the output, never acquires the shared interlock,
+and the frozen v5 start path (`POST /iv/profiles/{id}/start`, the `ivtrace` run
+loop) is untouched. There is **no interlock / confirmation gate** on any F-025
+route — none of them touches the device, output or protections. New error codes:
+`invalid_iv_component` (400 — empty/too-long name, unknown/edited `kind`, or a ref
+sweep that is not the component's or whose type mismatches the kind);
+`iv_component_not_found` (404). `iv_sweep_not_found` (404) and
+`storage_unavailable` (503) are reused. There are **no WS additions** (F-025 has
+no run activity).
+
+## Components (CRUD)
+
+`IVComponent`:
+```json
+{
+  "id": 3, "name": "Red LED 5mm (Kingbright)",
+  "kind": "led", "partNumber": "WP7113ID",
+  "notes": "bench reference, bin A",
+  "refSweepId": 7, "sweepCount": 4,
+  "createdAt": <ms>, "updatedAt": <ms>
+}
+```
+- `kind`: `"led" | "diode" | "zener" | "resistor" | "lamp" | "generic"` — the F-024
+  component enum, **fixed at creation** and **immutable** thereafter (so the
+  ref-sweep type invariant below cannot be broken by an edit).
+- `partNumber` (string, may be empty) and `notes` (free text, may be empty) are
+  optional metadata; `name` is non-empty, ≤ 200 chars.
+- `refSweepId` (`number | null`) — the pinned canonical characterization (see
+  *Reference curve*). `null` when the component has no sweeps.
+- `sweepCount` (int) — **derived** (not stored): the number of `iv_sweeps` rows
+  with this `component_id`, computed with a single `GROUP BY component_id`
+  aggregate for the list (never a per-component count — no N+1).
+- `GET /api/v1/iv/components` → `{"items": [IVComponent...]}` (by id, creation
+  order).
+- `POST /api/v1/iv/components` (no id) → `201 IVComponent`. Body
+  `{name, kind, partNumber?, notes?}` — a new component starts with
+  `refSweepId: null`, `sweepCount: 0`. `400 invalid_iv_component` for an
+  empty/too-long name or an unknown `kind`.
+- `GET /api/v1/iv/components/{id}` → `200 IVComponent`; `404 iv_component_not_found`.
+- `PUT /api/v1/iv/components/{id}` → `200 IVComponent`; `404 iv_component_not_found`.
+  Body `{name?, partNumber?, notes?, refSweepId?}`. `kind` is **immutable**
+  (a changed `kind` → `400 invalid_iv_component`). Setting `refSweepId` is
+  validated (see below); `refSweepId: null` explicitly clears the pin.
+- `DELETE /api/v1/iv/components/{id}` → `204`; `404 iv_component_not_found`.
+  Deleting a component **nulls `component_id` on its sweeps** (they become
+  unassigned) and **does NOT delete the sweeps** — sweep history is preserved.
+
+## Sweep ↔ component association
+
+The `IVSweep` object (v5) gains one additive field: **`componentId`**
+(`number | null`, `null` = unassigned). Everything else is unchanged.
+
+- `GET /api/v1/iv/sweeps?componentId=X` — the existing sweeps list (v5) gains a
+  **`componentId` filter**: only sweeps with that `component_id`, same
+  `{items, total}` shape, newest-first, same paging. `X` must be a **positive
+  integer**; omit the param (or `≤ 0`) for the full list (there is no "unassigned"
+  filter in v1, and `0` never matches the unassigned rows). A non-numeric
+  `componentId` → `400 bad_request`. The filter predicate is applied to **both**
+  the `total` count and the paged query (else `total` stays global and the UI
+  paginates to empty pages).
+- `POST /api/v1/iv/sweeps/{id}/component` — body `{"componentId": N | null}` —
+  **assign** the sweep to component `N`, or **unassign** with `null`. → `200 IVSweep`
+  (the updated sweep). This is a new sweep mutation (v5 sweeps were read-only),
+  run in **one DB transaction** with the ref-fixup. Validation: the sweep must be
+  **`completed`** (a `running`/`aborted`/`failed` sweep has empty/truncated points
+  → `400 invalid_iv_component`), and its F-024 `component` type must **equal the
+  target component's `kind`** — **except a `generic` component accepts any type**
+  (a resistor sweep cannot join an LED component, but can join a generic one).
+  Errors: `404 iv_sweep_not_found`; `400 invalid_iv_component` (component `N` does
+  not exist, a `kind`/`component` mismatch, or a non-`completed` sweep);
+  `503 storage_unavailable`. **Ref-pin side effects:** assigning to a component
+  that has **no** `ref_sweep_id` makes this sweep its reference (the first-assigned
+  default); if the sweep being unassigned/reassigned **was** the component's ref,
+  the ref auto-reassigns (below).
+- `DELETE /api/v1/iv/sweeps/{id}` — **delete a stored sweep** (library pruning of
+  junk/duplicate runs — the deletion the reference auto-reassign presupposes). →
+  `204`; `404 iv_sweep_not_found`; `503 storage_unavailable`. A sweep in the
+  **`running`** state (the row the active run owns and will finalize) **cannot be
+  deleted → `409 iv_active`**; only finalized rows are deletable. If the deleted
+  sweep was a component's `ref_sweep_id`, the ref auto-reassigns in the **same
+  transaction** (below). After deletion the per-sweep data is gone and any
+  Сравнение URL still holding the id drops it silently.
+
+## Reference curve
+
+`ref_sweep_id` is the component's canonical characterization; the component's
+displayed metrics are **that sweep's stored `metrics`, not recomputed** (analysis
+stays owned by `ivtrace`, contract v5 / design §3.8).
+
+- **Set / re-pin** via `PUT /api/v1/iv/components/{id}` `{"refSweepId": N}`. The
+  target sweep must **exist**, carry this component's `component_id`, **and** its
+  stored `component` must **equal the component's `kind`** — otherwise
+  `400 invalid_iv_component`.
+- **Default** — the **first `completed` sweep assigned** to a component (with no
+  prior ref) becomes its `ref_sweep_id` automatically. Only `completed` sweeps are
+  ref-eligible (a running/aborted/failed sweep would render an empty/garbage
+  reference curve).
+- **Auto-reassign — the pin never dangles.** Whenever the pinned sweep stops being
+  a member of the component — unassigned via `POST /iv/sweeps/{id}/component {null}`,
+  reassigned to another component, or **deleted** via `DELETE /iv/sweeps/{id}` —
+  `ref_sweep_id` **auto-reassigns to the newest remaining `completed` member** (by
+  `started_at`, then id), or `NULL` when none remain, in the **same transaction**
+  as the membership change. This fixup is one shared repo helper invoked by every
+  membership-changing path (assign/unassign/reassign/component-delete/sweep-delete);
+  there is no separate reference endpoint.
+
+## Comparison (frontend-only — NO backend endpoint)
+
+There is **no backend comparison / aggregate route**. Comparison is pure
+client-side presentation, driven entirely by existing reads:
+- The Сравнение tab holds a **set of sweep-ids in the URL** (`?tab=compare&ids=1,2,3`)
+  — the single source of truth for the selection, bookmarkable/shareable. Three
+  entry points write `ids`: **(x)** sweeps multi-selected in История; **(y)** N
+  components' reference curves from the Библиотека (each `refSweepId`); **(z)** all
+  sweeps of one component (`GET /iv/sweeps?componentId=X`).
+- The `?ids=` list is **deduped and validated in the loader first**, then the
+  **first 8 distinct valid ids in URL order** are each resolved with the existing
+  **`GET /iv/sweeps/{id}`** (the authoritative `points` + `metrics`) — a pasted
+  500-id URL never fires 500 sequential requests. A **stale / deleted / non-numeric
+  id is skipped silently** with a small note — never a crash.
+- The **overlay chart always renders** for a non-empty set (mixed component types
+  and mixed sweep modes allowed — all are `(V,I)` points on shared axes); raw
+  `(V,I)`, no normalization, both axes auto-fit to the union, **no compliance
+  band**, a **lin/log Y toggle** (`I ≤ 0` skipped in log), a per-curve show/hide
+  legend, capped at **~8 curves** (enforced in the loader, above), theme-aware
+  qualitative palette. Each series is **sorted by `V` ascending before line
+  render** (a current-sweep's `(V,I)` is not monotonic in `V` and would otherwise
+  zigzag).
+- The **metrics table** (with per-row min / max / spread) renders **only when
+  every selected sweep shares one `component` type**; a mixed set hides it with a
+  hint. min/max/spread **ignore `null` metrics** (F-024 metrics are `number|null`)
+  — a row with < 2 non-null values shows `—`, never `NaN`.
+
+## CSV export (client-side)
+
+A button in the Сравнение tab builds a **long-format comparison CSV in the
+browser** from the already-fetched points — columns
+`sweepId,label,index,voltage,current,power` (`power = voltage × current`), one row
+per point per sweep. The `label` is user-controlled, so the writer **quotes every
+field and neutralizes a leading `= + - @`** (CSV formula injection). **No new
+backend route**; the per-sweep `GET /iv/sweeps/{id}.csv` (v5, single/wide) is
+unchanged, and there is **no component-level export** in v1.
+
+## DB schema (all times unix millis, portable SQL)
+
+- `iv_components(id PK autoincr, name, kind, part_number, notes, ref_sweep_id,
+  created_at, updated_at)` — new feature-owned model.
+- `iv_sweeps` **gains** `component_id BIGINT INDEX` (nullable; `0`/`NULL` =
+  unassigned) — an **additive** column on the existing v5 model.
+
+Both changes are wired via `storage.Config.Models` (a new anchor for
+`iv_components`; `component_id` added to the existing `IVSweep` struct) and
+auto-migrate on both sqlite and postgres — AutoMigrate adds the table, the column
+and the index in place, no dialect functions and no separate SQL migration. The
+change is **backward-compatible**: every pre-existing sweep reads back with
+`componentId: null`. `ref_sweep_id` / `component_id` follow the codebase's
+int64-zero convention (`0` in storage ⇒ `null` on the wire, as `IVSweep.ProfileID`
+`0` = ad-hoc).
+
+## Frontend file structure
+
+Extends F-024's IVPage in place. New components: `src/components/IVComponents.tsx`
+(the **Библиотека** tab — component CRUD, ref-pin, a component's sweep list) and
+`src/components/IVCompare.tsx` (the **Сравнение** tab — the multi-series overlay
+chart, the metrics + min/max/spread table, the long-CSV button, `?ids=`-driven).
+The overlay is a multi-series mode of / sibling to the F-024 `IVChart` (lin/log Y,
+no compliance band); the single-sweep `IVChart` additionally gains the lin/log Y
+toggle. Tab routing on IVPage via `?tab=` (Live / Профили / История / Библиотека /
+Сравнение), the Сравнение selection via `?ids=`, both on the History-API
+`replaceState` pattern already used for `?range=`/`?tab=`. API types + TanStack
+Query hooks extend `src/api/iv.ts`; MSW mocks for every new route; i18n keys under
+`iv.*` (`iv.library.*`, `iv.compare.*`). Visual design is handled separately
+(ui-ux skill).

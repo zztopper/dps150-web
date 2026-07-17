@@ -403,7 +403,32 @@
       "compliance": "Current limit",
       "pause": "Pause",
       "resume": "Resume",
+      "scale": {
+        "label": "Current scale",
+        "linear": "Lin",
+        "log": "Log"
+      },
       "title": "I–V curve"
+    },
+    "compare": {
+      "allMissing": "The selected sweeps are unavailable",
+      "chartAria": "I–V overlay: current on the vertical axis, voltage on the horizontal axis.",
+      "clear": "Clear",
+      "empty": "No sweeps selected",
+      "emptyHint": "Select sweeps in History or references in the Library",
+      "exportCsv": "Export CSV",
+      "loading": "Loading sweeps…",
+      "max": "Max",
+      "metric": "Metric",
+      "metricsTitle": "Metrics comparison",
+      "min": "Min",
+      "mixedTypes": "The metrics table is shown only when all sweeps share one type",
+      "noteInvalid": "Skipped invalid ids: {{count}}",
+      "noteMissing": "Skipped unavailable sweeps: {{count}}",
+      "noteTruncated": "Showing the first {{max}} curves",
+      "remove": "Remove {{label}}",
+      "spread": "Spread",
+      "title": "Compare ({{count}})"
     },
     "component": {
       "diode": "Diode",
@@ -415,6 +440,8 @@
     },
     "errors": {
       "chargeActive": "A charge is running — stop it to trace an IV curve",
+      "componentNotFound": "Component not found",
+      "invalidComponent": "Invalid component: {{detail}}",
       "invalidProfile": "Invalid IV profile: {{detail}}",
       "ivActive": "An IV sweep is already running — stop it to start a new one",
       "profileNotFound": "IV profile not found",
@@ -451,6 +478,79 @@
       "titleEdit": "Edit IV profile",
       "vStart": "Start voltage, V",
       "vStop": "Stop voltage, V"
+    },
+    "library": {
+      "actions": {
+        "delete": "Delete",
+        "detail": "Open",
+        "edit": "Edit"
+      },
+      "addButton": "New component",
+      "assign": {
+        "assigned": "Sweep assigned to the component",
+        "hint": "Sweep type:",
+        "noneEligible": "No eligible components of this type",
+        "notCompleted": "Only a completed sweep can be assigned",
+        "ok": "Assign",
+        "placeholder": "Select a component",
+        "title": "Assign to component"
+      },
+      "compareRefs": "Compare references ({{count}})",
+      "created": "Component created",
+      "deleteConfirm": {
+        "content": "The sweeps are kept, only unassigned from the component.",
+        "ok": "Yes, delete",
+        "title": "Delete component “{{name}}”?"
+      },
+      "deleted": "Component deleted (sweeps kept)",
+      "detail": {
+        "compareAll": "Compare all sweeps",
+        "deleteSweep": "Delete",
+        "deleteSweepConfirm": "Delete this sweep permanently?",
+        "deleteSweepOk": "Yes, delete",
+        "makeRef": "Make reference",
+        "noRef": "No reference pinned — assign a completed sweep",
+        "noSweeps": "No sweeps assigned to this component",
+        "rePinned": "Reference updated",
+        "refCurve": "Reference I–V curve",
+        "refLabel": "Reference sweep",
+        "refPlaceholder": "Select a sweep",
+        "refTag": "Reference",
+        "sweepDeleted": "Sweep deleted",
+        "sweepsTitle": "Component sweeps",
+        "title": "Component",
+        "unassign": "Unassign",
+        "unassigned": "Sweep unassigned"
+      },
+      "empty": "No components yet — create the first",
+      "errors": {
+        "storageUnavailable": "Database unavailable — the library can't be changed right now",
+        "storageUnavailableTitle": "Storage unavailable"
+      },
+      "form": {
+        "kind": "Component kind",
+        "kindHint": "Set at creation, immutable thereafter",
+        "kindImmutable": "Kind can't be changed after creation",
+        "name": "Name",
+        "nameMax": "Max {{max}} characters",
+        "nameRequired": "Enter a name",
+        "notes": "Notes",
+        "partNumber": "Part number",
+        "save": "Save",
+        "titleCreate": "New component",
+        "titleEdit": "Edit component"
+      },
+      "noRefsToCompare": "The selected components have no reference sweeps",
+      "saved": "Component saved",
+      "table": {
+        "actions": "Actions",
+        "kind": "Kind",
+        "name": "Name",
+        "notes": "Notes",
+        "partNumber": "Part number",
+        "sweepCount": "Sweeps"
+      },
+      "title": "Component library"
     },
     "live": {
       "deviceOffline": "Starting a sweep is unavailable while the device is offline.",
@@ -549,6 +649,8 @@
       "title": "Start sweep: {{name}}"
     },
     "sweeps": {
+      "assign": "Assign",
+      "compareSelected": "Compare selected ({{count}})",
       "detailError": "Could not load the sweep",
       "detailTitle": "IV sweep",
       "empty": "No IV sweeps yet",
@@ -560,7 +662,10 @@
       "exportCsv": "Export CSV",
       "noPoints": "No points recorded",
       "reason": "Reason",
+      "selectHint": "Select sweeps to compare",
+      "selectedCount": "Selected: {{count}}",
       "table": {
+        "actions": "Actions",
         "component": "Component",
         "duration": "Duration",
         "points": "Points",
@@ -570,7 +675,9 @@
       }
     },
     "tabs": {
+      "compare": "Compare",
       "history": "History",
+      "library": "Library",
       "live": "Trace",
       "profiles": "Profiles"
     },

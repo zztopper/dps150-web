@@ -25,7 +25,7 @@ func newIVTestStore(t *testing.T) *storage.Storage {
 	s, err := storage.Open(storage.Config{
 		Driver:     storage.DriverSQLite,
 		DSN:        filepath.Join(t.TempDir(), "test.db"),
-		Models:     []any{&storage.IVProfile{}, &storage.IVSweep{}},
+		Models:     []any{&storage.IVProfile{}, &storage.IVSweep{}, &storage.IVComponent{}},
 		BackoffMin: 10 * time.Millisecond,
 	})
 	if err != nil {

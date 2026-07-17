@@ -1,26 +1,12 @@
 import { Descriptions, Empty, Flex, Tooltip, Typography } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import type { IVComponent, IVMetrics as IVMetricsData } from '../../api/iv'
-import { metricQuality, metricRows, metricView, type MetricUnit } from './ivFormat'
+import { metricQuality, metricRows, metricUnitSuffix, metricView } from './ivFormat'
 
 export interface IVMetricsViewProps {
   metrics: IVMetricsData | null
   component: IVComponent
-}
-
-function unitLabel(t: TFunction, unit: MetricUnit): string {
-  switch (unit) {
-    case 'volt':
-      return ' ' + t('units.volt')
-    case 'amp':
-      return ' ' + t('units.amp')
-    case 'ohm':
-      return ' ' + t('units.ohm')
-    case 'none':
-      return ''
-  }
 }
 
 /**
@@ -71,7 +57,7 @@ export function IVMetricsView({ metrics, component }: IVMetricsViewProps) {
             }
           }
           // `view.available` implies a finite number here.
-          const text = `${row.format(row.value as number)}${unitLabel(t, row.unit)}`
+          const text = `${row.format(row.value as number)}${metricUnitSuffix(t, row.unit)}`
           return {
             key: row.key,
             label,
