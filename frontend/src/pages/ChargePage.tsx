@@ -5,10 +5,11 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { ChargeProfiles } from '../components/charge/ChargeProfiles'
 import { ChargeLive } from '../components/charge/ChargeLive'
 import { ChargeSessions } from '../components/charge/ChargeSessions'
+import { ChargeBatteries } from '../components/charge/ChargeBatteries'
 import { useChargeLiveInvalidation, useChargeTerminalToast, useLiveCharge } from '../hooks/useCharge'
 import '../styles/charge.css'
 
-const CHARGE_TABS = ['live', 'profiles', 'history'] as const
+const CHARGE_TABS = ['live', 'profiles', 'history', 'batteries'] as const
 type ChargeTab = (typeof CHARGE_TABS)[number]
 const DEFAULT_TAB: ChargeTab = 'live'
 
@@ -81,6 +82,11 @@ export function ChargePage() {
             label: t('charge.tabs.history'),
             children: <ChargeSessions />,
             },
+          {
+            key: 'batteries',
+            label: t('charge.tabs.batteries'),
+            children: <ChargeBatteries />,
+          },
           ]}
         />
       </ErrorBoundary>

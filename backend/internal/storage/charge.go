@@ -40,9 +40,21 @@ type ChargeProfile struct {
 // internal/charge, storage treats it as an opaque blob. StartedAt/EndedAt/
 // CreatedAt are unix milliseconds, as all time columns in this schema; EndedAt
 // is 0 while the run is in flight.
+//
+// F-026 (battery health) adds two additive, nullable columns:
+//   - BatteryID: the library battery this session is assigned to (0 = unassigned,
+//     the int64-zero convention shared with ProfileID). Written only by the
+//     post-hoc association route, never by the charger.
+//   - StartVoltage: the open-terminal pack voltage measured at pre-flight with the
+//     output OFF, captured by the charger at session creation. It is a *float64
+//     (nullable) on purpose — a plain float64 would scan a DB NULL back as 0,
+//     which the capacity-eligibility gate would misread as "0 V ⇒ from empty" and
+//     mis-count every legacy (pre-F-026) row. NULL means the start SoC is unknown,
+//     so the session is excluded from every capacity metric.
 type ChargeSession struct {
 	ID           int64  `gorm:"primaryKey;autoIncrement"`
 	ProfileID    int64  `gorm:"index"` // 0 for an ad-hoc run
+	BatteryID    int64  `gorm:"index"` // 0 = unassigned to any library battery (F-026)
 	ProfileName  string `gorm:"size:200"`
 	Chemistry    string `gorm:"size:16"`
 	Cells        int
@@ -53,8 +65,54 @@ type ChargeSession struct {
 	DeliveredMah float64
 	DeliveredWh  float64
 	PeakVoltage  float64
-	Snapshot     string // JSON, opaque phase-timeline / limits snapshot owned by internal/charge
-	CreatedAt    int64  `gorm:"autoCreateTime:milli"`
+	StartVoltage *float64 // pack volts at start, output off; NULL for pre-F-026 rows
+	Snapshot     string   // JSON, opaque phase-timeline / limits snapshot owned by internal/charge
+	CreatedAt    int64    `gorm:"autoCreateTime:milli"`
+}
+
+// Per-cell "near-empty" thresholds (volts) that mark a pack as started-from-empty
+// for capacity eligibility (F-026 / design §3.10). The Li-ion and LiFePO4 values
+// are exactly the F-023 pre-charge thresholds — a pack below the pre-charge point
+// IS the "deeply discharged" state — so "eligible" == "was charged from empty"
+// with no new safety constant to bless. These are the single source of truth for
+// both CapacityEligible (per-row) and the eligibility SQL predicate used by the
+// health aggregates.
+const (
+	emptyThresholdLiIon   = 3.00
+	emptyThresholdLiFePO4 = 2.50
+	emptyThresholdPb      = 1.90
+)
+
+// emptyThresholdPerCell returns the per-cell "near-empty" voltage threshold for a
+// chemistry and whether it is a known chemistry.
+func emptyThresholdPerCell(chemistry string) (float64, bool) {
+	switch chemistry {
+	case "liion":
+		return emptyThresholdLiIon, true
+	case "lifepo4":
+		return emptyThresholdLiFePO4, true
+	case "pb":
+		return emptyThresholdPb, true
+	default:
+		return 0, false
+	}
+}
+
+// CapacityEligible reports whether this session is a capacity data-point for the
+// battery-health aggregates: it is intrinsic to the row — completed, with a
+// positive delivered charge, a known start voltage, and a per-cell start voltage
+// at or below the chemistry's "near-empty" threshold (i.e. the pack was charged
+// from empty, not topped up). It guards cells > 0 before dividing. Legacy rows
+// (StartVoltage == nil) are never eligible.
+func (s ChargeSession) CapacityEligible() bool {
+	if s.State != "completed" || s.DeliveredMah <= 0 || s.StartVoltage == nil || s.Cells <= 0 {
+		return false
+	}
+	thr, ok := emptyThresholdPerCell(s.Chemistry)
+	if !ok {
+		return false
+	}
+	return (*s.StartVoltage / float64(s.Cells)) <= thr
 }
 
 // ListChargeProfiles returns every profile ordered by id (creation order,
@@ -161,9 +219,13 @@ func (s *Storage) CreateChargeSession(ctx context.Context, sess *ChargeSession) 
 
 // UpdateChargeSession finalizes sess.ID: it saves the terminal fields (state,
 // reason, ended-at, delivered mAh/Wh, peak voltage, snapshot) recorded when the
-// run ends. The denormalized profile fields and StartedAt/CreatedAt are
-// preserved from the stored row. It returns ErrNotFound for an unknown id and
-// ErrUnavailable while the database is down.
+// run ends. The denormalized profile fields, StartedAt/CreatedAt, the F-026
+// StartVoltage and any BatteryID association are preserved from the stored row.
+// This is a full-row Save, so preserving StartVoltage is mandatory: dropping it
+// would zero/null the very datum the capacity-eligibility gate depends on at
+// every completed finalize (design §3.10, the pinned safety invariant). It
+// returns ErrNotFound for an unknown id and ErrUnavailable while the database is
+// down.
 func (s *Storage) UpdateChargeSession(ctx context.Context, sess *ChargeSession) error {
 	db, err := s.DB()
 	if err != nil {
@@ -177,11 +239,13 @@ func (s *Storage) UpdateChargeSession(ctx context.Context, sess *ChargeSession) 
 		return fmt.Errorf("update charge session %d: %w", sess.ID, err)
 	}
 	sess.ProfileID = existing.ProfileID
+	sess.BatteryID = existing.BatteryID
 	sess.ProfileName = existing.ProfileName
 	sess.Chemistry = existing.Chemistry
 	sess.Cells = existing.Cells
 	sess.StartedAt = existing.StartedAt
 	sess.CreatedAt = existing.CreatedAt
+	sess.StartVoltage = existing.StartVoltage
 	if err := db.WithContext(ctx).Save(sess).Error; err != nil {
 		return fmt.Errorf("update charge session %d: %w", sess.ID, err)
 	}
@@ -207,14 +271,22 @@ func (s *Storage) GetChargeSession(ctx context.Context, id int64) (ChargeSession
 
 // ListChargeSessions returns run-history entries newest-first (started-at, then
 // id descending) together with the total number of rows before paging.
-// limit > 0 caps the page size and offset > 0 skips leading rows. It returns
+// limit > 0 caps the page size and offset > 0 skips leading rows. batteryID > 0
+// filters to the sessions assigned to that library battery (F-026); a value <= 0
+// imposes no filter (there is no "unassigned" filter, and 0 never matches the
+// unassigned rows). The filter predicate is applied to BOTH the total count and
+// the paged query, so the UI never paginates to empty pages. It returns
 // ErrUnavailable while the database is down.
-func (s *Storage) ListChargeSessions(ctx context.Context, limit, offset int) ([]ChargeSession, int64, error) {
+func (s *Storage) ListChargeSessions(ctx context.Context, limit, offset int, batteryID int64) ([]ChargeSession, int64, error) {
 	db, err := s.DB()
 	if err != nil {
 		return nil, 0, err
 	}
-	q := db.WithContext(ctx).Model(&ChargeSession{}).Session(&gorm.Session{})
+	q := db.WithContext(ctx).Model(&ChargeSession{})
+	if batteryID > 0 {
+		q = q.Where("battery_id = ?", batteryID)
+	}
+	q = q.Session(&gorm.Session{})
 
 	var total int64
 	if err := q.Count(&total).Error; err != nil {

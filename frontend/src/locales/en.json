@@ -93,6 +93,111 @@
     }
   },
   "charge": {
+    "battery": {
+      "actions": {
+        "delete": "Delete",
+        "detail": "Details",
+        "edit": "Edit"
+      },
+      "addButton": "New battery",
+      "assign": {
+        "action": "Assign",
+        "assigned": "Session assigned to the battery",
+        "hint": "Compatible batteries (same chemistry and cell count):",
+        "noneEligible": "No compatible batteries",
+        "ok": "Assign",
+        "placeholder": "Select a battery",
+        "running": "A running session cannot be assigned",
+        "title": "Assign to a battery"
+      },
+      "chart": {
+        "ariaLabel": "Capacity degradation over session dates",
+        "capacity": "Capacity"
+      },
+      "created": "Battery created",
+      "deleteConfirm": {
+        "content": "Charge sessions are kept and become unassigned.",
+        "ok": "Delete",
+        "title": "Delete “{{name}}”?"
+      },
+      "deleted": "Battery deleted",
+      "detail": {
+        "degradationTitle": "Capacity degradation",
+        "eligibility": "Capacity",
+        "healthTitle": "Battery health",
+        "noEligible": "No capacity measurements yet (charges from empty)",
+        "noSessions": "No sessions assigned to this battery",
+        "pbCaveat": "For lead-acid, delivered mAh overstates true capacity (gassing losses) — treat as a relative trend.",
+        "rated": "Rated capacity",
+        "sessionsTitle": "Charge sessions",
+        "title": "Battery",
+        "unassign": "Unassign",
+        "unassignConfirm": "Unassign this session from the battery?",
+        "unassignOk": "Unassign",
+        "unassigned": "Session unassigned"
+      },
+      "eligibility": {
+        "eligible": "Capacity cycle",
+        "excludedHint": "Excluded from capacity and SoH — not a charge from empty.",
+        "notCapacity": "Not a capacity measurement",
+        "unknownSoc": "Start SoC unknown"
+      },
+      "empty": "No batteries yet",
+      "errors": {
+        "storageUnavailable": "Battery storage is unavailable, try again later",
+        "storageUnavailableTitle": "Storage unavailable"
+      },
+      "form": {
+        "cells": "Cells (S)",
+        "cellsImmutable": "Cell count cannot be changed after creation",
+        "cellsRange": "1 to {{max}}",
+        "chemistry": "Chemistry",
+        "chemistryImmutable": "Chemistry cannot be changed after creation",
+        "name": "Name",
+        "nameMax": "At most {{max}} characters",
+        "nameRequired": "Name is required",
+        "notes": "Notes",
+        "partNumber": "Part number",
+        "ratedCapacityMah": "Rated capacity, mAh",
+        "ratedHint": "Optional. Sets the SoH baseline and enables equivalent cycles.",
+        "ratedPlaceholder": "Unset",
+        "ratedRange": "0 to {{max}}",
+        "required": "Required",
+        "save": "Save",
+        "titleCreate": "New battery",
+        "titleEdit": "Edit battery"
+      },
+      "metrics": {
+        "bestCapacity": "Best capacity",
+        "degradation": "Degradation",
+        "equivalentCycles": "Equivalent cycles",
+        "firstCapacity": "First capacity",
+        "fullCycleCount": "Full cycles",
+        "latestCapacity": "Latest capacity",
+        "soh": "SoH (state of health)",
+        "sohOver100": "SoH above 100%",
+        "sohOver100Hint": "Delivered capacity exceeds the nameplate rating — the rated capacity is likely understated. The true value is shown; the bar is capped at 100%.",
+        "totalWh": "Total energy"
+      },
+      "notDetermined": "not determined",
+      "saved": "Battery saved",
+      "sessions": {
+        "battery": "Battery",
+        "startVoltage": "Start voltage",
+        "unassigned": "Unassigned"
+      },
+      "sohLevel": {
+        "fair": "Fair",
+        "good": "Good",
+        "poor": "Poor"
+      },
+      "table": {
+        "actions": "Actions",
+        "name": "Name",
+        "partNumber": "Part number"
+      },
+      "title": "Batteries"
+    },
     "chart": {
       "ariaLabel": "Charge chart: voltage and current across phases.",
       "pause": "Pause",
@@ -105,7 +210,9 @@
       "pb": "Lead-acid"
     },
     "errors": {
+      "batteryNotFound": "Battery not found",
       "chargeActive": "A charge is already running — stop it to start a new one",
+      "invalidBattery": "Invalid battery: {{detail}}",
       "invalidProfile": "Invalid charge profile: {{detail}}",
       "preflightFailed": "Pre-flight check failed: {{detail}}",
       "profileNotFound": "Charge profile not found",
@@ -265,6 +372,7 @@
       }
     },
     "tabs": {
+      "batteries": "Batteries",
       "history": "History",
       "live": "Charge",
       "profiles": "Profiles"

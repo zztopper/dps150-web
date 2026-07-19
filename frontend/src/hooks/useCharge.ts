@@ -5,18 +5,26 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { ApiError } from '../api/client'
 import {
+  assignSessionBattery,
   chargePreflight,
   chargeProgressFrom,
   chargeSessionEventFrom,
+  createBattery,
   createChargeProfile,
+  deleteBattery,
   deleteChargeProfile,
+  getBattery,
   getChargeActive,
   isTerminalChargeState,
+  listBatteries,
   listChargeProfiles,
   listChargeSessions,
   startCharge,
   stopCharge,
+  updateBattery,
   updateChargeProfile,
+  type BatteryInput,
+  type BatteryUpdate,
   type ChargeProfileInput,
   type ChargeStatus,
   type PreflightRequest,
@@ -28,6 +36,7 @@ import { useDevice } from '../state/useDevice'
 export const CHARGE_PROFILES_QUERY_KEY = ['charge', 'profiles'] as const
 export const CHARGE_ACTIVE_QUERY_KEY = ['charge', 'active'] as const
 export const CHARGE_SESSIONS_QUERY_KEY = ['charge', 'sessions'] as const
+export const CHARGE_BATTERIES_QUERY_KEY = ['charge', 'batteries'] as const
 
 /** GET /api/v1/charge/profiles. 503 storage_unavailable surfaces via `.error`. */
 export function useChargeProfilesQuery() {
@@ -39,11 +48,28 @@ export function useChargeActiveQuery() {
   return useQuery({ queryKey: CHARGE_ACTIVE_QUERY_KEY, queryFn: getChargeActive })
 }
 
-/** GET /api/v1/charge/sessions — newest first. */
-export function useChargeSessionsQuery(limit = 50, offset = 0) {
+/**
+ * GET /api/v1/charge/sessions — newest first. A positive `batteryId` scopes the
+ * list to one battery's sessions (F-026); omit it for the full history.
+ */
+export function useChargeSessionsQuery(limit = 50, offset = 0, batteryId?: number) {
   return useQuery({
-    queryKey: [...CHARGE_SESSIONS_QUERY_KEY, limit, offset],
-    queryFn: () => listChargeSessions(limit, offset),
+    queryKey: [...CHARGE_SESSIONS_QUERY_KEY, limit, offset, batteryId ?? null],
+    queryFn: () => listChargeSessions(limit, offset, batteryId),
+  })
+}
+
+/** GET /api/v1/charge/batteries — the battery library with derived health (F-026). */
+export function useBatteriesQuery() {
+  return useQuery({ queryKey: CHARGE_BATTERIES_QUERY_KEY, queryFn: listBatteries })
+}
+
+/** GET /api/v1/charge/batteries/{id} — one battery with its derived health. */
+export function useBatteryQuery(id: number | null) {
+  return useQuery({
+    queryKey: [...CHARGE_BATTERIES_QUERY_KEY, id],
+    queryFn: () => getBattery(id as number),
+    enabled: id !== null,
   })
 }
 
@@ -56,6 +82,10 @@ export function chargeErrorMessage(t: TFunction, err: ApiError): string {
       return t('charge.errors.profileNotFound')
     case 'charge_session_not_found':
       return t('charge.errors.sessionNotFound')
+    case 'invalid_battery':
+      return t('charge.errors.invalidBattery', { detail: err.message })
+    case 'battery_not_found':
+      return t('charge.errors.batteryNotFound')
     case 'charge_active':
       return t('charge.errors.chargeActive')
     case 'sequence_active':
@@ -117,6 +147,65 @@ export function useDeleteChargeProfile() {
     onError,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CHARGE_PROFILES_QUERY_KEY })
+    },
+  })
+}
+
+// -- Battery library (F-026) mutations -------------------------------------
+
+export function useCreateBattery() {
+  const queryClient = useQueryClient()
+  const onError = useChargeMutationError()
+  return useMutation({
+    mutationFn: (input: BatteryInput) => createBattery(input),
+    onError,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CHARGE_BATTERIES_QUERY_KEY })
+    },
+  })
+}
+
+export function useUpdateBattery() {
+  const queryClient = useQueryClient()
+  const onError = useChargeMutationError()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: BatteryUpdate }) => updateBattery(id, patch),
+    onError,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CHARGE_BATTERIES_QUERY_KEY })
+    },
+  })
+}
+
+export function useDeleteBattery() {
+  const queryClient = useQueryClient()
+  const onError = useChargeMutationError()
+  return useMutation({
+    mutationFn: (id: number) => deleteBattery(id),
+    onError,
+    onSuccess: () => {
+      // Deleting a battery nulls battery_id on its sessions → both lists change.
+      void queryClient.invalidateQueries({ queryKey: CHARGE_BATTERIES_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: CHARGE_SESSIONS_QUERY_KEY })
+    },
+  })
+}
+
+/**
+ * POST /charge/sessions/{id}/battery — assign/unassign a session. Refreshes both
+ * the session history and the battery library (membership + all derived health
+ * aggregates are query-time, so both the old and new battery recompute on read).
+ */
+export function useAssignSessionBattery() {
+  const queryClient = useQueryClient()
+  const onError = useChargeMutationError()
+  return useMutation({
+    mutationFn: ({ sessionId, batteryId }: { sessionId: number; batteryId: number | null }) =>
+      assignSessionBattery(sessionId, batteryId),
+    onError,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CHARGE_SESSIONS_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: CHARGE_BATTERIES_QUERY_KEY })
     },
   })
 }

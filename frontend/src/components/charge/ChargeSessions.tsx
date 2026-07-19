@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   Alert,
+  App as AntApp,
   Badge,
   Button,
   Card,
@@ -8,17 +9,27 @@ import {
   Drawer,
   Empty,
   Flex,
+  Popconfirm,
   Skeleton,
   Space,
   Table,
   Tag,
+  Tooltip,
+  Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import { InfoCircleOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../../api/client'
 import { type ChargeSession, getChargeSession } from '../../api/charge'
-import { useChargeSessionsQuery } from '../../hooks/useCharge'
+import {
+  useAssignSessionBattery,
+  useBatteriesQuery,
+  useChargeSessionsQuery,
+} from '../../hooks/useCharge'
+import { ChargeAssignBatteryModal } from './ChargeAssignBatteryModal'
+import { eligibilityFlag } from './chargeBatteryFormat'
 import { chargeStateBadge, formatDuration } from './chargeFormat'
 
 const PAGE_SIZE = 20
@@ -30,13 +41,20 @@ function sessionDuration(s: ChargeSession): string {
   return formatDuration(s.endedAt - s.startedAt)
 }
 
-/** Charge session history tab (F-023): newest-first table + a detail drawer. */
+/** Charge session history tab (F-023 + F-026): newest-first table + a detail
+ * drawer, plus the F-026 battery association — assign a finalized session to a
+ * battery, or unassign. A `running` session cannot be (un)assigned; only
+ * finalized rows offer the action. */
 export function ChargeSessions() {
   const { t, i18n } = useTranslation()
+  const { message } = AntApp.useApp()
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [assignSession, setAssignSession] = useState<ChargeSession | null>(null)
 
   const sessionsQuery = useChargeSessionsQuery(PAGE_SIZE, (page - 1) * PAGE_SIZE)
+  const batteriesQuery = useBatteriesQuery()
+  const assignMutation = useAssignSessionBattery()
 
   const detailQuery = useQuery({
     queryKey: ['charge', 'session', selectedId],
@@ -49,12 +67,42 @@ export function ChargeSessions() {
 
   const fmtTime = (ts: number) => new Date(ts).toLocaleString(i18n.language)
 
+  const batteryName = (id: number | null): string | null => {
+    if (id === null) {
+      return null
+    }
+    return batteriesQuery.data?.items.find((b) => b.id === id)?.name ?? `#${id}`
+  }
+
+  const unassign = (sessionId: number) => {
+    assignMutation.mutate(
+      { sessionId, batteryId: null },
+      { onSuccess: () => void message.success(t('charge.battery.detail.unassigned')) },
+    )
+  }
+
   const stateCell = (s: ChargeSession) => (
     <Space size={4}>
       <Badge status={chargeStateBadge(s.state)} />
       <span>{t('charge.run.state.' + s.state)}</span>
     </Space>
   )
+
+  const eligibilityTag = (s: ChargeSession) => {
+    const flag = eligibilityFlag(s)
+    if (flag === 'eligible') {
+      return <Tag color="success">{t('charge.battery.eligibility.eligible')}</Tag>
+    }
+    const reason =
+      flag === 'unknownSoc'
+        ? t('charge.battery.eligibility.unknownSoc')
+        : t('charge.battery.eligibility.notCapacity')
+    return (
+      <Tooltip title={t('charge.battery.eligibility.excludedHint')}>
+        <Tag icon={<InfoCircleOutlined />}>{reason}</Tag>
+      </Tooltip>
+    )
+  }
 
   const columns: ColumnsType<ChargeSession> = [
     {
@@ -96,6 +144,40 @@ export function ChargeSessions() {
       key: 'duration',
       render: (_: unknown, s: ChargeSession) => (
         <span className="tabular">{sessionDuration(s)}</span>
+      ),
+    },
+    {
+      title: t('charge.battery.sessions.battery'),
+      key: 'battery',
+      render: (_: unknown, s: ChargeSession) => {
+        const name = batteryName(s.batteryId)
+        return name === null ? <Tag>{t('charge.battery.sessions.unassigned')}</Tag> : <Tag color="processing">{name}</Tag>
+      },
+    },
+    {
+      title: t('charge.battery.table.actions'),
+      key: 'actions',
+      render: (_: unknown, s: ChargeSession) => (
+        // Stop row-click propagation so acting on a session does not also open
+        // the detail drawer underneath.
+        <span onClick={(e) => e.stopPropagation()}>
+          {s.state === 'running' ? (
+            <Tag>{t('charge.run.state.running')}</Tag>
+          ) : s.batteryId !== null ? (
+            <Popconfirm
+              title={t('charge.battery.detail.unassignConfirm')}
+              okText={t('charge.battery.detail.unassignOk')}
+              cancelText={t('common.cancel')}
+              onConfirm={() => unassign(s.id)}
+            >
+              <Button size="small">{t('charge.battery.detail.unassign')}</Button>
+            </Popconfirm>
+          ) : (
+            <Button size="small" onClick={() => setAssignSession(s)}>
+              {t('charge.battery.assign.action')}
+            </Button>
+          )}
+        </span>
       ),
     },
   ]
@@ -214,10 +296,43 @@ export function ChargeSessions() {
                   </span>
                 ),
               },
+              {
+                key: 'startVoltage',
+                label: t('charge.battery.sessions.startVoltage'),
+                children:
+                  selected.startVoltage === null ? (
+                    <Typography.Text type="secondary" aria-label={t('charge.battery.notDetermined')}>
+                      —
+                    </Typography.Text>
+                  ) : (
+                    <span className="tabular">
+                      {selected.startVoltage.toFixed(2)} {t('units.volt')}
+                    </span>
+                  ),
+              },
+              {
+                key: 'battery',
+                label: t('charge.battery.sessions.battery'),
+                children:
+                  batteryName(selected.batteryId) === null ? (
+                    t('charge.battery.sessions.unassigned')
+                  ) : (
+                    <Tag color="processing">{batteryName(selected.batteryId)}</Tag>
+                  ),
+              },
+              {
+                key: 'eligibility',
+                label: t('charge.battery.detail.eligibility'),
+                children: eligibilityTag(selected),
+              },
             ]}
           />
         ) : null}
       </Drawer>
+
+      {assignSession !== null && (
+        <ChargeAssignBatteryModal session={assignSession} onClose={() => setAssignSession(null)} />
+      )}
     </Flex>
   )
 }
