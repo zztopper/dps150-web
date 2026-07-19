@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Battery health & cycle tracking (F-026): a **battery library** (`batteries`) of
+  physical packs, with post-hoc assignment of finished charge sessions to a
+  battery (`POST /charge/sessions/{id}/battery`) and per-battery health computed
+  from the accumulated charges — capacity (`latest`/`best`/`first`), state of
+  health, degradation, full-cycle count, equivalent cycles and total energy — on
+  a new "Батареи" tab of the Charge page with a capacity-degradation chart.
+  Because `deliveredMah` is charge *accepted this session* (not battery capacity —
+  a top-up is a `completed` charge that delivers little), capacity metrics are
+  gated to genuine **from-empty** charges: the charger now persists the
+  already-measured start open-circuit voltage (`start_voltage`, the one additive
+  device-touching change — the charge process is byte-for-byte unchanged on the
+  wire), and only sessions that started at/below the chemistry's empty threshold
+  feed capacity/SoH/degradation; throughput metrics (equivalent cycles, total Wh)
+  use all completed sessions. Formalized in ADR-011 (`docs/architecture/design.md
+  §3.10`, `api-contract.md v7`). Additive migration (new table + two nullable
+  columns on `charge_sessions`); internal resistance (Rint) is deferred to v2.
 - IV sweep comparison + component library (ВАХ, F-025): a read-only analytics
   layer over the F-024 tracer with **zero device/run-engine/interlock/safety
   surface**. A **component library** (`iv_components`) of characterized physical

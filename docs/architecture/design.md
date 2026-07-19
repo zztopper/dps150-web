@@ -719,6 +719,232 @@ already-finalized sweep row.
   5. **Docs / deploy** — CHANGELOG + this doc; release is an MR bumping
      `image.tag` (§4). No new env, secret, config flag or infra change.
 
+### 3.10 Battery health & cycle tracking (ADR-011)
+
+Decision: add **per-battery health tracking** on top of the F-023 charger — a
+**library of physical batteries** plus **capacity / state-of-health / degradation /
+cycle metrics derived from that battery's charge sessions**. Almost all of it is a
+**read-only analytics layer** with the F-025 zero-device posture (a new storage
+entity, read/CRUD endpoints, one frontend tab, aggregates computed at query time);
+the **single exception** is one **additive, safety-adjacent charger change** — the
+charger persists the **start voltage** it already measures — which the rest of the
+feature needs to tell a real capacity cycle from a top-up. That one change is called
+out explicitly below so it can take its own safety-DA pass; everything else touches
+no setpoint, output, interlock, protocol or emulator surface.
+
+- **Why the naïve "SoH from `delivered_mah`" design is wrong (the DA blocker this
+  ADR fixes).** `delivered_mah` is the charge **accepted in one session**, *not* the
+  battery's capacity. The common case is a **top-up**: a half-full pack charged to
+  full `completes` normally having accepted only a fraction of its capacity, so a SoH
+  computed as `latest delivered / rated` reads **"10 % health" after a perfectly
+  healthy top-up**. Capacity is only observable when a charge runs **from empty to
+  full**, and whether a session started empty depends on its **start voltage** — which
+  the charger measures at pre-flight (output off, `manager.go:454` `readVbat`) but
+  **currently discards**: a session finalizes with only `delivered_mah / delivered_wh
+  / peak_voltage` + the opaque `snapshot` (`run.go:357`). So the honest design cannot
+  be pure-read — it needs one new persisted datum.
+
+- **Decision: capture the start voltage in the charger (the ONLY device-touching
+  change — separate safety-DA wave).** Add a **nullable `start_voltage`** column to
+  `charge_sessions`; at session creation the charger writes the **already-measured**
+  open-terminal Vbat (the `vbat` from `readVbat` at `manager.go:454`, threaded through
+  `beginSession` → `SessionStart` → `BeginSession`) into the row. This is **purely
+  additive**: it records a value the pre-flight **already reads with the output off**
+  — **no new measurement, no new device I/O, no change to the pre-flight, the
+  invariant start order, the phases, the staleness watchdog, `SafeOutputOff` or any
+  termination/abort path**. The charge process is byte-for-byte identical on the wire;
+  only one extra field is written to the session row. This is the one bullet the
+  safety review must scrutinise — everything after it is zero-device. **Two
+  implementation invariants the safety review pinned** (else the capacity gate
+  ships wrong): the column/model field is **`*float64` (nullable)** — a plain
+  `float64` scans a DB `NULL` back as `0`, which the gate would read as "0 V ⇒
+  from-empty" and mis-count every legacy row; and the finalize path
+  (`UpdateChargeSession` does a full-row `Save`) **must preserve `start_voltage`
+  from the existing row**, exactly like the other denormalized start-time fields
+  (`chemistry`/`cells`/`started_at`) — otherwise every `completed` finalize zeroes
+  it and poisons the very gate this feature exists for. A begin→finish round-trip
+  test asserts `start_voltage` survives. **Legacy
+  sessions** (finalized before F-026) have `start_voltage = NULL` → their start SoC is
+  unknown → they are **excluded from every capacity metric** and shown flagged "стартовый
+  SoC неизвестен", never silently treated as full cycles. Note this captures the
+  **open-terminal OCV only** — it is *not* Rint: internal-resistance tracking additionally
+  needs the **CC-onset voltage** (the IR step when charge current first flows), a second
+  measurement that would touch the run loop, so **Rint stays deferred to v2** (bundled with
+  the start-time battery preselect, both of which need further charger-engine work).
+
+- **Capacity-eligibility — the honesty gate.** A session is a **capacity data-point**
+  (feeds `latest/best/first` capacity, SoH, degradation and `fullCycleCount`) only
+  when it is `state = 'completed'` **AND** `delivered_mah > 0` **AND**
+  `start_voltage IS NOT NULL` **AND** the pack started **empty**:
+  `start_voltage / cells ≤ emptyThreshold(chemistry)` with per-cell thresholds
+  **Li-ion ≤ 3.00 V, LiFePO4 ≤ 2.50 V, Pb ≤ 1.90 V**. The Li-ion/LiFePO4 thresholds
+  are **exactly the F-023 pre-charge thresholds** (§3.7) — a pack below the pre-charge
+  point *is* the "deeply discharged" state — so "eligible" == "was charged from
+  empty" with no new safety constant to bless. A `completed` **top-up** (start voltage
+  above the threshold) stays **assigned and visible** but is flagged "не измерение
+  ёмкости" and is **not** a capacity point. (Honest limitation: the threshold is
+  "near-empty", not a true 0 % cutoff, so an eligible session's `delivered_mah` is a
+  **consistent lower-bound proxy** for capacity, not an absolute mAh — but SoH and
+  degradation are **ratios of same-method measurements**, so the offset cancels for
+  the `best`-baseline; the `rated`-baseline reads **conservative** by design.)
+
+- **Data model — a new first-class entity + two additive session columns.** A battery
+  exists **independently of any session**. New `batteries` table
+  `{id, name, chemistry, cells, rated_capacity_mah, part_number, notes, created_at,
+  updated_at}`: `chemistry` reuses the F-023 charge enum (`liion|lifepo4|pb`) and
+  `cells` (≥ 1) are **fixed at creation** — together they gate which sessions may join
+  (association, below) and drive the per-cell empty threshold, so an edit can never
+  retroactively invalidate members; `rated_capacity_mah` is **optional** (`≥ 0`,
+  `0`/absent = unset); `name` non-empty ≤ 200; `part_number`/`notes` optional free
+  text. `charge_sessions` gains **two nullable columns**: an **indexed `battery_id`**
+  (`0`/`NULL` = unassigned) and **`start_voltage`** (above). **No reference-pin** (a
+  battery's health is a **query-time aggregate** over its sessions, not a stored
+  canonical row) — so there is no `ref_*` column, none of F-025's ref-fixup, and
+  **aggregates are never denormalized**: assign / unassign / reassign / delete only
+  flip a `battery_id`, and both affected batteries' numbers simply recompute on the
+  next read. Migration is **additive** on both sqlite and postgres via
+  `storage.Config.Models` (a new anchor for `batteries`; `battery_id` + `start_voltage`
+  added in place) — no dialect functions, no separate SQL migration, the
+  charge/IV storage convention (§3.7/§3.8/§3.9).
+
+- **Association is post-hoc only, and typed.** A finished session is attached to a
+  battery **after the fact**, from the История / battery views, via one new session
+  mutation `POST /charge/sessions/{id}/battery {batteryId: N|null}` (`0`/`null` =
+  unassign). There is **no start-time battery preselect** in v1 (a v2 deferral), so
+  `charger.Request` and the run loop are unchanged apart from the `start_voltage`
+  write above. Assignment requires the session to be **finalized** (`completed |
+  stopped | aborted | failed`); a **`running`** session cannot be assigned →
+  **`409 charge_active`** (startup reconciliation closes crashed `running` rows, so a
+  persistent one is a live run). Assignment validates against the session's
+  **denormalized** `chemistry` **and** `cells` (the values copied onto the row at
+  start — **not** the profile's, which may have been edited or deleted); both must
+  **equal the battery's** (no wildcard) else `400 invalid_battery`. The **assignable
+  set** (any finalized session of matching chemistry×cells) is deliberately **wider
+  than the capacity-eligible set**: a `stopped`/`aborted` run — or a `completed`
+  top-up — belongs in the battery's log even though it is not a capacity point. Each
+  mutation runs in **one DB transaction** (read-validate-write), matching F-025.
+
+- **Health metrics — two honest families, query-time, one window-function pass, no
+  N+1.** Every number is **derived, never stored**, returned on **both** the battery
+  list (`GET /charge/batteries`) and the detail (`GET /charge/batteries/{id}`),
+  computed for the whole list in **one query** (no per-battery loop). There is
+  deliberately **no field named `cycleCount`** — a raw session count is not a cycle
+  count. Two families:
+  - **Capacity / SoH family — over the *eligible* set only** (the predicate above):
+    `fullCycleCount` = **count of eligible sessions** (honest full cycles);
+    `latestCapacityMah` / `firstCapacityMah` = `delivered_mah` of the **newest /
+    oldest** eligible session **by `started_at` then `id`**; `bestCapacityMah` =
+    `MAX(delivered_mah)` **over eligible sessions only** (never over all `completed`,
+    so a top-up can never poison the baseline); `sohPct = 100 × latest / rated` when
+    `rated > 0`, else `100 × latest / best`; `degradationPct = 100 × (1 − latest /
+    best)`.
+  - **Throughput family — over all `completed` sessions with `delivered_mah > 0`**
+    (top-ups included, because they *do* wear the cell): `equivalentCycles =
+    Σ(delivered_mah) / rated` when `rated > 0` (a standard equivalent-full-cycle wear
+    proxy), else `null`; `totalWh = Σ(delivered_wh)` (lifetime energy through the
+    battery).
+  - **Implementation — window function, not a bare `GROUP BY`.** `latest/first
+    capacity` are *value-at-max/min(`started_at`)*, not expressible as `MAX/MIN` of a
+    column, so the capacity family is computed with
+    `ROW_NUMBER() OVER (PARTITION BY battery_id ORDER BY started_at …)` over the
+    eligible rows (portable across **sqlite ≥ 3.25 and postgres**), one pass, no N+1;
+    the throughput family is a plain `SUM` `GROUP BY battery_id` over the completed
+    rows. Sessions are **interlock-serialised** (only one charge runs at a time), so
+    `started_at` is monotonic and the "latest/first by `started_at`" ordering is
+    well-defined (tie-break `id`).
+  - **Guards (never NaN/Inf).** No eligible sessions ⇒ `fullCycleCount: 0` and
+    `latest / best / first / sohPct / degradationPct: null`. No `completed` sessions ⇒
+    `totalWh: 0`, `equivalentCycles: null`. `rated ≤ 0` ⇒ `equivalentCycles: null` and
+    SoH falls back to the `best` baseline. When any capacity ratio is emitted,
+    `best > 0` (a `MAX` of positive eligible values) and `latest ≤ best` (`best` is the
+    true max of a set that includes `latest`) — so **`degradationPct ≥ 0` is
+    guaranteed** and no denominator is ever zero. `sohPct` **may exceed 100 %** (a
+    strong cell out-delivering an understated `rated`): the payload carries the **raw,
+    unclamped** value; the **UI shows the true number** (e.g. "103 %") with the health
+    **bar clamped to 100 % width**.
+  - **Chemistry caveat (documented).** For **Pb**, `delivered_mah` includes charge
+    lost to gassing / overpotential (coulombic efficiency ≪ 100 %), so Pb "capacity"
+    is **overstated** vs true Ah delivered on discharge — Pb numbers are a
+    **relative trend**, not an absolute capacity. Li-ion/LiFePO4 are ~99 % efficient
+    and largely free of this.
+
+- **Degradation curve — frontend-only, driven by the SAME eligible set as SoH.** The
+  per-battery chart is built **client-side** from `GET /charge/sessions?batteryId=X`,
+  filtered to the **capacity-eligible** sessions — the identical set that feeds SoH —
+  so the plotted trend and the headline SoH number can **never diverge**. To make that
+  filter possible client-side, the session DTO carries `startVoltage` and a computed
+  `capacityEligible` boolean (below). It is a uPlot with **capacity (`deliveredMah`)
+  on Y** and the session **`startedAt` date on X** (a cycle ordinal 1…N derivable for
+  an alternate X); non-eligible sessions may be drawn as **marked/ghost points** but
+  are excluded from the trend line. The backend adds **no aggregate / curve route** —
+  F-025's "comparison is pure presentation" stance.
+
+- **DTO deltas.** `Battery` carries `fullCycleCount`, `equivalentCycles`,
+  `latestCapacityMah`, `bestCapacityMah`, `firstCapacityMah`, `sohPct`,
+  `degradationPct`, `totalWh` (there is **no** `cycleCount`). `ChargeSession` gains
+  three additive fields: `batteryId` (`number|null`), `startVoltage` (`number|null`,
+  pack volts at start, `null` for legacy rows) and `capacityEligible` (`bool`,
+  intrinsic to the session: `completed ∧ delivered_mah>0 ∧ start_voltage≠null ∧
+  start_voltage/cells ≤ threshold`).
+
+- **Mechanics (mirror F-025, stated explicitly).** The `?batteryId=` filter is
+  **positive-integer only** and applied to **both** the `Count` and the paged `Find`
+  (never a global `total` over a filtered page); a non-numeric value → `400
+  bad_request`. `POST /charge/sessions/{id}/battery` runs in one transaction;
+  `{batteryId: 0|null}` unassigns; assign of a `running` session → `409 charge_active`;
+  chemistry×cells mismatch → `400 invalid_battery`; a non-existent target battery →
+  `404 battery_not_found`. `PUT /charge/batteries/{id}` treats **`chemistry` and
+  `cells` as immutable** (changing either → `400 invalid_battery`); `name` /
+  `rated_capacity_mah` / `part_number` / `notes` are editable (editing `rated` simply
+  re-bases the derived `sohPct`). Creation validates `chemistry ∈ {liion,lifepo4,pb}`,
+  `cells ≥ 1`, `rated_capacity_mah ≥ 0` (`0` = unset), `name` non-empty ≤ 200.
+  `DELETE /charge/batteries/{id}` **nulls `battery_id` on its sessions atomically and
+  does NOT delete the sessions**; **reassign is a silent `battery_id` move** and, because
+  aggregates are query-time, both the old and new battery recompute on next read.
+  There is **no** session-delete route (no ref-pin requires it). New error codes
+  `invalid_battery` (400) and `battery_not_found` (404); `charge_session_not_found`
+  (404), `charge_active` (409) and `storage_unavailable` (503) reused. **No interlock
+  / confirmation gate and no WS additions** on any analytics route — the only
+  device-adjacent change in the whole feature is the `start_voltage` write above.
+
+- **UI — a fourth tab on the existing Charge page, no new route.** ChargePage's tab
+  set grows to four — **Live / Профили / История / Батареи** — driven by the page's
+  existing `?tab=` react-router `useSearchParams` / `setSearchParams({replace:true})`
+  mechanism (default `live` param-less; the new tab `?tab=batteries`). The **Батареи**
+  tab is the battery library (CRUD) plus a battery **detail**: the two cycle numbers
+  (`fullCycleCount` + `equivalentCycles`), SoH (uncapped value, clamped bar),
+  degradation %, best / latest / first capacity and total Wh; the degradation uPlot
+  (eligible sessions only); the battery's session list with **assign / unassign**, each
+  row flagged `capacityEligible` / "top-up" / "стартовый SoC неизвестен"; and — on the
+  **История** tab — an **"assign to battery"** action per finalized session. Visual
+  design is handled separately (ui-ux skill).
+
+- **Migration plan (phased, each phase backward-compatible).**
+  1. **Contract freeze** — this ADR + contract v7 land in one MR; no code yet.
+  2. **Charger start-voltage capture (the ONLY device-touching change; own
+     safety-DA wave).** Add `StartVoltage` to the `ChargeSession` model + the additive
+     `start_voltage` column; thread the already-measured `vbat` (`manager.go:454`)
+     through `beginSession` → `SessionStart` → `BeginSession` so it is written at
+     session creation. **No change** to the pre-flight, start order, phases, watchdog,
+     `SafeOutputOff` or terminations; a test asserts the on-the-wire frame sequence is
+     unchanged. AutoMigrate adds the column; legacy rows stay `NULL`.
+  3. **Storage analytics (zero-device).** The `Battery` model + the `battery_id`
+     column, registered through `storage.Config.Models`; repo methods (battery CRUD;
+     assign/unassign — each in **one transaction** with the finalized-not-running +
+     denormalized chemistry×cells checks; the count-filtered `?batteryId=` sessions
+     list; the **eligible-gated window-function capacity family + completed-set
+     throughput family, with the guards**).
+  4. **API** — the `/charge/batteries` CRUD handlers, the
+     `POST /charge/sessions/{id}/battery` mutation, the `batteryId` filter and the
+     `batteryId`/`startVoltage`/`capacityEligible` fields on the sessions routes, wired
+     in `internal/api/charge.go` + `registerChargeRoutes`; all 503 when storage is off.
+  5. **Frontend** — the Батареи tab + battery detail + the degradation uPlot (eligible
+     filter) + the assign UI (tab and История) + the eligibility/legacy flags, the
+     `src/api/charge.ts` extensions, the three new session fields on the type, MSW mocks
+     and `charge.battery.*` i18n keys.
+  6. **Docs / deploy** — CHANGELOG + this doc; release is an MR bumping `image.tag`
+     (§4). No new env, secret, config flag or infra change.
+
 ## 4. Deploy and environments
 
 - **Single environment** (ns `dps150`): a second instance could not connect
