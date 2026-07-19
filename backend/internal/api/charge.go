@@ -515,14 +515,17 @@ func chargePreflight(store *storage.Storage, mgr *charger.Manager, interlock *de
 	}
 }
 
-// startChargeRequest is the POST /charge/profiles/{id}/start body.
+// startChargeRequest is the POST /charge/profiles/{id}/start body. BatteryID is
+// the optional F-027 start-time preselect (omitted/0/null = start unassigned).
 type startChargeRequest struct {
-	Confirm              bool `json:"confirm"`
-	ConfirmDeepDischarge bool `json:"confirmDeepDischarge"`
+	Confirm              bool   `json:"confirm"`
+	ConfirmDeepDischarge bool   `json:"confirmDeepDischarge"`
+	BatteryID            *int64 `json:"batteryId"`
 }
 
 // startCharge handles POST /api/v1/charge/profiles/{id}/start: it loads the
-// profile, requires an explicit confirmation, and launches the run.
+// profile, requires an explicit confirmation, validates the optional start-time
+// battery preselect (F-027), and launches the run.
 func startCharge(store *storage.Storage, mgr *charger.Manager, interlock *device.Interlock) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !requireChargeStore(c, store) || !requireChargeManager(c, mgr) {
@@ -549,6 +552,25 @@ func startCharge(store *storage.Storage, mgr *charger.Manager, interlock *device
 			return
 		}
 		req := chargeRequestFromProfile(p)
+		// F-027 start-time battery preselect: validate BEFORE mgr.Start energizes
+		// anything. It is a metadata field — the battery must exist and its
+		// chemistry AND cells must equal the profile's (which seed the session's
+		// denormalized values). A rejected batteryId fails the start request before
+		// output-on; omitted/0/null starts unassigned.
+		if body.BatteryID != nil && *body.BatteryID > 0 {
+			bat, err := store.GetBattery(c.Request.Context(), *body.BatteryID)
+			if err != nil {
+				writeChargeStoreError(c, err, "battery_not_found")
+				return
+			}
+			if bat.Chemistry != p.Chemistry || bat.Cells != p.Cells {
+				writeError(c, http.StatusBadRequest, "invalid_battery",
+					fmt.Sprintf("battery %s/%dS does not match profile %s/%dS",
+						bat.Chemistry, bat.Cells, p.Chemistry, p.Cells))
+				return
+			}
+			req.BatteryID = *body.BatteryID
+		}
 		if err := mgr.Start(c.Request.Context(), req, body.ConfirmDeepDischarge); err != nil {
 			writeChargeEngineError(c, err, interlock)
 			return
@@ -641,10 +663,13 @@ func activeCharge(mgr *charger.Manager) gin.HandlerFunc {
 	}
 }
 
-// chargeSessionDTO mirrors the ChargeSession object of the F-023/F-026 contract.
-// EndedAt is null while a run is in flight; Snapshot is the opaque phase/limits
-// blob or null. F-026 adds BatteryID (null = unassigned), StartVoltage (null for
-// pre-F-026 rows) and the intrinsic, computed CapacityEligible flag.
+// chargeSessionDTO mirrors the ChargeSession object of the F-023/F-026/F-027
+// contract. EndedAt is null while a run is in flight; Snapshot is the opaque
+// phase/limits blob or null. F-026 adds BatteryID (null = unassigned),
+// StartVoltage (null for pre-F-026 rows) and the intrinsic CapacityEligible flag.
+// F-027 adds CCOnsetVoltage/CCOnsetCurrent (null when not captured), the computed
+// per-cell RintCellMohm (null unless RintEligible) and the intrinsic RintEligible
+// flag.
 type chargeSessionDTO struct {
 	ID               int64           `json:"id"`
 	ProfileID        int64           `json:"profileId"`
@@ -661,6 +686,10 @@ type chargeSessionDTO struct {
 	PeakVoltage      float64         `json:"peakVoltage"`
 	StartVoltage     *float64        `json:"startVoltage"`
 	CapacityEligible bool            `json:"capacityEligible"`
+	CCOnsetVoltage   *float64        `json:"ccOnsetVoltage"`
+	CCOnsetCurrent   *float64        `json:"ccOnsetCurrent"`
+	RintCellMohm     *float64        `json:"rintCellMohm"`
+	RintEligible     bool            `json:"rintEligible"`
 	Snapshot         json.RawMessage `json:"snapshot"`
 }
 
@@ -685,6 +714,16 @@ func chargeSessionJSON(s storage.ChargeSession) chargeSessionDTO {
 		v := *s.StartVoltage
 		startVoltage = &v
 	}
+	var ccOnsetVoltage *float64
+	if s.CCOnsetVoltage != nil {
+		v := *s.CCOnsetVoltage
+		ccOnsetVoltage = &v
+	}
+	var ccOnsetCurrent *float64
+	if s.CCOnsetCurrent != nil {
+		v := *s.CCOnsetCurrent
+		ccOnsetCurrent = &v
+	}
 	return chargeSessionDTO{
 		ID:               s.ID,
 		ProfileID:        s.ProfileID,
@@ -701,6 +740,10 @@ func chargeSessionJSON(s storage.ChargeSession) chargeSessionDTO {
 		PeakVoltage:      s.PeakVoltage,
 		StartVoltage:     startVoltage,
 		CapacityEligible: s.CapacityEligible(),
+		CCOnsetVoltage:   ccOnsetVoltage,
+		CCOnsetCurrent:   ccOnsetCurrent,
+		RintCellMohm:     s.RintCellMohm(),
+		RintEligible:     s.RintEligible(),
 		Snapshot:         snapshot,
 	}
 }

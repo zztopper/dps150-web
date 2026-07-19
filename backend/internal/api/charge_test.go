@@ -291,6 +291,107 @@ func TestChargeStartRequiresConfirm(t *testing.T) {
 	}
 }
 
+// storeAdapter bridges *storage.Storage to charger.Store for the api tests
+// (mirroring cmd/server's chargeStore), so a manager can persist a real session.
+type storeAdapter struct{ s *storage.Storage }
+
+func (a storeAdapter) BeginSession(ctx context.Context, ss charger.SessionStart) (int64, error) {
+	sess := &storage.ChargeSession{
+		ProfileID: ss.ProfileID, BatteryID: ss.BatteryID, ProfileName: ss.ProfileName,
+		Chemistry: ss.Chemistry, Cells: ss.Cells, StartedAt: ss.StartedAt.UnixMilli(),
+		State: charger.StateRunning, StartVoltage: ss.StartVoltage,
+		CCOnsetVoltage: ss.CCOnsetVoltage, CCOnsetCurrent: ss.CCOnsetCurrent,
+	}
+	if err := a.s.CreateChargeSession(ctx, sess); err != nil {
+		return 0, err
+	}
+	return sess.ID, nil
+}
+
+func (a storeAdapter) FinishSession(ctx context.Context, id int64, r charger.SessionResult) error {
+	return a.s.UpdateChargeSession(ctx, &storage.ChargeSession{
+		ID: id, State: r.State, Reason: r.Reason, EndedAt: r.EndedAt.UnixMilli(),
+		DeliveredMah: r.DeliveredMah, DeliveredWh: r.DeliveredWh, PeakVoltage: r.PeakVoltage,
+	})
+}
+
+func (a storeAdapter) RecordCCOnset(ctx context.Context, id int64, v, i float64) error {
+	return a.s.RecordChargeCCOnset(ctx, id, v, i)
+}
+
+func (a storeAdapter) AppendEvent(ctx context.Context, kind string, data any) error {
+	return a.s.AppendEvent(ctx, kind, data)
+}
+
+func (a storeAdapter) MarkOrphanRunningFailed(ctx context.Context, reason string) (int64, error) {
+	return a.s.MarkRunningChargeSessionsFailed(ctx, reason)
+}
+
+// TestChargeStartBatteryPreselect exercises the F-027 start-time battery preselect:
+// an unknown battery → 404 battery_not_found, a chemistry×cells mismatch → 400
+// invalid_battery (both rejected BEFORE anything energizes), and a matching battery
+// → 202 with the created session assigned to it.
+func TestChargeStartBatteryPreselect(t *testing.T) {
+	store := newChargeTestStore(t)
+	snap := onlineSnapshot()
+	snap.State.Voltage = 3.7 // a valid 1S li-ion open-terminal reading for the preflight
+	hub := &fakeHub{snap: snap, updates: make(chan device.Update, 8)}
+	mgr := charger.New(hub, charger.WithStore(storeAdapter{s: store}),
+		charger.WithTimings(200*time.Millisecond, time.Second, 5*time.Millisecond, time.Second))
+	r := chargeRouter(hub, store, mgr, nil)
+
+	// A 1S li-ion profile (validChargeBody), a matching 1S battery and a 3S one.
+	prof := decodeChargeProfile(t, doCharge(t, r, http.MethodPost, "/api/v1/charge/profiles", validChargeBody).Body.String())
+	match := decodeBattery(t, doCharge(t, r, http.MethodPost, "/api/v1/charge/batteries",
+		`{"name":"match","chemistry":"liion","cells":1,"ratedCapacityMah":3400}`).Body.String())
+	mismatch := decodeBattery(t, doCharge(t, r, http.MethodPost, "/api/v1/charge/batteries",
+		`{"name":"mismatch","chemistry":"liion","cells":3,"ratedCapacityMah":3400}`).Body.String())
+
+	start := fmt.Sprintf("/api/v1/charge/profiles/%d/start", prof.ID)
+
+	// Unknown battery → 404 battery_not_found (validated before Start).
+	w := doCharge(t, r, http.MethodPost, start, `{"confirm":true,"batteryId":999999}`)
+	if w.Code != http.StatusNotFound || errorCode(t, w.Body.String()) != "battery_not_found" {
+		t.Errorf("start with unknown battery = %d/%s, want 404 battery_not_found", w.Code, w.Body.String())
+	}
+
+	// Chemistry×cells mismatch → 400 invalid_battery (before Start).
+	w = doCharge(t, r, http.MethodPost, start, fmt.Sprintf(`{"confirm":true,"batteryId":%d}`, mismatch.ID))
+	if w.Code != http.StatusBadRequest || errorCode(t, w.Body.String()) != "invalid_battery" {
+		t.Errorf("start with mismatched battery = %d/%s, want 400 invalid_battery", w.Code, w.Body.String())
+	}
+
+	// A rejected preselect must not have energized the output.
+	hub.mu.Lock()
+	energized := len(hub.outputs) > 0
+	hub.mu.Unlock()
+	if energized {
+		t.Errorf("output energized despite a rejected preselect: %v", hub.outputs)
+	}
+
+	// Matching battery → 202, and the created session carries the preselected id.
+	w = doCharge(t, r, http.MethodPost, start, fmt.Sprintf(`{"confirm":true,"batteryId":%d}`, match.ID))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("start with matching battery = %d, want 202: %s", w.Code, w.Body.String())
+	}
+	mgr.Stop()
+
+	w = doCharge(t, r, http.MethodGet, fmt.Sprintf("/api/v1/charge/sessions?batteryId=%d", match.ID), "")
+	var page struct {
+		Items []chargeSessionDTO `json:"items"`
+		Total int64              `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode sessions: %v", err)
+	}
+	if page.Total < 1 || len(page.Items) < 1 {
+		t.Fatalf("no session assigned to preselected battery %d: %s", match.ID, w.Body.String())
+	}
+	if page.Items[0].BatteryID == nil || *page.Items[0].BatteryID != match.ID {
+		t.Errorf("session batteryId = %v, want %d (start-time preselect)", page.Items[0].BatteryID, match.ID)
+	}
+}
+
 // The 409 gate reads the shared interlock: while it is owned by "charge",
 // manual device mutations are rejected with 409 charge_active.
 func TestChargeGateBlocksMutations(t *testing.T) {

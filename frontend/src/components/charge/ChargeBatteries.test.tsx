@@ -10,6 +10,7 @@ import {
   chargeSessionsListRoute,
   makeBattery,
   makeChargeSession,
+  makeRintSession,
 } from '../../test/chargeRoutes'
 import { ChargeBatteries } from './ChargeBatteries'
 
@@ -124,5 +125,69 @@ describe('ChargeBatteries (Батареи)', () => {
       await within(dialog).findByText(/Пока нет измерений ёмкости/, undefined, { timeout: 5000 }),
     ).toBeInTheDocument()
     expect(within(dialog).queryByRole('img', { name: /деградации/ })).not.toBeInTheDocument()
+  })
+
+  it('builds the Rint trend from rintEligible sessions only and flags the rest', async () => {
+    const store = { items: [makeBattery({ id: 2 })] }
+    // Three sessions on battery 2: two clean Rint measurements (mid-SoC top-ups
+    // with a real CC phase), one from-empty capacity cycle whose precharge
+    // inflates ΔV so it is NOT a Rint data-point (near-disjoint with capacity).
+    stubFetchRoutes([
+      batteriesListRoute(store),
+      chargeSessionsListRoute([
+        makeRintSession({ id: 41, batteryId: 2, rintCellMohm: 41.2 }),
+        makeRintSession({ id: 42, batteryId: 2, rintCellMohm: 44.0, startedAt: 1784100000000 }),
+        makeChargeSession({ id: 43, batteryId: 2, capacityEligible: true, rintEligible: false }),
+      ]),
+    ])
+
+    renderWithProviders(<ChargeBatteries />)
+
+    fireEvent.click(await screen.findByText('Pack A — 3S1P 18650'))
+    const dialog = await screen.findByRole('dialog')
+
+    // The Rint trend chart renders (≥1 rintEligible session) — a distinct chart
+    // from the capacity-degradation one (matched by its own aria-label).
+    expect(
+      await within(dialog).findByRole('img', { name: /сопротивлени/i }, { timeout: 5000 }),
+    ).toBeInTheDocument()
+
+    // The from-empty capacity cycle is flagged as excluded from Rint; the two
+    // clean measurements show the "Rint measurement" flag with their mΩ value.
+    expect(within(dialog).getByText('Из разряда — не измерение Rint')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('Измерение Rint').length).toBe(2)
+    expect(within(dialog).getByText(/41\.2/)).toBeInTheDocument()
+  })
+
+  it('renders a null Rint metric as "—" and the empty Rint state', async () => {
+    // Capacity metrics are set (no capacity nulls), but this battery has no
+    // Rint-eligible sessions → latest/best Rint null, count 0.
+    const store = {
+      items: [makeBattery({ id: 2, latestRintCellMohm: null, bestRintCellMohm: null, rintCount: 0 })],
+    }
+    stubFetchRoutes([
+      batteriesListRoute(store),
+      chargeSessionsListRoute([
+        // A from-empty capacity cycle: capacity-eligible, but not Rint-eligible.
+        makeChargeSession({ id: 51, batteryId: 2, capacityEligible: true, rintEligible: false }),
+      ]),
+    ])
+
+    renderWithProviders(<ChargeBatteries />)
+
+    fireEvent.click(await screen.findByText('Pack A — 3S1P 18650'))
+    const dialog = await screen.findByRole('dialog')
+
+    // No Rint-eligible session → the Rint curve is replaced by its empty state.
+    expect(
+      await within(dialog).findByText(/Пока нет измерений Rint/, undefined, { timeout: 5000 }),
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByRole('img', { name: /сопротивлени/i })).not.toBeInTheDocument()
+
+    // The latest-Rint metric renders as "—" / "не определено", never a fake 0
+    // (all capacity metrics are set, so this em dash is the null Rint value).
+    expect(within(dialog).getAllByLabelText('не определено').length).toBeGreaterThan(0)
+    // The Rint count is a plain 0 (a count, not a nullable ratio).
+    expect(within(dialog).getByText('Измерений Rint')).toBeInTheDocument()
   })
 })

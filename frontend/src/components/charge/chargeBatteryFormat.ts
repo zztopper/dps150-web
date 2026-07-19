@@ -29,6 +29,54 @@ export function eligibleCapacitySeries(sessions: readonly ChargeSession[]): Capa
 }
 
 /**
+ * A point on the Rint trend curve: one Rint-eligible session's per-cell internal
+ * resistance (mΩ) at its start time. The X axis is the session date, the Y axis
+ * per-cell mΩ. Rising = aging (approximate — a same-method trend, not absolute).
+ */
+export interface RintPoint {
+  startedAt: number
+  rintCellMohm: number
+}
+
+/**
+ * The Rint trend series for a battery: its `rintEligible === true` sessions only
+ * — the SAME set the backend counts for `latest`/`best`/`count`, so the curve
+ * and the headline metrics can never diverge (the F-026 SoH-vs-curve lesson) —
+ * sorted ascending by `startedAt` (tie-break `id`). A non-eligible session (a
+ * from-empty charge whose precharge inflates ΔV, or a run with no CC-onset
+ * capture) is deliberately excluded — plotting it would poison the trend with a
+ * ~5–7× inflated reading. `rintEligible` implies `rintCellMohm != null` per the
+ * contract, but the `!= null`/finite guard keeps the map total-typed and safe.
+ * Pure so the filtering is unit-testable without a canvas (the chart no-ops
+ * under jsdom).
+ */
+export function eligibleRintSeries(sessions: readonly ChargeSession[]): RintPoint[] {
+  return sessions
+    .filter((s) => s.rintEligible && s.rintCellMohm !== null && Number.isFinite(s.rintCellMohm))
+    .slice()
+    .sort((a, b) => (a.startedAt === b.startedAt ? a.id - b.id : a.startedAt - b.startedAt))
+    .map((s) => ({ startedAt: s.startedAt, rintCellMohm: s.rintCellMohm as number }))
+}
+
+/**
+ * Why a session is (not) a Rint measurement — drives the per-row Rint flag on
+ * the battery's session list. `eligible` sessions feed the Rint metrics and the
+ * trend; `fromEmpty` is a genuine capacity cycle (charge-from-empty) whose
+ * precharge inflates ΔV so it is excluded from Rint (the "capacity xor clean
+ * Rint" near-disjoint split — `capacityEligible` is the same-threshold signal of
+ * a from-empty start); `notMeasured` is everything else (no CC-onset capture — a
+ * legacy row, a start already in CV, or a run too short — or a non-positive ΔV).
+ */
+export type RintFlag = 'eligible' | 'fromEmpty' | 'notMeasured'
+
+export function rintFlag(session: ChargeSession): RintFlag {
+  if (session.rintEligible) {
+    return 'eligible'
+  }
+  return session.capacityEligible ? 'fromEmpty' : 'notMeasured'
+}
+
+/**
  * Bar width (0..100) for the health bar. `sohPct` may exceed 100 (a strong cell
  * out-delivering an understated rating); the bar is CLAMPED to 100 % while the
  * caller shows the true, unclamped number as text (contract v7 SoH>100 rule). A

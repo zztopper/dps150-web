@@ -67,6 +67,117 @@ func mkSession(t *testing.T, s *Storage, chemistry string, cells int, startedAt 
 	return sess.ID
 }
 
+// mkRintSession creates a session with a start voltage and (when onsetI > 0) a
+// mid-run CC-onset capture, finalizes it to state, and assigns it to a battery. It
+// mirrors the real charge flow (RecordChargeCCOnset before finalize, so the
+// finalize must preserve the columns). It returns the created id.
+func mkRintSession(t *testing.T, s *Storage, cells int, startedAt int64, state string, startV, onsetV, onsetI float64, batteryID int64) int64 {
+	t.Helper()
+	ctx := context.Background()
+	sv := startV
+	sess := ChargeSession{
+		ProfileName: "rint", Chemistry: "liion", Cells: cells,
+		StartedAt: startedAt, State: "running", StartVoltage: &sv,
+	}
+	if err := s.CreateChargeSession(ctx, &sess); err != nil {
+		t.Fatalf("CreateChargeSession: %v", err)
+	}
+	if onsetI > 0 {
+		if err := s.RecordChargeCCOnset(ctx, sess.ID, onsetV, onsetI); err != nil {
+			t.Fatalf("RecordChargeCCOnset: %v", err)
+		}
+	}
+	fin := ChargeSession{
+		ID: sess.ID, State: state, Reason: "x", EndedAt: startedAt + 100,
+		DeliveredMah: 1000, DeliveredWh: 3.7, PeakVoltage: 4.2,
+	}
+	if err := s.UpdateChargeSession(ctx, &fin); err != nil {
+		t.Fatalf("UpdateChargeSession: %v", err)
+	}
+	if batteryID > 0 {
+		if _, err := s.AssignSessionBattery(ctx, sess.ID, batteryID); err != nil {
+			t.Fatalf("AssignSessionBattery: %v", err)
+		}
+	}
+	return sess.ID
+}
+
+// runBatteryRintSuite exercises the F-027 query-time Rint aggregates (the
+// no-precharge gate distinct from the capacity gate, MIN-not-MAX best, window
+// latest, count, stopped-still-eligible, and the null guards) against a ready
+// storage of any dialect.
+func runBatteryRintSuite(t *testing.T, s *Storage) {
+	t.Helper()
+	ctx := context.Background()
+
+	db, err := s.DB()
+	if err != nil {
+		t.Fatalf("DB: %v", err)
+	}
+	for _, table := range []string{"charge_sessions", "batteries"} {
+		if err := db.WithContext(ctx).Exec("DELETE FROM " + table).Error; err != nil {
+			t.Fatalf("clean %s table: %v", table, err)
+		}
+	}
+
+	// Battery R (liion 1S): the full Rint mix.
+	//   S1 oldest  eligible: start 3.55, onset 3.62/1.70 → 41.18 mΩ
+	//   S2         eligible: start 3.60, onset 3.69/1.70 → 52.94 mΩ
+	//   S3         from-empty (start 2.85 < 3.00 precharge) → EXCLUDED (inflated)
+	//   S4         no onset captured → EXCLUDED
+	//   S5 newest  eligible, STOPPED: start 3.58, onset 3.66/1.70 → 47.06 mΩ
+	batR := Battery{Name: "R", Chemistry: "liion", Cells: 1, RatedCapacityMah: 3400}
+	if err := s.CreateBattery(ctx, &batR); err != nil {
+		t.Fatalf("CreateBattery(R): %v", err)
+	}
+	mkRintSession(t, s, 1, 1000, "completed", 3.55, 3.62, 1.70, batR.ID)
+	mkRintSession(t, s, 1, 2000, "completed", 3.60, 3.69, 1.70, batR.ID)
+	mkRintSession(t, s, 1, 3000, "completed", 2.85, 3.31, 1.70, batR.ID) // from-empty
+	mkRintSession(t, s, 1, 4000, "completed", 3.55, 0, 0, batR.ID)       // no onset
+	mkRintSession(t, s, 1, 5000, "stopped", 3.58, 3.66, 1.70, batR.ID)   // newest eligible
+
+	// Battery E (liion 1S): only precharge-inflated / no-onset sessions → no Rint.
+	batE := Battery{Name: "E", Chemistry: "liion", Cells: 1}
+	if err := s.CreateBattery(ctx, &batE); err != nil {
+		t.Fatalf("CreateBattery(E): %v", err)
+	}
+	mkRintSession(t, s, 1, 1000, "completed", 2.85, 3.31, 1.70, batE.ID) // from-empty, excluded
+
+	health, err := s.BatteryHealthMap(ctx, 0)
+	if err != nil {
+		t.Fatalf("BatteryHealthMap(all): %v", err)
+	}
+
+	r := health[batR.ID]
+	if r.RintCount != 3 {
+		t.Errorf("R rintCount = %d, want 3 (S1, S2, S5; from-empty + no-onset excluded)", r.RintCount)
+	}
+	wantLatest := (3.66 - 3.58) / 1.70 * 1000 // S5, newest eligible by started_at
+	wantBest := (3.62 - 3.55) / 1.70 * 1000   // S1, the MIN (lower is healthier)
+	if r.LatestRintCellMohm == nil || !approxEq(*r.LatestRintCellMohm, wantLatest) {
+		t.Errorf("R latestRintCellMohm = %v, want %v (newest eligible S5)", r.LatestRintCellMohm, wantLatest)
+	}
+	if r.BestRintCellMohm == nil || !approxEq(*r.BestRintCellMohm, wantBest) {
+		t.Errorf("R bestRintCellMohm = %v, want %v (MIN over eligible, not MAX)", r.BestRintCellMohm, wantBest)
+	}
+
+	// Battery E: no eligible sessions → count 0, latest/best nil (never NaN/Inf).
+	e := health[batE.ID]
+	if e.RintCount != 0 || e.LatestRintCellMohm != nil || e.BestRintCellMohm != nil {
+		t.Errorf("E rint family = count %d, latest %v, best %v; want 0 / nil / nil", e.RintCount, e.LatestRintCellMohm, e.BestRintCellMohm)
+	}
+
+	// The single-battery detail path returns the same Rint numbers as the list.
+	one, err := s.BatteryHealthMap(ctx, batR.ID)
+	if err != nil {
+		t.Fatalf("BatteryHealthMap(one): %v", err)
+	}
+	or := one[batR.ID]
+	if or.RintCount != r.RintCount || or.LatestRintCellMohm == nil || !approxEq(*or.LatestRintCellMohm, *r.LatestRintCellMohm) {
+		t.Errorf("single-battery rint = %+v, want same as list (count %d, latest %v)", or, r.RintCount, r.LatestRintCellMohm)
+	}
+}
+
 // runBatterySuite exercises the F-026 battery CRUD, association and delete against
 // a ready storage of any dialect.
 func runBatterySuite(t *testing.T, s *Storage) {
@@ -422,6 +533,18 @@ func TestDeriveBatteryHealth(t *testing.T) {
 	if h.SohPct == nil || *h.SohPct <= 100 {
 		t.Errorf("sohPct = %v, want raw > 100 (not clamped)", h.SohPct)
 	}
+
+	// F-027: the Rint family passes through from the agg (SQL-computed) unchanged,
+	// and is null/0 when there are no eligible rows.
+	empty := deriveBatteryHealth(batteryAgg{}, 3400)
+	if empty.RintCount != 0 || empty.LatestRintCellMohm != nil || empty.BestRintCellMohm != nil {
+		t.Errorf("empty rint family = count %d latest %v best %v, want 0/nil/nil", empty.RintCount, empty.LatestRintCellMohm, empty.BestRintCellMohm)
+	}
+	withRint := deriveBatteryHealth(batteryAgg{rintCount: 3, latestRint: fptr(47.06), bestRint: fptr(41.18)}, 3400)
+	if withRint.RintCount != 3 || withRint.LatestRintCellMohm == nil || !approxEq(*withRint.LatestRintCellMohm, 47.06) ||
+		withRint.BestRintCellMohm == nil || !approxEq(*withRint.BestRintCellMohm, 41.18) {
+		t.Errorf("rint family passthrough = %+v, want count 3, latest 47.06, best 41.18", withRint)
+	}
 }
 
 func TestSQLiteBattery(t *testing.T) {
@@ -430,6 +553,7 @@ func TestSQLiteBattery(t *testing.T) {
 	waitReady(t, s, 5*time.Second)
 	runBatterySuite(t, s)
 	runBatteryHealthSuite(t, s)
+	runBatteryRintSuite(t, s)
 }
 
 func TestBatteryUnavailable(t *testing.T) {
@@ -471,4 +595,5 @@ func TestPostgresBattery(t *testing.T) {
 	waitReady(t, s, 60*time.Second)
 	runBatterySuite(t, s)
 	runBatteryHealthSuite(t, s)
+	runBatteryRintSuite(t, s)
 }

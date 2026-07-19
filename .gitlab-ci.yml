@@ -192,7 +192,12 @@ test:frontend:
   script:
     - cd frontend
     - npm ci
-    - npm run test
+    # --no-file-parallelism: run test files sequentially. Under CPU contention on
+    # the single shared runner, file-parallel vitest intermittently timed out an
+    # AntD portal-Select interaction (the IVSweeps CSV-export test) — a flake that
+    # failed pipelines for F-025/F-026/F-027 while the suite is green locally.
+    # Sequential is slower but deterministic; correctness over a few extra seconds.
+    - npm run test -- --no-file-parallelism
 
 # Playwright e2e: dashboard in Chromium against the real backend running the
 # built-in device emulator (DPS_TRANSPORT=mock://). Needs glibc for the

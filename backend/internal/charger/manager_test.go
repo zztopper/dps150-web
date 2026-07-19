@@ -108,6 +108,13 @@ func (h *fakeHub) Refresh(context.Context) error {
 	return nil
 }
 
+// ccOnset is one recorded CC-onset capture (F-027).
+type ccOnset struct {
+	sessID  int64
+	voltage float64
+	current float64
+}
+
 // fakeStore records session lifecycle.
 type fakeStore struct {
 	mu        sync.Mutex
@@ -116,6 +123,7 @@ type fakeStore struct {
 	finished  []SessionResult
 	events    []string
 	orphanN   int64
+	onsets    []ccOnset
 }
 
 func (s *fakeStore) BeginSession(_ context.Context, start SessionStart) (int64, error) {
@@ -144,6 +152,19 @@ func (s *fakeStore) AppendEvent(_ context.Context, kind string, _ any) error {
 	defer s.mu.Unlock()
 	s.events = append(s.events, kind)
 	return nil
+}
+
+func (s *fakeStore) RecordCCOnset(_ context.Context, sessID int64, voltage, current float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onsets = append(s.onsets, ccOnset{sessID: sessID, voltage: voltage, current: current})
+	return nil
+}
+
+func (s *fakeStore) onsetCalls() []ccOnset {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]ccOnset(nil), s.onsets...)
 }
 
 func (s *fakeStore) MarkOrphanRunningFailed(context.Context, string) (int64, error) {
@@ -205,6 +226,21 @@ func waitFinish(t *testing.T, store *fakeStore, within time.Duration) SessionRes
 	return SessionResult{}
 }
 
+// waitOnset blocks until at least one CC-onset capture is recorded and returns
+// the recorded calls.
+func waitOnset(t *testing.T, store *fakeStore, within time.Duration) []ccOnset {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if calls := store.onsetCalls(); len(calls) > 0 {
+			return calls
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatal("no CC-onset capture recorded in time")
+	return nil
+}
+
 func liion1S() Request {
 	return Request{ProfileID: 1, ProfileName: "cell", Chemistry: ChemLiIon, Cells: 1, CapacityMah: 1000, ChargeA: 1.0}
 }
@@ -259,6 +295,139 @@ func TestStartCapturesStartVoltage(t *testing.T) {
 	if len(cmds) < 4 || cmds[0] != "protections" ||
 		!strings.HasPrefix(cmds[1], "V=") || !strings.HasPrefix(cmds[2], "I=") || cmds[3] != "out=on" {
 		t.Fatalf("start sequence = %v, want protections, V=, I=, out=on unchanged", cmds)
+	}
+}
+
+// TestCCOnsetCaptureOnRampedNoisyCurrent drives a crafted, ramped-and-noisy
+// main-phase current array (F-027 capture, the mandatory ramp test — the emulator
+// settles instantly and cannot reveal a ramp mis-fire). It asserts the capture
+// fires on the FIRST main-phase tick that sustains ≥ 0.9 × Icharge for two
+// consecutive ticks (never on the earlier single-tick spike, never on a noise
+// dip), records that same tick's measured V and I, and never overwrites.
+func TestCCOnsetCaptureOnRampedNoisyCurrent(t *testing.T) {
+	hub := newFakeHub(3.7) // above 3.0 → precharge advances on the first tick
+	store := &fakeStore{}
+	m := testManager(hub, store)
+	// liion 1S, 1000 mAh, 1.0 A ⇒ 0.9 × Icharge = 0.9 A.
+	if err := m.Start(context.Background(), liion1S(), false); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	base := time.Unix(1_700_000_000, 0)
+	// Precharge advances immediately (V ≥ 3.0). Its current is irrelevant to the
+	// capture (phase-kind gate), but feed a plausible value.
+	hub.updates <- tick(base, 0, 3.70, 0.10, 0.10, protocol.ModeCC)
+	// Main phase: a ramped + noisy current. 0.6 (below), 0.95 (1st high), 0.85
+	// (noise dip → reset), 0.92 (1st high again), 0.98 (2nd consecutive high →
+	// CAPTURE here). A 0.5× gate would have fired at 0.6; the 0.9×/two-tick gate
+	// fires only at 0.98.
+	hub.updates <- tick(base, 500, 3.75, 0.60, 0.11, protocol.ModeCC)
+	hub.updates <- tick(base, 1000, 3.80, 0.95, 0.12, protocol.ModeCC)
+	hub.updates <- tick(base, 1500, 3.82, 0.85, 0.13, protocol.ModeCC)
+	hub.updates <- tick(base, 2000, 3.85, 0.92, 0.14, protocol.ModeCC)
+	hub.updates <- tick(base, 2500, 3.88, 0.98, 0.15, protocol.ModeCC) // ← onset
+	// More high ticks after capture: must never overwrite.
+	hub.updates <- tick(base, 3000, 3.90, 1.00, 0.16, protocol.ModeCC)
+	hub.updates <- tick(base, 3500, 3.92, 1.00, 0.17, protocol.ModeCC)
+
+	calls := waitOnset(t, store, 2*time.Second)
+	m.Stop()
+	waitIdle(t, m, 2*time.Second)
+
+	if len(store.onsetCalls()) != 1 {
+		t.Fatalf("onset captured %d times, want exactly 1 (write-once, never overwritten)", len(store.onsetCalls()))
+	}
+	got := calls[0]
+	if got.voltage != 3.88 || got.current != 0.98 {
+		t.Fatalf("captured onset = %.2f V / %.2f A, want 3.88 V / 0.98 A (the first 2-consecutive-high main tick)", got.voltage, got.current)
+	}
+}
+
+// TestCCOnsetNeverCapturesInPrecharge is the mandatory precharge-safety test: a
+// slow charge (0.1C) whose precharge trickle current (0.1 A) is itself ≥ 0.9 ×
+// Icharge (0.09 A). A current-only gate would mis-fire in precharge; the
+// phase-kind primary gate must forbid it, so the capture only happens once the
+// main phase begins.
+func TestCCOnsetNeverCapturesInPrecharge(t *testing.T) {
+	hub := newFakeHub(2.8) // below 3.0 → a precharge phase actually runs
+	store := &fakeStore{}
+	m := testManager(hub, store)
+	// liion 1S, 1000 mAh, 0.1 A ⇒ 0.9 × Icharge = 0.09 A; precharge current 0.1 A
+	// ≥ 0.09 A would trip a current-only gate.
+	req := Request{ProfileID: 1, ProfileName: "slow", Chemistry: ChemLiIon, Cells: 1, CapacityMah: 1000, ChargeA: 0.1}
+	if err := m.Start(context.Background(), req, true); err != nil { // confirmDeep: 2.8 V is below precharge
+		t.Fatalf("Start: %v", err)
+	}
+	base := time.Unix(1_700_000_000, 0)
+	// Precharge ticks: high current (0.10 ≥ 0.09) sustained for 3 consecutive
+	// ticks — a current-only gate would fire at the 2nd. V stays < 3.0.
+	hub.updates <- tick(base, 0, 2.82, 0.10, 0.10, protocol.ModeCC)
+	hub.updates <- tick(base, 500, 2.88, 0.10, 0.11, protocol.ModeCC)
+	hub.updates <- tick(base, 1000, 2.95, 0.10, 0.12, protocol.ModeCC)
+	hub.updates <- tick(base, 1500, 3.02, 0.10, 0.13, protocol.ModeCC) // V ≥ 3.0 → precharge advances
+	// Main phase: the first two consecutive high ticks capture here.
+	hub.updates <- tick(base, 2000, 3.30, 0.10, 0.14, protocol.ModeCC)
+	hub.updates <- tick(base, 2500, 3.35, 0.10, 0.15, protocol.ModeCC) // ← onset (2nd main high tick)
+
+	calls := waitOnset(t, store, 2*time.Second)
+	m.Stop()
+	waitIdle(t, m, 2*time.Second)
+
+	got := calls[0]
+	// The onset voltage must be a MAIN-phase value (3.35), never a precharge one
+	// (2.82/2.88/2.95). A precharge mis-fire would have recorded ≈ 2.88 V.
+	if got.voltage != 3.35 {
+		t.Fatalf("captured onset voltage = %.2f V, want 3.35 V (main phase); a precharge value proves a mis-fire", got.voltage)
+	}
+	if len(store.onsetCalls()) != 1 {
+		t.Fatalf("onset captured %d times, want exactly 1", len(store.onsetCalls()))
+	}
+}
+
+// TestCCOnsetCaptureLeavesWireUnchanged asserts the mandatory invariant that the
+// capture is byte-for-byte unchanged on the wire: with the capture firing during
+// a run, the device sees the exact start order and exactly one protections write,
+// one output-on and one output-off — the capture injects no setpoint/output/
+// protection write of its own.
+func TestCCOnsetCaptureLeavesWireUnchanged(t *testing.T) {
+	hub := newFakeHub(3.7)
+	store := &fakeStore{}
+	m := testManager(hub, store)
+	if err := m.Start(context.Background(), liion1S(), false); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	base := time.Unix(1_700_000_000, 0)
+	hub.updates <- tick(base, 0, 3.70, 0.10, 0.10, protocol.ModeCC)    // precharge advances
+	hub.updates <- tick(base, 500, 3.80, 1.00, 0.11, protocol.ModeCC)  // main high tick 1
+	hub.updates <- tick(base, 1000, 3.85, 1.00, 0.12, protocol.ModeCC) // main high tick 2 → onset
+
+	waitOnset(t, store, 2*time.Second) // capture definitely fired
+	m.Stop()
+	waitIdle(t, m, 2*time.Second)
+
+	cmds := hub.commands()
+	// Start order intact.
+	if len(cmds) < 4 || cmds[0] != "protections" ||
+		!strings.HasPrefix(cmds[1], "V=") || !strings.HasPrefix(cmds[2], "I=") || cmds[3] != "out=on" {
+		t.Fatalf("start order = %v, want protections, V=, I=, out=on unchanged with capture present", cmds)
+	}
+	count := func(target string) int {
+		n := 0
+		for _, c := range cmds {
+			if c == target {
+				n++
+			}
+		}
+		return n
+	}
+	// The capture issues NO protections / output write: exactly one of each.
+	if count("protections") != 1 {
+		t.Errorf("protections written %d times, want 1 (capture must not write protections): %v", count("protections"), cmds)
+	}
+	if count("out=on") != 1 {
+		t.Errorf("out=on written %d times, want 1 (capture must not toggle output): %v", count("out=on"), cmds)
+	}
+	if count("out=off") != 1 {
+		t.Errorf("out=off written %d times, want 1: %v", count("out=off"), cmds)
 	}
 }
 

@@ -65,6 +65,15 @@ type BatteryHealth struct {
 	SohPct            *float64
 	DegradationPct    *float64
 	TotalWh           float64
+
+	// F-027 internal-resistance family (per-cell mΩ), derived over the
+	// Rint-eligible sessions. LatestRintCellMohm is the newest eligible session's
+	// per-cell Rint, BestRintCellMohm the MIN (the "as-new" baseline — lower is
+	// healthier, the opposite of BestCapacityMah), both null when there are no
+	// eligible sessions; RintCount defaults 0.
+	LatestRintCellMohm *float64
+	BestRintCellMohm   *float64
+	RintCount          int64
 }
 
 // ListBatteries returns every battery ordered by id (creation order, stable and
@@ -275,6 +284,27 @@ func eligibleSessionPredicate() string {
 		emptyThresholdLiIon, emptyThresholdLiFePO4, emptyThresholdPb)
 }
 
+// rintEligiblePredicate is the SQL WHERE fragment marking a session as an
+// internal-resistance data-point (design §3.11): a known start voltage AND a
+// captured CC-onset voltage/current, a positive onset current, a positive step,
+// and a per-cell start voltage at or above the chemistry's precharge threshold
+// (no precharge ran — the honest-Rint gate). It is DELIBERATELY distinct from
+// eligibleSessionPredicate (the from-empty capacity gate): reusing the capacity
+// WHERE would compute Rint over the exact from-empty rows most inflated by
+// precharge. It does NOT require state = 'completed' — a stopped/aborted run that
+// reached CC onset still measured a valid IR step. NULLIF(cells, 0) guards
+// division by zero (Postgres raises on /0, SQLite yields NULL) and an unknown
+// chemistry maps to a huge threshold so it can never be eligible. It mirrors
+// ChargeSession.RintEligible, both driven by the vPrecharge* constants.
+func rintEligiblePredicate() string {
+	return fmt.Sprintf(
+		"start_voltage IS NOT NULL AND cc_onset_voltage IS NOT NULL AND cc_onset_current > 0 "+
+			"AND cells > 0 AND (cc_onset_voltage - start_voltage) > 0 "+
+			"AND (start_voltage / NULLIF(cells, 0)) >= "+
+			"(CASE chemistry WHEN 'liion' THEN %g WHEN 'lifepo4' THEN %g WHEN 'pb' THEN %g ELSE 1e9 END)",
+		vPrechargeLiIon, vPrechargeLiFePO4, vPrechargePb)
+}
+
 // batteryAgg holds the raw per-battery aggregates before the guards are applied.
 type batteryAgg struct {
 	fullCycleCount int64
@@ -284,6 +314,14 @@ type batteryAgg struct {
 	sumMah         float64
 	hasCompleted   bool
 	totalWh        float64
+
+	// F-027 Rint family (per-cell mΩ) over the Rint-eligible rows: rintCount is
+	// the eligible row count, latestRint the newest eligible session's Rint, and
+	// bestRint the MIN over the eligible set (lower is healthier). latestRint/
+	// bestRint are nil when there are no eligible rows.
+	rintCount  int64
+	latestRint *float64
+	bestRint   *float64
 }
 
 // BatteryHealthMap computes the derived health of every battery in scope in a
@@ -394,6 +432,50 @@ func (s *Storage) BatteryHealthMap(ctx context.Context, onlyID int64) (map[int64
 		a.totalWh = r.SumWh
 	}
 
+	// Rint family (F-027): one window-function pass over the Rint-eligible rows.
+	// The per-cell Rint (mΩ) is computed in SQL; rn_desc == 1 is the newest
+	// eligible session (latest Rint), and the caller takes MIN over the set (best,
+	// as-new baseline) and the eligible row count. Distinct predicate from the
+	// capacity family (rintEligiblePredicate, the no-precharge gate) — the divide
+	// is guarded by that predicate (cc_onset_current > 0, cells > 0) so rint_cell
+	// is finite. Same one-pass shape as the capacity family, no per-battery N+1.
+	rintExpr := "(cc_onset_voltage - start_voltage) / cc_onset_current / NULLIF(cells, 0) * 1000"
+	rintSelect := "SELECT battery_id, " + rintExpr + " AS rint_cell, " +
+		"ROW_NUMBER() OVER (PARTITION BY battery_id ORDER BY started_at DESC, id DESC) AS rn_desc " +
+		"FROM charge_sessions WHERE "
+	type rintRow struct {
+		BatteryID int64
+		RintCell  float64
+		RnDesc    int64
+	}
+	rintSQL := rintSelect + "battery_id > 0 AND " + rintEligiblePredicate()
+	var rintArgs []any
+	if onlyID > 0 {
+		rintSQL = rintSelect + "battery_id = ? AND " + rintEligiblePredicate()
+		rintArgs = append(rintArgs, onlyID)
+	}
+	var rintRows []rintRow
+	if err := db.WithContext(ctx).Raw(rintSQL, rintArgs...).Scan(&rintRows).Error; err != nil {
+		return nil, fmt.Errorf("battery rint aggregates: %w", err)
+	}
+	for _, r := range rintRows {
+		a := aggs[r.BatteryID]
+		if a == nil {
+			a = &batteryAgg{}
+			aggs[r.BatteryID] = a
+		}
+		a.rintCount++
+		rc := r.RintCell
+		if a.bestRint == nil || rc < *a.bestRint {
+			v := rc
+			a.bestRint = &v
+		}
+		if r.RnDesc == 1 {
+			v := rc
+			a.latestRint = &v
+		}
+	}
+
 	out := make(map[int64]BatteryHealth, len(rated))
 	for _, r := range rated {
 		a := aggs[r.ID]
@@ -417,6 +499,11 @@ func deriveBatteryHealth(a batteryAgg, ratedMah float64) BatteryHealth {
 	h := BatteryHealth{
 		FullCycleCount: a.fullCycleCount,
 		TotalWh:        a.totalWh,
+		// Rint family is computed in SQL (per-cell mΩ) and only aggregated here:
+		// no eligible rows ⇒ RintCount 0 and latest/best nil (never NaN/Inf).
+		RintCount:          a.rintCount,
+		LatestRintCellMohm: a.latestRint,
+		BestRintCellMohm:   a.bestRint,
 	}
 	if a.fullCycleCount > 0 && a.latest != nil && a.best != nil && a.first != nil && *a.best > 0 {
 		latest, best, first := *a.latest, *a.best, *a.first

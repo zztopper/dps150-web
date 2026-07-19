@@ -23,10 +23,13 @@ import type { Battery, ChargeSession } from '../../api/charge'
 import { useAssignSessionBattery, useChargeSessionsQuery } from '../../hooks/useCharge'
 import { ApiError } from '../../api/client'
 import { ChargeBatteryChart } from './ChargeBatteryChart'
+import { ChargeRintChart } from './ChargeRintChart'
 import {
   eligibilityFlag,
   eligibleCapacitySeries,
+  eligibleRintSeries,
   formatOptional,
+  rintFlag,
   sohBarPct,
   sohLevel,
   type SohLevel,
@@ -61,6 +64,7 @@ export function ChargeBatteryDetail({ battery }: ChargeBatteryDetailProps) {
 
   const fmtTime = (ts: number) => new Date(ts).toLocaleString(i18n.language)
   const capacityPoints = eligibleCapacitySeries(sessions)
+  const rintPoints = eligibleRintSeries(sessions)
 
   const level = sohLevel(battery.sohPct)
   const levelColor: Record<SohLevel, string> = {
@@ -76,6 +80,11 @@ export function ChargeBatteryDetail({ battery }: ChargeBatteryDetailProps) {
   const mah = (v: number | null) => {
     const s = formatOptional(v, 0)
     return s === null ? null : `${s} ${t('units.milliampHour')}`
+  }
+  /** A per-cell Rint value in mΩ (1 decimal), or the null-safe em dash. */
+  const mohm = (v: number | null) => {
+    const s = formatOptional(v, 1)
+    return s === null ? null : `${s} ${t('units.milliohm')}`
   }
   const dash = <Typography.Text type="secondary" aria-label={t('charge.battery.notDetermined')}>—</Typography.Text>
   const orDash = (text: string | null) => (text === null ? dash : <span className="tabular">{text}</span>)
@@ -99,6 +108,31 @@ export function ChargeBatteryDetail({ battery }: ChargeBatteryDetailProps) {
     return (
       <Tooltip title={t('charge.battery.eligibility.excludedHint')}>
         <Tag icon={<InfoCircleOutlined />}>{reason}</Tag>
+      </Tooltip>
+    )
+  }
+
+  /** Per-row Rint (mΩ) value + eligibility flag on the session list (F-027). */
+  const rintCell = (s: ChargeSession) => {
+    const flag = rintFlag(s)
+    if (flag === 'eligible') {
+      return (
+        <Space size={4} wrap>
+          <span className="tabular">{mohm(s.rintCellMohm)}</span>
+          <Tag color="blue">{t('charge.battery.rint.flag.eligible')}</Tag>
+        </Space>
+      )
+    }
+    const reason =
+      flag === 'fromEmpty'
+        ? t('charge.battery.rint.flag.fromEmpty')
+        : t('charge.battery.rint.flag.notMeasured')
+    return (
+      <Tooltip title={t('charge.battery.rint.flag.excludedHint')}>
+        <Space size={4}>
+          {dash}
+          <Tag icon={<InfoCircleOutlined />}>{reason}</Tag>
+        </Space>
       </Tooltip>
     )
   }
@@ -134,6 +168,11 @@ export function ChargeBatteryDetail({ battery }: ChargeBatteryDetailProps) {
       render: (_: unknown, s: ChargeSession) => flagTag(s),
     },
     {
+      title: t('charge.battery.rint.table.rint'),
+      key: 'rint',
+      render: (_: unknown, s: ChargeSession) => rintCell(s),
+    },
+    {
       title: t('charge.battery.table.actions'),
       key: 'actions',
       render: (_: unknown, s: ChargeSession) => (
@@ -150,6 +189,7 @@ export function ChargeBatteryDetail({ battery }: ChargeBatteryDetailProps) {
   ]
 
   const chartKey = `${battery.id}-${capacityPoints.length}-${token.colorBgContainer}-${i18n.language}`
+  const rintChartKey = `rint-${battery.id}-${rintPoints.length}-${token.colorBgContainer}-${i18n.language}`
 
   return (
     <Flex vertical gap="middle">
@@ -280,6 +320,59 @@ export function ChargeBatteryDetail({ battery }: ChargeBatteryDetailProps) {
           description={t('charge.battery.detail.noEligible')}
         />
       )}
+
+      {/* Rint (F-027): lead with the trend curve (§3.11 — the absolute mΩ is
+          only approximate, so the rise over cycles is the signal). `best` is a
+          faint dashed "as-new" reference line on the chart, not a headline
+          number, and there is deliberately no "Rint degradation %". */}
+      <Divider style={{ margin: 0 }} titlePlacement="start">
+        {t('charge.battery.rint.title')}
+      </Divider>
+
+      <Alert type="info" showIcon message={t('charge.battery.rint.approxNote')} />
+
+      {rintPoints.length > 0 ? (
+        <div>
+          <ChargeRintChart
+            key={rintChartKey}
+            points={rintPoints}
+            best={battery.bestRintCellMohm}
+          />
+          {battery.bestRintCellMohm !== null && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {t('charge.battery.rint.chart.reference')}: {mohm(battery.bestRintCellMohm)}
+            </Typography.Text>
+          )}
+        </div>
+      ) : (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={t('charge.battery.rint.noEligible')}
+        />
+      )}
+
+      <Descriptions
+        size="small"
+        column={{ xs: 1, sm: 2 }}
+        bordered
+        items={[
+          {
+            key: 'latestRint',
+            label: (
+              <Space size={4} wrap>
+                {t('charge.battery.rint.latest')}
+                <Tag>{t('charge.battery.rint.approximate')}</Tag>
+              </Space>
+            ),
+            children: orDash(mohm(battery.latestRintCellMohm)),
+          },
+          {
+            key: 'rintCount',
+            label: t('charge.battery.rint.count'),
+            children: <span className="tabular">{battery.rintCount}</span>,
+          },
+        ]}
+      />
 
       <Divider style={{ margin: 0 }} titlePlacement="start">
         {t('charge.battery.detail.sessionsTitle')}

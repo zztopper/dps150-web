@@ -115,8 +115,34 @@ export function makeChargeSession(overrides: Partial<ChargeSession> = {}): Charg
     batteryId: null,
     startVoltage: 2.9,
     capacityEligible: true,
+    // F-027 additive fields: this from-empty charge DID reach CC onset (so the
+    // capture columns are set), but a precharge ran (start 2.9 < 3.0 V/cell) so
+    // its ΔV-based Rint is inflated → `rintEligible: false`, `rintCellMohm: null`
+    // (mirrors the contract v8 example). Override for a Rint-eligible top-up.
+    ccOnsetVoltage: 3.31,
+    ccOnsetCurrent: 1.7,
+    rintCellMohm: null,
+    rintEligible: false,
     ...overrides,
   }
+}
+
+/**
+ * A Rint-eligible session (F-027): a mid-SoC top-up that starts ABOVE the
+ * precharge threshold (no precharge ran), so its CC-onset ΔV is a clean IR step
+ * → `rintEligible: true` with a computed per-cell `rintCellMohm`. It is NOT
+ * `capacityEligible` (not a from-empty cycle) — the capacity-xor-Rint split.
+ */
+export function makeRintSession(overrides: Partial<ChargeSession> = {}): ChargeSession {
+  return makeChargeSession({
+    startVoltage: 3.55,
+    capacityEligible: false,
+    ccOnsetVoltage: 3.62,
+    ccOnsetCurrent: 1.7,
+    rintCellMohm: 41.2,
+    rintEligible: true,
+    ...overrides,
+  })
 }
 
 /**
@@ -141,6 +167,11 @@ export function makeBattery(overrides: Partial<Battery> = {}): Battery {
     degradationPct: 5.1,
     equivalentCycles: 7.2,
     totalWh: 442.7,
+    // F-027 Rint family (per-cell mΩ): a `best` < `latest` (a lower Rint is
+    // healthier — `best` is a MIN, the "as-new" baseline) over 5 eligible sessions.
+    latestRintCellMohm: 42.5,
+    bestRintCellMohm: 38.1,
+    rintCount: 5,
     createdAt: 1784000000000,
     updatedAt: 1784000000000,
     ...overrides,
@@ -297,6 +328,9 @@ export function batteriesCreateRoute(store: { items: Battery[] }): RouteHandler 
         degradationPct: null,
         equivalentCycles: null,
         totalWh: 0,
+        latestRintCellMohm: null,
+        bestRintCellMohm: null,
+        rintCount: 0,
       })
       store.items.push(created)
       return { status: 201, body: created }
