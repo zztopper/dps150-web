@@ -945,6 +945,269 @@ no setpoint, output, interlock, protocol or emulator surface.
   6. **Docs / deploy** — CHANGELOG + this doc; release is an MR bumping `image.tag`
      (§4). No new env, secret, config flag or infra change.
 
+### 3.11 Battery internal resistance (Rint) tracking (ADR-012)
+
+Decision: add **per-battery DC internal-resistance (Rint) tracking** on top of the
+F-026 battery library — a second derived health metric family that reads a rising
+Rint over cycles as cell aging — plus the **start-time battery preselect** F-026
+explicitly deferred. This is the **v2 of F-026**: it reuses F-026's `batteries`
+table, its per-cell eligibility pattern and its query-time-aggregate posture whole,
+and adds **no new entity, endpoint, interlock, confirmation gate or WS message**.
+Like F-026 it is **almost entirely** a read-only analytics layer; the **single
+exception** is one **additive, observational charger change** — the run loop
+**records** the operating point at CC onset — which takes its own safety-DA wave.
+That one change is called out explicitly below; everything after it is zero-device.
+
+- **Why Rint was deferred, and what F-027 refines (the §3.10 handoff).** §3.10
+  captured only the start **OCV** (`start_voltage`, read output-off at pre-flight)
+  and noted that internal-resistance tracking additionally needs the **CC-onset
+  voltage** — the IR step when the charge current first flows — *"a second
+  measurement that would touch the run loop"*, so Rint stayed deferred (bundled with
+  the start-time preselect). F-027 lifts that deferral, and the design grill
+  **refined the premise**: the CC-onset point is **not a new measurement or
+  stimulus**. The charger already jumps to the full charge current at the start of
+  the `main`/`cc` phase (existing F-023 behaviour — `charge.go` compiles that phase
+  with `amps = req.ChargeA`); F-027 only **records** the voltage/current the run loop
+  is already observing at that moment. So the charge is **byte-for-byte unchanged on
+  the wire** — this is an **observational** run-loop change, strictly weaker than the
+  "second measurement" §3.10 anticipated. (**Decision a: record-only** — no new
+  stimulus, no new device I/O.)
+
+- **The one run-loop capture (the ONLY device-touching change; own safety-DA
+  wave).** Add **two nullable columns** to `charge_sessions` — **`cc_onset_voltage`**
+  and **`cc_onset_current`** (both `*float64`). During the run, **only within the `main`/`cc`
+  phase** (never `precharge` — at a low `Icharge` the 0.1C precharge trickle could
+  otherwise trip the current gate), at the **first tick where the measured current has
+  been ≥ 0.9 × Icharge for two consecutive ticks** (full charge current genuinely
+  flowing and stable — 0.9× not 0.5×, since 0.5× can land mid current-ramp on real
+  hardware; the emulator settles instantly and cannot reveal this), the run loop
+  records **that same tick's** measured terminal voltage **and** current together —
+  **once, never overwritten**. The **measured-current threshold is the
+  primary gate** (measured current is more reliable than the advisory, on-change
+  `Mode` flag — the same F-024 lesson that region-selection reads current, not
+  `telemetry.Mode`); `Mode == CC` (`modeString`, `manager.go`) is a secondary
+  confirm. The capture reads a tick the run loop **already processes** in
+  `run.runPhase` (`run.go`); a **missing / never-satisfied** capture — a charge that
+  begins already in CV (near-full top-up), or a run too short to reach the gate —
+  leaves both columns **NULL** and has **zero effect on the charge**. The value is
+  persisted **mid-run via a targeted two-column update** (fail-soft, like the session
+  journal), so it survives a crash *after* onset (the reconciliation path only
+  updates `state`/`reason`/`ended_at`, never the onset columns).
+
+- **What this capture must NOT touch (the safety-DA boundary).** The capture is a
+  pure **read-and-record inside the existing tick loop**: it issues **no setpoint, no
+  output toggle, no protection write**. It must **not** change the phase machine
+  (`phasePrecharge`/`phaseMain`/`phaseFloat`), any termination rule (taper / voltage
+  ceiling / capacity cap / per-phase timeout / Pb float-hold), the **telemetry-
+  staleness watchdog**, `device.SafeOutputOff` (fresh-context, retried,
+  telemetry-confirmed), the **invariant start order** (protections → `Vset` → `Iset`
+  → output-on), the shared **`device.Interlock`**, or the **reset-aware delivered-Ah
+  accounting** (the counter-decrease → `reasonCounterReset` fault). A test asserts the
+  on-the-wire frame sequence of a charge is **identical** with the capture present.
+  This is the one bullet the safety review scrutinises; everything below is
+  zero-device.
+
+- **Capture implementation guardrails (safety-review conditions — the mid-run DB
+  write is the first-ever store write inside the hot tick loop, so keep it off the
+  cadence path).**
+  - **Async, off the hot path (P0).** The two-column `Updates` is **dispatched in a
+    detached goroutine** with values (`sessID`, `v`, `i`) copied by value and its own
+    timeout — it is **not** run inline in the tick loop. The capture is write-once, so
+    this spawns **exactly one goroutine per charge** (no unbounded spawn). This keeps
+    the loop cadence, the telemetry-staleness watchdog, the terminations and `Stop`
+    responsiveness **provably unaffected** by any DB stall (an inline synchronous write
+    with a background context would, on a DB stall, pause the loop up to its timeout —
+    during which the staleness timer is not running and a `Stop`/ceiling/cap check is
+    delayed).
+  - **Fail-soft, non-propagating (P0).** The record path **logs and swallows** its
+    error — it **never** returns a fault or early-returns into `runPhase`; a failed
+    write just leaves the columns NULL (session excluded from Rint). The in-memory
+    `captured` flag is set when the **gate fires** (the first qualifying tick), **not**
+    on DB success, so a transient DB error is never retried every tick (a hot-path
+    storm). DB-level write-once is also enforced: `Updates(...).Where("id = ? AND
+    cc_onset_voltage IS NULL")`.
+  - **Phase-kind is the PRIMARY gate (P0).** Capture only when `ph.kind == phaseMain`
+    (never `precharge`/`float`); the `≥ 0.9 × Icharge`/two-tick current test is
+    secondary and `Mode == CC` tertiary. Reason: at a slow charge (`ChargeA ≤ 0.111C`)
+    the 0.1C precharge current can itself reach `0.9 × Icharge`, so a current-only gate
+    would mis-fire in precharge — the phase-kind gate makes that impossible regardless
+    of current (and even a mis-fire only writes a wrong number, never perturbs the
+    charge).
+
+- **Rint computation (query-time, per-cell).** `Rint_pack = (cc_onset_voltage −
+  start_voltage) / cc_onset_current`; `Rint_cell = Rint_pack / cells` (series cells
+  add, so per-cell is the pack value divided by the count) → reported **per-cell in
+  mΩ** (`× 1000`). **Guard `cells > 0` and `cc_onset_current > 0`** before dividing —
+  never `NaN`/`Inf`. `start_voltage` is the F-026 open-terminal OCV; `cc_onset_voltage`
+  is the terminal voltage **under load** at CC onset.
+
+- **Rint-eligibility — the no-precharge gate (design review P0-1, safety-critical for
+  honesty).** A session yields a **Rint data-point** iff `start_voltage IS NOT NULL AND
+  cc_onset_voltage IS NOT NULL AND cc_onset_current > 0 AND (cc_onset_voltage −
+  start_voltage) > 0 AND start_voltage/cells ≥ vPrecharge(chemistry)` — where
+  `vPrecharge` is the charger's own per-cell precharge threshold (`presets.go`:
+  **Li-ion 3.0, LiFePO4 2.5, Pb 0** — Pb has no precharge, so all Pb charges pass).
+  **Why the last clause is mandatory:** `start_voltage` is the OCV read *before*
+  energize, but if a **precharge** phase trickled first (the deeply-discharged /
+  from-empty case), the cell absorbs charge and its true OCV **rises 0.1–0.5 V/cell**
+  before the `main` CC onset — that rise lands in `ΔV` as **fake resistance and
+  inflates Rint ~5–7×** (a real 18650 is ~40 mΩ; a from-empty reading computes
+  ~270 mΩ). Mixing precharge and non-precharge readings in one `latest`/`best` set
+  reproduces the F-026 `deliveredMah≠capacity` false-degradation disaster for Rint.
+  Gating on `start_voltage/cells ≥ vPrecharge` accepts **only charges where no
+  precharge ran** (`start_voltage` ≈ the true OCV at onset), because the charger adds a
+  precharge phase iff `start_voltage < vPrecharge·cells` (`charge.go`). This makes the
+  Rint gate (`≥ vPrecharge`) and the F-026 **capacity** gate
+  (`≤ emptyThreshold` == `≤ vPrecharge` for Li chemistries) **near-disjoint and
+  physically honest**: one charge measures capacity **xor** clean Rint. A mid-SoC
+  charge with a real CC phase is Rint-eligible but not capacity-eligible; a from-empty
+  charge is capacity-eligible but not Rint-eligible; a session may be either or
+  neither (rarely both). Rint-eligibility does **not** require `completed` (a
+  `stopped`/`aborted` run that reached CC onset still measured a valid IR step); a
+  session must be assigned to a battery to contribute. Enforced as an intrinsic per-row
+  boolean **`ChargeSession.RintEligible()`** plus a **separate SQL predicate**
+  (`rintEligiblePredicate()`, distinct from the capacity `eligibleSessionPredicate()` —
+  reusing the capacity WHERE would compute Rint over the exact from-empty rows that are
+  most inflated).
+
+- **Accuracy caveat — an indicative trend, not an absolute mΩ (documented like the Pb
+  caveat).** The **worst** confound (precharge lifting the OCV, +5–7× error) is
+  **removed by the no-precharge gate above**. What remains: `start_voltage` is the
+  **OCV** measured output-off at pre-flight while `cc_onset_voltage` is **under load**,
+  so `ΔV` is the ohmic IR **plus** the cell's **initial polarisation** (charge-transfer
+  + concentration overpotential) — an **approximate DC Rint**, not the instantaneous
+  ohmic IR (which needs a fast current-step and µs sampling this rig cannot do). It
+  also carries residual **SoC-dependence** (the OCV curve is non-linear) and
+  **temperature** sensitivity (there is no battery temperature probe — OTP reads the
+  *supply*). Therefore the number is framed as a **same-method, same-battery indicative
+  trend** — a **rise** in per-cell mΩ over cycles signals aging — **not** a lab-grade
+  absolute resistance. **Rint is labelled "approximate" everywhere it is shown**, and
+  the UI leads with the **trend**, not the raw number (below).
+
+- **Battery Rint metrics — a third health family, query-time, one pass, no N+1.**
+  Every number is **derived, never stored**, returned on both the battery list
+  (`GET /charge/batteries`) and the detail (`GET /charge/batteries/{id}`), over the
+  **Rint-eligible** set: `latestRintCellMohm` = per-cell Rint of the **newest**
+  Rint-eligible session (by `started_at`, then `id`); `bestRintCellMohm` =
+  **`MIN`** per-cell Rint over the eligible set — the **"as-new"** baseline
+  (**`MIN`, not `MAX`** — the opposite of `bestCapacityMah`, because a **lower** Rint
+  is healthier); `rintCount` = count of Rint-eligible sessions. The `latest` value is
+  a *value-at-max(`started_at`)*, so it is computed with the **same one-pass
+  `ROW_NUMBER() OVER (PARTITION BY battery_id ORDER BY started_at DESC)`** window
+  function as F-026's capacity family (portable across **sqlite ≥ 3.25 and
+  postgres**), evaluated alongside the existing families in the same query — no
+  per-battery N+1; `best`/`count` are a `MIN`/`COUNT` over the eligible rows. The
+  per-cell Rint expression `(cc_onset_voltage − start_voltage) / cc_onset_current /
+  cells × 1000` is evaluated over those rows. **Guards (never NaN/Inf):** no
+  Rint-eligible sessions ⇒ `rintCount: 0`, `latestRintCellMohm / bestRintCellMohm:
+  null`; the divide is guarded by the eligibility predicate itself
+  (`cc_onset_current > 0`, `cells > 0`). **Framing (design review P0-1):** because the
+  absolute number is approximate, the UI **leads with the trend curve** (below), not a
+  headline stat; `bestRintCellMohm` is drawn as a **faint "as-new" reference line** on
+  that curve, **not** a prominent number that invites `latest`-vs-`best` mental math.
+  `best` is a `MIN` and `latest` is a member of the same set, so `latest ≥ best` holds
+  — but the design deliberately does **not** publish a "Rint degradation %" (a `MIN`
+  reference is one noisy reading away from poisoning such a ratio, the F-026
+  `best`-extreme trap; a rising *trend* is robust where a single-point ratio is not).
+
+- **Rint trend — frontend-only, its own eligible set (mirrors F-026's degradation
+  curve).** A **second uPlot curve** on the battery detail, alongside the F-026
+  capacity-degradation curve: **per-cell Rint (mΩ) on Y** vs the session
+  **`startedAt` date on X**, built **client-side** from
+  `GET /charge/sessions?batteryId=X` filtered to **`rintEligible === true`** — the
+  **same set** the backend counts, so the plotted trend and the headline
+  `latest/best` can never diverge (the F-026 SoH-vs-curve lesson). To make that filter
+  possible client-side the session DTO carries `rintCellMohm` (computed, nullable) and
+  `rintEligible` (bool). The backend adds **no curve / aggregate route** — F-025's
+  "comparison is pure presentation" stance.
+
+- **DTO deltas.** `ChargeSession` gains **four** additive fields: `ccOnsetVoltage`
+  (`number|null`), `ccOnsetCurrent` (`number|null`), `rintCellMohm` (`number|null`,
+  **computed**, `null` unless `rintEligible`) and `rintEligible` (`bool`, intrinsic:
+  `startVoltage≠null ∧ ccOnsetVoltage≠null ∧ ccOnsetCurrent>0 ∧
+  ccOnsetVoltage−startVoltage>0`). `Battery` gains `latestRintCellMohm`,
+  `bestRintCellMohm` (both `number|null`) and `rintCount` (`int`, default `0`). No
+  field is renamed or removed.
+
+- **Bundled — start-time battery preselect (the other F-026 deferral).** The charge
+  **start request** (`POST /charge/profiles/{id}/start`) gains an **optional
+  `batteryId`**. When present it is validated — the battery must **exist**
+  (`404 battery_not_found`) and its **`chemistry` AND `cells`** must **equal the
+  profile's** (`400 invalid_battery`) — and written to the session at **`BeginSession`**
+  (threaded through `SessionStart`, alongside `StartVoltage`). It is a **metadata
+  field, NOT safety-critical**: it touches no setpoint/output/protection, it is
+  validated **before** the pre-flight guard and output-on (a bad `batteryId` fails the
+  start request before anything energizes), and a wrong/omitted value merely leaves
+  the session **unassigned**. The chemistry×cells check reuses the same rule as
+  F-026's post-hoc assign (there checked against the session's *denormalized*
+  chemistry/cells; here against the *profile's*, which **seed** those denormalized
+  values). F-026's post-hoc `POST /charge/sessions/{id}/battery` assignment **stays**
+  — both paths write the same `battery_id` column, and a preselect can still be changed
+  or cleared post-hoc. The start **form** gains a **battery picker filtered to
+  chemistry+cells-matching batteries** (data from `GET /charge/batteries`,
+  frontend-only filtering). **No new error code** — `invalid_battery` /
+  `battery_not_found` are reused from F-026.
+
+- **CRITICAL implementation invariants (the F-026 lessons, pinned).**
+  - The new columns/model fields are **`*float64` (nullable)** — a plain `float64`
+    scans a DB `NULL` back as `0`, which would poison the Rint gate (`0 V` onset ⇒
+    `ΔV` negative ⇒ excluded, or a garbage compute) exactly as it would the F-026
+    capacity gate.
+  - **`UpdateChargeSession` (the full-row `Save`, `storage/charge.go`) MUST preserve
+    `cc_onset_voltage` and `cc_onset_current` from the existing row** in its
+    preserve-list, alongside `start_voltage` / `chemistry` / `cells` / `battery_id` /
+    `started_at` — otherwise **every `completed` finalize zeroes the mid-run
+    capture** and the whole feature reads empty. Round-trip tests assert both columns
+    survive the finalize on **both** the `completed` path **and** a `stopped`/`aborted`
+    finalize — Rint-eligibility does not require `completed`, so a run that reached CC
+    onset and was then stopped/aborted must keep its reading.
+  - The **mid-run capture writes only the two `cc_onset_*` columns** via a **targeted
+    `Updates`** (not a full-row `Save`), so it never clobbers the concurrently-updated
+    status/delivered fields and is safe to run inside the tick loop.
+
+- **Migration — additive.** Two nullable columns `cc_onset_voltage`,
+  `cc_onset_current` on `charge_sessions`; AutoMigrate adds them in place on both
+  sqlite and postgres — no dialect functions, no separate SQL migration. The
+  `batteries` table is **unchanged** (Rint metrics are query-time over sessions, like
+  the F-026 families). **Backward-compatible**: every pre-F-027 session reads back
+  `ccOnsetVoltage: null`, `ccOnsetCurrent: null`, `rintCellMohm: null`,
+  `rintEligible: false` and contributes to **no** Rint metric.
+
+- **Migration plan (phased, each phase backward-compatible).**
+  1. **Contract freeze** — this ADR + contract v8 land in one MR; no code yet.
+  2. **Charger CC-onset capture + storage columns (the ONLY device-touching change;
+     own safety-DA wave).** Add `CCOnsetVoltage`/`CCOnsetCurrent` (`*float64`) to the
+     `ChargeSession` model + the additive columns; the write-once, current-gated
+     capture in `run.runPhase` (`main`/`cc` phase only) persisted via a targeted
+     two-column update; **preserve both in `UpdateChargeSession`**. **No change** to
+     the phases, terminations, watchdog, `SafeOutputOff`, start order, interlock or
+     reset-aware Ah accounting; tests assert the on-the-wire frame sequence is
+     unchanged **and** the begin→capture→finish round-trip preserves the columns.
+  3. **Storage analytics (zero-device).** The Rint-eligibility predicate +
+     `RintEligible()`/`RintCellMohm()` row methods; the window-function
+     `latest` / `MIN best` / `count` Rint family computed alongside the F-026 capacity
+     + throughput families in the same one-pass query. **Test trap (design review):**
+     the emulator battery is a **perfect linear instantaneous IR** (`battery.go` — no
+     polarisation/temperature/SoC-dependence/ramp), so a no-precharge round-trip yields
+     `rint ≈ RintOhm` *exactly* — an **emulator artifact**, NOT proof of accuracy. The
+     decisive test is the **gate**, not the value: a **from-empty** start (`DPS_MOCK_BATTERY`
+     SoC low → precharge runs) must read `rintEligible=false` (excluded, no inflated
+     number), while a **mid-SoC** start (no precharge) reads `rintEligible=true` — never
+     let a clean round-trip stand in for the precharge-inflation confound.
+  4. **API** — the four `ccOnsetVoltage`/`ccOnsetCurrent`/`rintCellMohm`/`rintEligible`
+     fields on the session DTO; `latestRintCellMohm`/`bestRintCellMohm`/`rintCount` on
+     the `Battery` DTO; the **optional `batteryId`** on the charge start request
+     (validated against the profile's chemistry×cells, threaded to `BeginSession`);
+     the battery-picker data reuses `GET /charge/batteries`.
+  5. **Frontend** — the Rint trend curve on the battery detail (`rintEligible`
+     filter), the three header Rint metrics (labelled *approximate*), the per-session
+     Rint value + flag, the **start-form battery picker** (chemistry+cells filtered),
+     the `src/api/charge.ts` extensions (four session fields + three battery fields +
+     the optional `batteryId` on the start mutation), MSW mocks and the
+     `charge.battery.*` / `charge.rint.*` i18n keys.
+  6. **Docs / deploy** — CHANGELOG + this doc; release is an MR bumping `image.tag`
+     (§4). No new env, secret, config flag or infra change.
+
 ## 4. Deploy and environments
 
 - **Single environment** (ns `dps150`): a second instance could not connect

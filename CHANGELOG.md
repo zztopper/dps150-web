@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Battery internal resistance (Rint) tracking (F-027, the F-026 v2): per-battery DC
+  internal resistance derived from the voltage step at CC onset
+  (`Rint = (ccOnsetVoltage − startVoltage)/ccOnsetCurrent`, per cell), tracked as a
+  trend over cycles (rising = aging) on a second curve of the battery-health view.
+  The one device-touching change is observational — the charger **records** the
+  operating point at CC onset into the session (two nullable columns), dispatched off
+  the hot tick loop, fail-soft, phase-`main`-gated; the charge is byte-for-byte
+  unchanged on the wire (safety review: safe-as-additive). Because a precharge phase
+  inflates the reading ~5–7×, Rint is honestly gated to **no-precharge** charges
+  (`startVoltage/cell ≥ vPrecharge`) — near-disjoint from the F-026 from-empty
+  capacity gate, so a charge measures capacity xor clean Rint. Rint is labelled
+  approximate; the UI leads with the trend, not an absolute number. Also bundles the
+  F-026-deferred **start-time battery preselect** (an optional `batteryId` on the
+  charge start request, validated before energize). Formalized in ADR-012
+  (`docs/architecture/design.md §3.11`, `api-contract.md v8`). Additive migration.
 - Battery health & cycle tracking (F-026): a **battery library** (`batteries`) of
   physical packs, with post-hoc assignment of finished charge sessions to a
   battery (`POST /charge/sessions/{id}/battery`) and per-battery health computed
