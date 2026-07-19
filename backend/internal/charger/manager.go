@@ -94,13 +94,18 @@ type HubController interface {
 	Refresh(ctx context.Context) error
 }
 
-// SessionStart is the record written when a charge begins.
+// SessionStart is the record written when a charge begins. StartVoltage is the
+// open-terminal pack voltage the pre-flight already measured with the output OFF
+// (F-026 / design §3.10); it is a *float64 (nullable) so a session with no
+// captured start voltage persists as NULL rather than a misleading 0. It records
+// a value already read — no new measurement, no change to the charge on the wire.
 type SessionStart struct {
-	ProfileID   int64
-	ProfileName string
-	Chemistry   string
-	Cells       int
-	StartedAt   time.Time
+	ProfileID    int64
+	ProfileName  string
+	Chemistry    string
+	Cells        int
+	StartedAt    time.Time
+	StartVoltage *float64
 }
 
 // SessionResult finalizes a charge session at its terminal state.
@@ -507,7 +512,11 @@ func (m *Manager) Start(ctx context.Context, req Request, confirmDeep bool) erro
 	m.active = ar
 	m.mu.Unlock()
 
-	sessID := m.beginSession(req, ar.status.StartedAt)
+	// Persist the already-measured open-terminal start voltage (F-026): a pure
+	// additive record AFTER output-on. vbat was read output-off above (readVbat)
+	// and re-validated by the pre-flight, so it is a genuine start-of-charge OCV.
+	startVoltage := vbat
+	sessID := m.beginSession(req, ar.status.StartedAt, &startVoltage)
 	m.mu.Lock()
 	ar.status.SessionID = sessID
 	m.mu.Unlock()
@@ -639,18 +648,19 @@ func (m *Manager) confirmOutputOff() bool {
 	}
 }
 
-func (m *Manager) beginSession(req Request, started time.Time) int64 {
+func (m *Manager) beginSession(req Request, started time.Time, startVoltage *float64) int64 {
 	if m.store == nil {
 		return 0
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	id, err := m.store.BeginSession(ctx, SessionStart{
-		ProfileID:   req.ProfileID,
-		ProfileName: req.ProfileName,
-		Chemistry:   string(req.Chemistry),
-		Cells:       req.Cells,
-		StartedAt:   started,
+		ProfileID:    req.ProfileID,
+		ProfileName:  req.ProfileName,
+		Chemistry:    string(req.Chemistry),
+		Cells:        req.Cells,
+		StartedAt:    started,
+		StartVoltage: startVoltage,
 	})
 	if err != nil {
 		m.log.Warn("charge: could not record session start", "error", err)

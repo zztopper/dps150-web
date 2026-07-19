@@ -5,9 +5,11 @@ import { stubFetchRoutes } from '../test/fetchRouter'
 import { ResizeObserverStub } from '../test/resizeObserver'
 import { FakeWebSocket } from '../test/fakeWebSocket'
 import {
+  batteriesListRoute,
   chargeActiveRoute,
   chargeProfilesListRoute,
   chargeSessionsListRoute,
+  makeBattery,
   makeChargeProfile,
   makeChargeSession,
 } from '../test/chargeRoutes'
@@ -23,12 +25,13 @@ describe('ChargePage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows the three tabs, listing profiles and session history', async () => {
+  it('shows the four tabs, listing profiles, session history and batteries', async () => {
     const store = { items: [makeChargeProfile()] }
     stubFetchRoutes([
       chargeProfilesListRoute(store),
       chargeActiveRoute({ active: false }),
       chargeSessionsListRoute([makeChargeSession()]),
+      batteriesListRoute({ items: [makeBattery()] }),
     ])
 
     renderWithProviders(<ChargePage />)
@@ -43,6 +46,26 @@ describe('ChargePage', () => {
     // History tab lists the completed session.
     fireEvent.click(screen.getByRole('tab', { name: 'История' }))
     expect(await screen.findByText('3350 мАч')).toBeInTheDocument()
+
+    // Batteries tab lists the battery library.
+    fireEvent.click(screen.getByRole('tab', { name: 'Батареи' }))
+    expect(await screen.findByText('Pack A — 3S1P 18650')).toBeInTheDocument()
+  })
+
+  it('restores the Batteries tab from the ?tab=batteries query param', async () => {
+    const store = { items: [makeChargeProfile()] }
+    stubFetchRoutes([
+      chargeProfilesListRoute(store),
+      chargeActiveRoute({ active: false }),
+      batteriesListRoute({ items: [makeBattery()] }),
+    ])
+
+    renderWithProviders(<ChargePage />, { route: '/charge?tab=batteries' })
+
+    // The Батареи pane is active on mount (its library is listed) rather than
+    // the default Live pane's start card.
+    expect(await screen.findByText('Pack A — 3S1P 18650')).toBeInTheDocument()
+    expect(screen.queryByText('Запуск заряда')).not.toBeInTheDocument()
   })
 
   it('restores the active tab from the ?tab query param', async () => {

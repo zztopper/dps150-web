@@ -34,7 +34,7 @@ func newChargeTestStore(t *testing.T) *storage.Storage {
 	s, err := storage.Open(storage.Config{
 		Driver:     storage.DriverSQLite,
 		DSN:        filepath.Join(t.TempDir(), "test.db"),
-		Models:     []any{&storage.ChargeProfile{}, &storage.ChargeSession{}},
+		Models:     []any{&storage.ChargeProfile{}, &storage.ChargeSession{}, &storage.Battery{}},
 		BackoffMin: 10 * time.Millisecond,
 	})
 	if err != nil {

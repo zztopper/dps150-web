@@ -233,6 +233,26 @@ export interface ChargeSession {
   deliveredWh: number
   peakVoltage: number
   snapshot: Record<string, unknown> | null
+  /**
+   * Library membership (F-026, additive): the `batteries` row this session is
+   * assigned to, or `null` when unassigned. Pre-F-026 sessions read back `null`
+   * (the backend `0`/omitempty ⇒ `null` on the wire).
+   */
+  batteryId: number | null
+  /**
+   * Pack voltage measured at start with the output off (design §3.10); `null`
+   * for sessions finalized before F-026 (their start SoC is unknown, so they are
+   * excluded from capacity metrics).
+   */
+  startVoltage: number | null
+  /**
+   * Intrinsic to the session: `true` iff it was a genuine charge-from-empty
+   * cycle (`state === 'completed'` ∧ `deliveredMah > 0` ∧ `startVoltage != null`
+   * ∧ per-cell start voltage ≤ the chemistry's empty threshold). Only eligible
+   * sessions feed the capacity/SoH family and the degradation curve; a completed
+   * top-up is `false` (it would read as false degradation).
+   */
+  capacityEligible: boolean
 }
 
 export interface ChargeSessionsPage {
@@ -416,15 +436,73 @@ export async function getChargeActive(): Promise<ChargeStatus> {
   }
 }
 
-/** GET /api/v1/charge/sessions?limit=&offset= — newest first. */
-export function listChargeSessions(limit = 50, offset = 0): Promise<ChargeSessionsPage> {
+/**
+ * Raw session row — the three F-026 additive fields ride the backend's
+ * int64-zero / omitempty convention (a `0`/absent `batteryId`, an absent
+ * `startVoltage`, a `false` `capacityEligible` may all be thinned off the wire),
+ * so `normalizeSession` fills them defensively rather than trusting presence.
+ */
+type RawChargeSession = Omit<ChargeSession, 'batteryId' | 'startVoltage' | 'capacityEligible'> & {
+  batteryId?: number | null
+  startVoltage?: number | null
+  capacityEligible?: boolean
+}
+
+/** Fills the F-026 additive session fields to their documented defaults. */
+function normalizeSession(raw: RawChargeSession): ChargeSession {
+  return {
+    ...raw,
+    // int64-zero convention: `0` (or absent) ⇒ unassigned ⇒ `null` on our side.
+    batteryId: raw.batteryId != null && raw.batteryId > 0 ? raw.batteryId : null,
+    startVoltage: raw.startVoltage ?? null,
+    capacityEligible: raw.capacityEligible ?? false,
+  }
+}
+
+/**
+ * GET /api/v1/charge/sessions?limit=&offset=&batteryId= — newest first. A
+ * positive `batteryId` filters to that battery's sessions (F-026); omit it (or
+ * pass ≤ 0) for the full history — the contract has no "unassigned" filter, and
+ * `0` never matches unassigned rows.
+ */
+export async function listChargeSessions(
+  limit = 50,
+  offset = 0,
+  batteryId?: number,
+): Promise<ChargeSessionsPage> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-  return apiRequest<ChargeSessionsPage>(`/api/v1/charge/sessions?${params.toString()}`)
+  if (batteryId !== undefined && batteryId > 0) {
+    params.set('batteryId', String(batteryId))
+  }
+  const page = await apiRequest<{ items: RawChargeSession[]; total: number }>(
+    `/api/v1/charge/sessions?${params.toString()}`,
+  )
+  return { items: page.items.map(normalizeSession), total: page.total }
 }
 
 /** GET /api/v1/charge/sessions/{id} — 404 charge_session_not_found. */
-export function getChargeSession(id: number): Promise<ChargeSession> {
-  return apiRequest<ChargeSession>(`/api/v1/charge/sessions/${id}`)
+export async function getChargeSession(id: number): Promise<ChargeSession> {
+  const raw = await apiRequest<RawChargeSession>(`/api/v1/charge/sessions/${id}`)
+  return normalizeSession(raw)
+}
+
+/**
+ * POST /api/v1/charge/sessions/{id}/battery — assign the session to battery
+ * `batteryId`, or unassign with `null` (or `0`). Returns the updated session.
+ * The session must be finalized (a `running` session → `409 charge_active`) and,
+ * on assign, its denormalized `chemistry` and `cells` must equal the battery's —
+ * otherwise `400 invalid_battery`. `404 charge_session_not_found` / `404
+ * battery_not_found`.
+ */
+export async function assignSessionBattery(
+  sessionId: number,
+  batteryId: number | null,
+): Promise<ChargeSession> {
+  const raw = await apiRequest<RawChargeSession>(`/api/v1/charge/sessions/${sessionId}/battery`, {
+    method: 'POST',
+    body: JSON.stringify({ batteryId }),
+  })
+  return normalizeSession(raw)
 }
 
 /**
@@ -460,6 +538,170 @@ export function chargeProgressFrom(lastEvent: unknown): ChargeProgress | null {
     etaMs: ev.etaMs ?? -1,
     ts: ev.ts ?? 0,
   }
+}
+
+// -- Batteries (F-026 / ADR-011) -------------------------------------------
+
+/**
+ * A physical battery in the library (contract v7). Its health aggregates are a
+ * **query-time** derivation over this battery's charge sessions — read-only,
+ * never stored — split into two families with different domains (design §3.10):
+ * the capacity/SoH family over `capacityEligible` sessions only, and the
+ * throughput family over all `completed` sessions. Every capacity/SoH ratio is
+ * `number | null` (never NaN/Inf); `fullCycleCount`/`totalWh` default to `0`.
+ */
+export interface Battery {
+  id: number
+  name: string
+  /** F-023 charge enum — fixed at creation, immutable thereafter. */
+  chemistry: ChargeChemistry
+  /** ≥ 1 — fixed at creation, immutable. */
+  cells: number
+  /**
+   * Nameplate capacity (`≥ 0`; `0`/absent = unset). When set (`> 0`) it is the
+   * SoH baseline and enables `equivalentCycles`; otherwise `bestCapacityMah` is
+   * the SoH baseline and `equivalentCycles` is `null`.
+   */
+  ratedCapacityMah: number | null
+  partNumber: string
+  notes: string
+  // -- Capacity / SoH family (over capacityEligible sessions only) --
+  /** Count of eligible sessions (honest full cycles). Defaults to 0. */
+  fullCycleCount: number
+  /** `deliveredMah` of the newest eligible session; `null` when none. */
+  latestCapacityMah: number | null
+  /** `MAX(deliveredMah)` over eligible sessions — the SoH-100 % baseline; `null` when none. */
+  bestCapacityMah: number | null
+  /** `deliveredMah` of the oldest eligible session; `null` when none. */
+  firstCapacityMah: number | null
+  /**
+   * `100 × latest / rated` (rated set), else `100 × latest / best`. **May exceed
+   * 100** (a strong cell out-delivering an understated rating) — the payload is
+   * raw/unclamped; the UI shows the true number with the bar clamped. `null`
+   * when there are no eligible sessions.
+   */
+  sohPct: number | null
+  /** `100 × (1 − latest / best)` — `0` at peak, always `[0, 100)`; `null` when none. */
+  degradationPct: number | null
+  // -- Throughput family (over all completed sessions with deliveredMah > 0) --
+  /** `Σ(deliveredMah) / ratedCapacityMah` when rated set, else `null`. */
+  equivalentCycles: number | null
+  /** `Σ(deliveredWh)` — lifetime energy through the battery. Defaults to 0. */
+  totalWh: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** Body of POST /charge/batteries — a new battery starts empty (no cycles). */
+export interface BatteryInput {
+  name: string
+  chemistry: ChargeChemistry
+  cells: number
+  /** Optional nameplate capacity; omit or `0` leaves it unset. */
+  ratedCapacityMah?: number | null
+  partNumber?: string
+  notes?: string
+}
+
+/**
+ * Body of PUT /charge/batteries/{id}. `chemistry` and `cells` are immutable
+ * (omitted here — sending either that differs → `400 invalid_battery`). Editing
+ * `ratedCapacityMah` re-bases `sohPct`/`equivalentCycles` (derived, not stored).
+ */
+export interface BatteryUpdate {
+  name?: string
+  ratedCapacityMah?: number | null
+  partNumber?: string
+  notes?: string
+}
+
+export interface BatteriesPage {
+  items: Battery[]
+}
+
+/**
+ * Raw battery row: the derived aggregates ride Go's omitempty (a `0`
+ * `fullCycleCount`/`totalWh`, an int64-zero `ratedCapacityMah`, and the
+ * `null`-default ratio fields may all be thinned/omitted), so `normalizeBattery`
+ * fills the documented defaults rather than trusting presence.
+ */
+interface RawBattery {
+  id: number
+  name?: string
+  chemistry?: string
+  cells?: number
+  ratedCapacityMah?: number | null
+  partNumber?: string
+  notes?: string
+  fullCycleCount?: number
+  latestCapacityMah?: number | null
+  bestCapacityMah?: number | null
+  firstCapacityMah?: number | null
+  sohPct?: number | null
+  degradationPct?: number | null
+  equivalentCycles?: number | null
+  totalWh?: number
+  createdAt?: number
+  updatedAt?: number
+}
+
+/** Fills a battery's omitempty-thinned fields to their documented defaults. */
+function normalizeBattery(raw: RawBattery): Battery {
+  return {
+    id: raw.id,
+    name: raw.name ?? '',
+    chemistry: toChemistry(raw.chemistry),
+    cells: raw.cells ?? 1,
+    // int64-zero: `0`/absent rating ⇒ unset ⇒ `null`.
+    ratedCapacityMah: raw.ratedCapacityMah != null && raw.ratedCapacityMah > 0 ? raw.ratedCapacityMah : null,
+    partNumber: raw.partNumber ?? '',
+    notes: raw.notes ?? '',
+    fullCycleCount: raw.fullCycleCount ?? 0,
+    latestCapacityMah: raw.latestCapacityMah ?? null,
+    bestCapacityMah: raw.bestCapacityMah ?? null,
+    firstCapacityMah: raw.firstCapacityMah ?? null,
+    sohPct: raw.sohPct ?? null,
+    degradationPct: raw.degradationPct ?? null,
+    equivalentCycles: raw.equivalentCycles ?? null,
+    totalWh: raw.totalWh ?? 0,
+    createdAt: raw.createdAt ?? 0,
+    updatedAt: raw.updatedAt ?? 0,
+  }
+}
+
+/** GET /api/v1/charge/batteries — by id, creation order; each with derived health. */
+export async function listBatteries(): Promise<BatteriesPage> {
+  const page = await apiRequest<{ items: RawBattery[] }>('/api/v1/charge/batteries')
+  return { items: page.items.map(normalizeBattery) }
+}
+
+/** POST /api/v1/charge/batteries — 400 invalid_battery on a bad name/cells/chemistry. */
+export async function createBattery(input: BatteryInput): Promise<Battery> {
+  const raw = await apiRequest<RawBattery>('/api/v1/charge/batteries', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  return normalizeBattery(raw)
+}
+
+/** GET /api/v1/charge/batteries/{id} — 404 battery_not_found. */
+export async function getBattery(id: number): Promise<Battery> {
+  const raw = await apiRequest<RawBattery>(`/api/v1/charge/batteries/${id}`)
+  return normalizeBattery(raw)
+}
+
+/** PUT /api/v1/charge/batteries/{id} — 400 invalid_battery | 404 battery_not_found. */
+export async function updateBattery(id: number, patch: BatteryUpdate): Promise<Battery> {
+  const raw = await apiRequest<RawBattery>(`/api/v1/charge/batteries/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  })
+  return normalizeBattery(raw)
+}
+
+/** DELETE /api/v1/charge/batteries/{id} — 204; nulls battery_id on its sessions. */
+export function deleteBattery(id: number): Promise<void> {
+  return apiRequest<void>(`/api/v1/charge/batteries/${id}`, { method: 'DELETE' })
 }
 
 /** Reads a terminal `chargeSession` WS event out of `useDevice().lastEvent`. */

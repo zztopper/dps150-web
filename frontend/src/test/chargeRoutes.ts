@@ -6,6 +6,7 @@
 import type { RouteHandler } from './fetchRouter'
 import type {
   ActiveChargeStatus,
+  Battery,
   ChargeProfile,
   ChargeSession,
   PreflightOk,
@@ -109,6 +110,39 @@ export function makeChargeSession(overrides: Partial<ChargeSession> = {}): Charg
     deliveredWh: 12.4,
     peakVoltage: 4.2,
     snapshot: null,
+    // F-026 additive fields: a genuine charge-from-empty (start 2.9 V ≤ the
+    // liion 3.00 V/cell empty threshold), unassigned by default.
+    batteryId: null,
+    startVoltage: 2.9,
+    capacityEligible: true,
+    ...overrides,
+  }
+}
+
+/**
+ * A battery (F-026) fixture — a 3S liion pack with derived health aggregates. By
+ * default it has a rating set (SoH baseline) and 4 full cycles; override the
+ * capacity/SoH fields to exercise the null ("не определено") and SoH>100 paths.
+ */
+export function makeBattery(overrides: Partial<Battery> = {}): Battery {
+  return {
+    id: 2,
+    name: 'Pack A — 3S1P 18650',
+    chemistry: 'liion',
+    cells: 3,
+    ratedCapacityMah: 3400,
+    partNumber: 'NCR18650B',
+    notes: 'bench pack, 2024 build',
+    fullCycleCount: 4,
+    latestCapacityMah: 3180,
+    bestCapacityMah: 3350,
+    firstCapacityMah: 3350,
+    sohPct: 93.5,
+    degradationPct: 5.1,
+    equivalentCycles: 7.2,
+    totalWh: 442.7,
+    createdAt: 1784000000000,
+    updatedAt: 1784000000000,
     ...overrides,
   }
 }
@@ -192,11 +226,24 @@ export function chargeStopRoute(): RouteHandler {
   }
 }
 
-export function chargeSessionsListRoute(items: ChargeSession[], total = items.length): RouteHandler {
+/**
+ * GET /charge/sessions — honors the F-026 `batteryId` filter: when the query
+ * carries a positive `batteryId`, only sessions with that `batteryId` are
+ * returned (and `total` reflects the filtered count unless overridden), matching
+ * the real API.
+ */
+export function chargeSessionsListRoute(items: ChargeSession[], total?: number): RouteHandler {
   return {
     method: 'GET',
     match: (u) => u.startsWith('/api/v1/charge/sessions?'),
-    respond: () => ({ status: 200, body: { items, total } }),
+    respond: (u) => {
+      const bid = new URL(`http://x${u}`).searchParams.get('batteryId')
+      const filtered =
+        bid !== null && Number(bid) > 0
+          ? items.filter((s) => s.batteryId === Number(bid))
+          : items
+      return { status: 200, body: { items: filtered, total: total ?? filtered.length } }
+    },
   }
 }
 
@@ -205,5 +252,101 @@ export function chargeSessionDetailRoute(session: ChargeSession): RouteHandler {
     method: 'GET',
     match: (u) => /^\/api\/v1\/charge\/sessions\/\d+$/.test(u),
     respond: () => ({ status: 200, body: session }),
+  }
+}
+
+/** POST /charge/sessions/{id}/battery — echoes the session with the new batteryId. */
+export function chargeSessionAssignBatteryRoute(base: ChargeSession = makeChargeSession()): RouteHandler {
+  return {
+    method: 'POST',
+    match: (u) => /^\/api\/v1\/charge\/sessions\/\d+\/battery$/.test(u),
+    respond: (u, init) => {
+      const id = Number(u.split('/')[5])
+      const body = JSON.parse(String(init?.body)) as { batteryId: number | null }
+      return { status: 200, body: { ...base, id, batteryId: body.batteryId } }
+    },
+  }
+}
+
+// -- Battery library (F-026) routes ----------------------------------------
+
+/** GET /charge/batteries backed by a mutable in-memory store. */
+export function batteriesListRoute(store: { items: Battery[] }): RouteHandler {
+  return {
+    method: 'GET',
+    match: (u) => u === '/api/v1/charge/batteries',
+    respond: () => ({ status: 200, body: { items: store.items } }),
+  }
+}
+
+/** POST /charge/batteries — appends to the store, 201 (empty health aggregates). */
+export function batteriesCreateRoute(store: { items: Battery[] }): RouteHandler {
+  return {
+    method: 'POST',
+    match: (u) => u === '/api/v1/charge/batteries',
+    respond: (_u, init) => {
+      const input = JSON.parse(String(init?.body)) as Partial<Battery>
+      const created = makeBattery({
+        ...input,
+        id: store.items.length + 10,
+        fullCycleCount: 0,
+        latestCapacityMah: null,
+        bestCapacityMah: null,
+        firstCapacityMah: null,
+        sohPct: null,
+        degradationPct: null,
+        equivalentCycles: null,
+        totalWh: 0,
+      })
+      store.items.push(created)
+      return { status: 201, body: created }
+    },
+  }
+}
+
+/** GET /charge/batteries/{id} — from the store, 404 battery_not_found. */
+export function batteryDetailRoute(store: { items: Battery[] }): RouteHandler {
+  return {
+    method: 'GET',
+    match: (u) => /^\/api\/v1\/charge\/batteries\/\d+$/.test(u),
+    respond: (u) => {
+      const id = Number(u.split('/').pop())
+      const found = store.items.find((b) => b.id === id)
+      if (found === undefined) {
+        return { status: 404, body: { error: { code: 'battery_not_found', message: 'not found' } } }
+      }
+      return { status: 200, body: found }
+    },
+  }
+}
+
+/** PUT /charge/batteries/{id} — merges the patch into the stored battery. */
+export function batteryUpdateRoute(store: { items: Battery[] }): RouteHandler {
+  return {
+    method: 'PUT',
+    match: (u) => /^\/api\/v1\/charge\/batteries\/\d+$/.test(u),
+    respond: (u, init) => {
+      const id = Number(u.split('/').pop())
+      const patch = JSON.parse(String(init?.body)) as Partial<Battery>
+      const idx = store.items.findIndex((b) => b.id === id)
+      if (idx < 0) {
+        return { status: 404, body: { error: { code: 'battery_not_found', message: 'not found' } } }
+      }
+      store.items[idx] = { ...store.items[idx], ...patch }
+      return { status: 200, body: store.items[idx] }
+    },
+  }
+}
+
+/** DELETE /charge/batteries/{id} — removes from the store, 204. */
+export function batteryDeleteRoute(store: { items: Battery[] }): RouteHandler {
+  return {
+    method: 'DELETE',
+    match: (u) => /^\/api\/v1\/charge\/batteries\/\d+$/.test(u),
+    respond: (u) => {
+      const id = Number(u.split('/').pop())
+      store.items = store.items.filter((b) => b.id !== id)
+      return { status: 204 }
+    },
   }
 }

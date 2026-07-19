@@ -45,6 +45,18 @@ func registerChargeRoutes(v1 *gin.RouterGroup, store *storage.Storage, mgr *char
 
 	v1.GET("/charge/sessions", listChargeSessions(store))
 	v1.GET("/charge/sessions/:id", getChargeSession(store))
+
+	// F-026: battery library (CRUD, with derived per-battery health aggregates) +
+	// the post-hoc session<->battery association. These are a pure read-and-storage
+	// layer with no device/run-engine/interlock surface, so none takes the seqGate
+	// and none touches the charger.
+	v1.GET("/charge/batteries", listBatteries(store))
+	v1.POST("/charge/batteries", createBattery(store))
+	v1.GET("/charge/batteries/:id", getBattery(store))
+	v1.PUT("/charge/batteries/:id", updateBattery(store))
+	v1.DELETE("/charge/batteries/:id", deleteBattery(store))
+
+	v1.POST("/charge/sessions/:id/battery", assignSessionBattery(store))
 }
 
 // chargeProfileDTO mirrors the ChargeProfile object of the F-023 contract.
@@ -629,23 +641,27 @@ func activeCharge(mgr *charger.Manager) gin.HandlerFunc {
 	}
 }
 
-// chargeSessionDTO mirrors the ChargeSession object of the F-023 contract.
+// chargeSessionDTO mirrors the ChargeSession object of the F-023/F-026 contract.
 // EndedAt is null while a run is in flight; Snapshot is the opaque phase/limits
-// blob or null.
+// blob or null. F-026 adds BatteryID (null = unassigned), StartVoltage (null for
+// pre-F-026 rows) and the intrinsic, computed CapacityEligible flag.
 type chargeSessionDTO struct {
-	ID           int64           `json:"id"`
-	ProfileID    int64           `json:"profileId"`
-	ProfileName  string          `json:"profileName"`
-	Chemistry    string          `json:"chemistry"`
-	Cells        int             `json:"cells"`
-	StartedAt    int64           `json:"startedAt"`
-	EndedAt      *int64          `json:"endedAt"`
-	State        string          `json:"state"`
-	Reason       string          `json:"reason"`
-	DeliveredMah float64         `json:"deliveredMah"`
-	DeliveredWh  float64         `json:"deliveredWh"`
-	PeakVoltage  float64         `json:"peakVoltage"`
-	Snapshot     json.RawMessage `json:"snapshot"`
+	ID               int64           `json:"id"`
+	ProfileID        int64           `json:"profileId"`
+	BatteryID        *int64          `json:"batteryId"`
+	ProfileName      string          `json:"profileName"`
+	Chemistry        string          `json:"chemistry"`
+	Cells            int             `json:"cells"`
+	StartedAt        int64           `json:"startedAt"`
+	EndedAt          *int64          `json:"endedAt"`
+	State            string          `json:"state"`
+	Reason           string          `json:"reason"`
+	DeliveredMah     float64         `json:"deliveredMah"`
+	DeliveredWh      float64         `json:"deliveredWh"`
+	PeakVoltage      float64         `json:"peakVoltage"`
+	StartVoltage     *float64        `json:"startVoltage"`
+	CapacityEligible bool            `json:"capacityEligible"`
+	Snapshot         json.RawMessage `json:"snapshot"`
 }
 
 // chargeSessionJSON maps a stored session onto the contract's ChargeSession.
@@ -659,20 +675,33 @@ func chargeSessionJSON(s storage.ChargeSession) chargeSessionDTO {
 	if s.Snapshot != "" {
 		snapshot = json.RawMessage(s.Snapshot)
 	}
+	var batteryID *int64
+	if s.BatteryID != 0 {
+		b := s.BatteryID
+		batteryID = &b
+	}
+	var startVoltage *float64
+	if s.StartVoltage != nil {
+		v := *s.StartVoltage
+		startVoltage = &v
+	}
 	return chargeSessionDTO{
-		ID:           s.ID,
-		ProfileID:    s.ProfileID,
-		ProfileName:  s.ProfileName,
-		Chemistry:    s.Chemistry,
-		Cells:        s.Cells,
-		StartedAt:    s.StartedAt,
-		EndedAt:      ended,
-		State:        s.State,
-		Reason:       s.Reason,
-		DeliveredMah: s.DeliveredMah,
-		DeliveredWh:  s.DeliveredWh,
-		PeakVoltage:  s.PeakVoltage,
-		Snapshot:     snapshot,
+		ID:               s.ID,
+		ProfileID:        s.ProfileID,
+		BatteryID:        batteryID,
+		ProfileName:      s.ProfileName,
+		Chemistry:        s.Chemistry,
+		Cells:            s.Cells,
+		StartedAt:        s.StartedAt,
+		EndedAt:          ended,
+		State:            s.State,
+		Reason:           s.Reason,
+		DeliveredMah:     s.DeliveredMah,
+		DeliveredWh:      s.DeliveredWh,
+		PeakVoltage:      s.PeakVoltage,
+		StartVoltage:     startVoltage,
+		CapacityEligible: s.CapacityEligible(),
+		Snapshot:         snapshot,
 	}
 }
 
@@ -696,7 +725,22 @@ func listChargeSessions(store *storage.Storage) gin.HandlerFunc {
 		if !ok {
 			return
 		}
-		items, total, err := store.ListChargeSessions(c.Request.Context(), int(limit), int(offset))
+		// Optional batteryId filter (F-026): a positive integer filters to that
+		// battery's sessions; omitted or <= 0 imposes no filter (0 never matches
+		// the unassigned rows). A non-numeric value is a 400 bad_request.
+		batteryID := int64(0)
+		if raw := c.Query("batteryId"); raw != "" {
+			n, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				writeError(c, http.StatusBadRequest, "bad_request",
+					fmt.Sprintf("batteryId must be an integer, got %q", raw))
+				return
+			}
+			if n > 0 {
+				batteryID = n
+			}
+		}
+		items, total, err := store.ListChargeSessions(c.Request.Context(), int(limit), int(offset), batteryID)
 		if err != nil {
 			writeChargeStoreError(c, err, "charge_session_not_found")
 			return

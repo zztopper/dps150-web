@@ -110,18 +110,26 @@ func (h *fakeHub) Refresh(context.Context) error {
 
 // fakeStore records session lifecycle.
 type fakeStore struct {
-	mu       sync.Mutex
-	begun    int
-	finished []SessionResult
-	events   []string
-	orphanN  int64
+	mu        sync.Mutex
+	begun     int
+	lastStart SessionStart
+	finished  []SessionResult
+	events    []string
+	orphanN   int64
 }
 
-func (s *fakeStore) BeginSession(context.Context, SessionStart) (int64, error) {
+func (s *fakeStore) BeginSession(_ context.Context, start SessionStart) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.begun++
+	s.lastStart = start
 	return int64(s.begun), nil
+}
+
+func (s *fakeStore) startVoltage() *float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastStart.StartVoltage
 }
 
 func (s *fakeStore) FinishSession(_ context.Context, _ int64, r SessionResult) error {
@@ -221,6 +229,36 @@ func TestStartOrderEnergizesAfterSetpoints(t *testing.T) {
 	}
 	if cmds[3] != "out=on" {
 		t.Fatalf("4th command = %q, want out=on (output must energize AFTER setpoints)", cmds[3])
+	}
+}
+
+// TestStartCapturesStartVoltage asserts the F-026 additive record: the
+// already-measured open-terminal Vbat is threaded into the SessionStart, and the
+// on-the-wire start sequence (protections → V → I → out=on) is byte-for-byte
+// unchanged — the capture is a pure record AFTER output-on, not a device write.
+func TestStartCapturesStartVoltage(t *testing.T) {
+	const vbat = 3.42
+	hub := newFakeHub(vbat)
+	store := &fakeStore{}
+	m := testManager(hub, store)
+	if err := m.Start(context.Background(), liion1S(), false); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { m.Stop(); waitIdle(t, m, 2*time.Second) }()
+
+	sv := store.startVoltage()
+	if sv == nil {
+		t.Fatal("SessionStart.StartVoltage is nil, want the measured open-terminal Vbat")
+	}
+	if *sv != vbat {
+		t.Fatalf("captured start voltage = %v, want %v (the readVbat value)", *sv, vbat)
+	}
+
+	// The captured record must not perturb the safety-critical start order.
+	cmds := hub.commands()
+	if len(cmds) < 4 || cmds[0] != "protections" ||
+		!strings.HasPrefix(cmds[1], "V=") || !strings.HasPrefix(cmds[2], "I=") || cmds[3] != "out=on" {
+		t.Fatalf("start sequence = %v, want protections, V=, I=, out=on unchanged", cmds)
 	}
 }
 

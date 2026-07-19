@@ -20,7 +20,7 @@ func openChargeStorage(t *testing.T, driver, dsn string) *Storage {
 	s, err := Open(Config{
 		Driver:     driver,
 		DSN:        dsn,
-		Models:     []any{&ChargeProfile{}, &ChargeSession{}},
+		Models:     []any{&ChargeProfile{}, &ChargeSession{}, &Battery{}},
 		BackoffMin: backoffMin,
 		BackoffMax: time.Second,
 	})
@@ -192,7 +192,7 @@ func runChargeSuite(t *testing.T, s *Storage) {
 		t.Fatalf("CreateChargeSession(second): %v", err)
 	}
 
-	sessions, total, err := s.ListChargeSessions(ctx, 0, 0)
+	sessions, total, err := s.ListChargeSessions(ctx, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("ListChargeSessions(all): %v", err)
 	}
@@ -206,7 +206,7 @@ func runChargeSuite(t *testing.T, s *Storage) {
 	}
 
 	// Limit/offset page through the result; total stays unpaged.
-	page, total, err := s.ListChargeSessions(ctx, 1, 1)
+	page, total, err := s.ListChargeSessions(ctx, 1, 1, 0)
 	if err != nil {
 		t.Fatalf("ListChargeSessions(limit=1, offset=1): %v", err)
 	}
@@ -244,6 +244,70 @@ func runChargeSuite(t *testing.T, s *Storage) {
 	// A second sweep finds nothing running.
 	if n, err := s.MarkRunningChargeSessionsFailed(ctx, "server restarted"); err != nil || n != 0 {
 		t.Errorf("MarkRunningChargeSessionsFailed(again) = %d, %v; want 0, nil", n, err)
+	}
+
+	// --- F-026 start_voltage round-trip (the #1 safety must-fix) ---
+
+	// A session created WITH a start voltage must survive a completed finalize,
+	// even though the finalize path (chargeStore.FinishSession) never carries
+	// start_voltage: UpdateChargeSession preserves it from the stored row. A plain
+	// float64 would scan a legacy NULL back as 0 and poison the capacity gate, so
+	// the column is a *float64 and legacy rows round-trip as nil, not 0.
+	sv := 2.95 // below the 3.00 V/cell li-ion empty threshold → charged from empty
+	svSess := ChargeSession{
+		ProfileID: 0, ProfileName: "sv", Chemistry: "liion", Cells: 1,
+		StartedAt: sess.StartedAt + 5000, State: "running", StartVoltage: &sv,
+	}
+	if err := s.CreateChargeSession(ctx, &svSess); err != nil {
+		t.Fatalf("CreateChargeSession(with start voltage): %v", err)
+	}
+	// Finalize the way the run does: only the terminal fields, start_voltage absent.
+	svFin := ChargeSession{
+		ID: svSess.ID, State: "completed", Reason: "termination current reached",
+		EndedAt: svSess.StartedAt + 6000, DeliveredMah: 900, DeliveredWh: 3.2, PeakVoltage: 4.2,
+	}
+	if err := s.UpdateChargeSession(ctx, &svFin); err != nil {
+		t.Fatalf("UpdateChargeSession(with start voltage): %v", err)
+	}
+	if svFin.StartVoltage == nil || *svFin.StartVoltage != sv {
+		t.Errorf("finalize dropped start_voltage: got %v, want %v", svFin.StartVoltage, sv)
+	}
+	gotSV, err := s.GetChargeSession(ctx, svSess.ID)
+	if err != nil {
+		t.Fatalf("GetChargeSession(with start voltage): %v", err)
+	}
+	if gotSV.StartVoltage == nil || *gotSV.StartVoltage != sv {
+		t.Errorf("start_voltage did not survive finalize: got %v, want %v", gotSV.StartVoltage, sv)
+	}
+	if !gotSV.CapacityEligible() {
+		t.Errorf("session (completed, 3.05V/1cell li-ion, delivered>0) should be capacity-eligible")
+	}
+
+	// A legacy session (no start voltage) round-trips as nil, never 0, and is not
+	// capacity-eligible.
+	legacy := ChargeSession{
+		ProfileID: 0, ProfileName: "legacy", Chemistry: "liion", Cells: 1,
+		StartedAt: sess.StartedAt + 7000, State: "running",
+	}
+	if err := s.CreateChargeSession(ctx, &legacy); err != nil {
+		t.Fatalf("CreateChargeSession(legacy): %v", err)
+	}
+	legFin := ChargeSession{
+		ID: legacy.ID, State: "completed", Reason: "done",
+		EndedAt: legacy.StartedAt + 100, DeliveredMah: 900, DeliveredWh: 3.2, PeakVoltage: 4.2,
+	}
+	if err := s.UpdateChargeSession(ctx, &legFin); err != nil {
+		t.Fatalf("UpdateChargeSession(legacy): %v", err)
+	}
+	gotLeg, err := s.GetChargeSession(ctx, legacy.ID)
+	if err != nil {
+		t.Fatalf("GetChargeSession(legacy): %v", err)
+	}
+	if gotLeg.StartVoltage != nil {
+		t.Errorf("legacy start_voltage = %v, want nil (a NULL must not scan as 0)", *gotLeg.StartVoltage)
+	}
+	if gotLeg.CapacityEligible() {
+		t.Errorf("legacy session (start_voltage NULL) must never be capacity-eligible")
 	}
 }
 
@@ -287,7 +351,7 @@ func TestChargeUnavailable(t *testing.T) {
 	if _, err := s.GetChargeSession(ctx, 1); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("GetChargeSession error = %v, want ErrUnavailable", err)
 	}
-	if _, _, err := s.ListChargeSessions(ctx, 0, 0); !errors.Is(err, ErrUnavailable) {
+	if _, _, err := s.ListChargeSessions(ctx, 0, 0, 0); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("ListChargeSessions error = %v, want ErrUnavailable", err)
 	}
 	if _, err := s.MarkRunningChargeSessionsFailed(ctx, "x"); !errors.Is(err, ErrUnavailable) {

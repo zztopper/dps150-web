@@ -24,12 +24,13 @@ type chargeStore struct {
 // BeginSession inserts a running ChargeSession and returns its new id.
 func (a chargeStore) BeginSession(ctx context.Context, s charger.SessionStart) (int64, error) {
 	sess := &storage.ChargeSession{
-		ProfileID:   s.ProfileID,
-		ProfileName: s.ProfileName,
-		Chemistry:   s.Chemistry,
-		Cells:       s.Cells,
-		StartedAt:   s.StartedAt.UnixMilli(),
-		State:       charger.StateRunning,
+		ProfileID:    s.ProfileID,
+		ProfileName:  s.ProfileName,
+		Chemistry:    s.Chemistry,
+		Cells:        s.Cells,
+		StartedAt:    s.StartedAt.UnixMilli(),
+		State:        charger.StateRunning,
+		StartVoltage: s.StartVoltage,
 	}
 	if err := a.store.CreateChargeSession(ctx, sess); err != nil {
 		return 0, err
