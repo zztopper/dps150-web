@@ -309,6 +309,126 @@ func runChargeSuite(t *testing.T, s *Storage) {
 	if gotLeg.CapacityEligible() {
 		t.Errorf("legacy session (start_voltage NULL) must never be capacity-eligible")
 	}
+
+	// --- F-027 cc_onset round-trip: preserved on BOTH completed and stopped
+	// finalize (Rint-eligibility does not require completed), and RecordChargeCCOnset
+	// is write-once ---
+
+	// A mid-SoC session that captures a CC onset mid-run via RecordChargeCCOnset,
+	// then finalizes COMPLETED: the two columns must survive the full-row Save.
+	onsetSV := 3.55 // ≥ 3.00 V/cell li-ion precharge threshold → no precharge → Rint-eligible
+	compSess := ChargeSession{
+		ProfileID: 0, ProfileName: "rint", Chemistry: "liion", Cells: 1,
+		StartedAt: sess.StartedAt + 9000, State: "running", StartVoltage: &onsetSV,
+	}
+	if err := s.CreateChargeSession(ctx, &compSess); err != nil {
+		t.Fatalf("CreateChargeSession(cc onset, completed): %v", err)
+	}
+	if err := s.RecordChargeCCOnset(ctx, compSess.ID, 3.62, 1.70); err != nil {
+		t.Fatalf("RecordChargeCCOnset: %v", err)
+	}
+	// A second record is a write-once no-op (WHERE cc_onset_voltage IS NULL); it
+	// must not overwrite the first capture.
+	if err := s.RecordChargeCCOnset(ctx, compSess.ID, 9.99, 9.99); err != nil {
+		t.Fatalf("RecordChargeCCOnset(again): %v", err)
+	}
+	compFin := ChargeSession{
+		ID: compSess.ID, State: "completed", Reason: "done",
+		EndedAt: compSess.StartedAt + 100, DeliveredMah: 400, DeliveredWh: 1.5, PeakVoltage: 4.2,
+	}
+	if err := s.UpdateChargeSession(ctx, &compFin); err != nil {
+		t.Fatalf("UpdateChargeSession(cc onset, completed): %v", err)
+	}
+	gotComp, err := s.GetChargeSession(ctx, compSess.ID)
+	if err != nil {
+		t.Fatalf("GetChargeSession(cc onset, completed): %v", err)
+	}
+	if gotComp.CCOnsetVoltage == nil || *gotComp.CCOnsetVoltage != 3.62 {
+		t.Errorf("cc_onset_voltage after completed finalize = %v, want 3.62 (write-once, preserved)", gotComp.CCOnsetVoltage)
+	}
+	if gotComp.CCOnsetCurrent == nil || *gotComp.CCOnsetCurrent != 1.70 {
+		t.Errorf("cc_onset_current after completed finalize = %v, want 1.70 (write-once, preserved)", gotComp.CCOnsetCurrent)
+	}
+	if !gotComp.RintEligible() {
+		t.Errorf("mid-SoC session (3.55V start, 3.62V onset, 1.70A) should be Rint-eligible")
+	}
+	if rc := gotComp.RintCellMohm(); rc == nil || !approxEq(*rc, (3.62-3.55)/1.70*1000) {
+		t.Errorf("RintCellMohm = %v, want %v", rc, (3.62-3.55)/1.70*1000)
+	}
+
+	// The SAME must hold on a STOPPED finalize: a run that reached CC onset and was
+	// then stopped keeps its capture (Rint does not require completed).
+	stopSV := 3.58
+	stopSess := ChargeSession{
+		ProfileID: 0, ProfileName: "rint-stopped", Chemistry: "liion", Cells: 1,
+		StartedAt: sess.StartedAt + 11000, State: "running", StartVoltage: &stopSV,
+	}
+	if err := s.CreateChargeSession(ctx, &stopSess); err != nil {
+		t.Fatalf("CreateChargeSession(cc onset, stopped): %v", err)
+	}
+	if err := s.RecordChargeCCOnset(ctx, stopSess.ID, 3.66, 1.70); err != nil {
+		t.Fatalf("RecordChargeCCOnset(stopped): %v", err)
+	}
+	stopFin := ChargeSession{
+		ID: stopSess.ID, State: "stopped", Reason: "stopped",
+		EndedAt: stopSess.StartedAt + 100, DeliveredMah: 120, DeliveredWh: 0.4, PeakVoltage: 3.7,
+	}
+	if err := s.UpdateChargeSession(ctx, &stopFin); err != nil {
+		t.Fatalf("UpdateChargeSession(cc onset, stopped): %v", err)
+	}
+	gotStop, err := s.GetChargeSession(ctx, stopSess.ID)
+	if err != nil {
+		t.Fatalf("GetChargeSession(cc onset, stopped): %v", err)
+	}
+	if gotStop.CCOnsetVoltage == nil || *gotStop.CCOnsetVoltage != 3.66 ||
+		gotStop.CCOnsetCurrent == nil || *gotStop.CCOnsetCurrent != 1.70 {
+		t.Errorf("cc_onset after stopped finalize = %v/%v, want 3.66/1.70 (preserved on a non-completed finalize)",
+			gotStop.CCOnsetVoltage, gotStop.CCOnsetCurrent)
+	}
+	if !gotStop.RintEligible() {
+		t.Errorf("stopped session that reached CC onset should be Rint-eligible")
+	}
+
+	// A from-empty session (start below the precharge threshold → a precharge ran)
+	// is NOT Rint-eligible even with a captured onset (precharge inflates ΔV).
+	emptySV := 2.85
+	emptySess := ChargeSession{
+		ProfileID: 0, ProfileName: "from-empty", Chemistry: "liion", Cells: 1,
+		StartedAt: sess.StartedAt + 13000, State: "running", StartVoltage: &emptySV,
+	}
+	if err := s.CreateChargeSession(ctx, &emptySess); err != nil {
+		t.Fatalf("CreateChargeSession(from-empty): %v", err)
+	}
+	if err := s.RecordChargeCCOnset(ctx, emptySess.ID, 3.31, 1.70); err != nil {
+		t.Fatalf("RecordChargeCCOnset(from-empty): %v", err)
+	}
+	gotEmpty, err := s.GetChargeSession(ctx, emptySess.ID)
+	if err != nil {
+		t.Fatalf("GetChargeSession(from-empty): %v", err)
+	}
+	if gotEmpty.RintEligible() {
+		t.Errorf("from-empty session (2.85 V/cell < 3.00 precharge) must NOT be Rint-eligible (precharge-inflated)")
+	}
+	if gotEmpty.RintCellMohm() != nil {
+		t.Errorf("from-empty session RintCellMohm = %v, want nil", gotEmpty.RintCellMohm())
+	}
+	// It is, however, capacity-eligible (2.85 ≤ 3.00) — the near-disjoint property.
+	if !gotEmpty.CapacityEligible() {
+		// NOTE: capacity also requires completed; this row is still running, so it
+		// is not yet capacity-eligible. Finalize it to confirm the disjointness.
+		emptyFin := ChargeSession{
+			ID: emptySess.ID, State: "completed", Reason: "done",
+			EndedAt: emptySess.StartedAt + 100, DeliveredMah: 900, DeliveredWh: 3.2, PeakVoltage: 4.2,
+		}
+		if err := s.UpdateChargeSession(ctx, &emptyFin); err != nil {
+			t.Fatalf("UpdateChargeSession(from-empty): %v", err)
+		}
+		done, _ := s.GetChargeSession(ctx, emptySess.ID)
+		if !done.CapacityEligible() || done.RintEligible() {
+			t.Errorf("from-empty completed session: capacityEligible=%v rintEligible=%v, want true/false (near-disjoint)",
+				done.CapacityEligible(), done.RintEligible())
+		}
+	}
 }
 
 func TestSQLiteCharge(t *testing.T) {
@@ -350,6 +470,9 @@ func TestChargeUnavailable(t *testing.T) {
 	}
 	if _, err := s.GetChargeSession(ctx, 1); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("GetChargeSession error = %v, want ErrUnavailable", err)
+	}
+	if err := s.RecordChargeCCOnset(ctx, 1, 3.6, 1.7); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("RecordChargeCCOnset error = %v, want ErrUnavailable", err)
 	}
 	if _, _, err := s.ListChargeSessions(ctx, 0, 0, 0); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("ListChargeSessions error = %v, want ErrUnavailable", err)

@@ -43,31 +43,42 @@ type ChargeProfile struct {
 //
 // F-026 (battery health) adds two additive, nullable columns:
 //   - BatteryID: the library battery this session is assigned to (0 = unassigned,
-//     the int64-zero convention shared with ProfileID). Written only by the
-//     post-hoc association route, never by the charger.
+//     the int64-zero convention shared with ProfileID). Written by the post-hoc
+//     association route and by the F-027 start-time preselect (BeginSession).
 //   - StartVoltage: the open-terminal pack voltage measured at pre-flight with the
 //     output OFF, captured by the charger at session creation. It is a *float64
 //     (nullable) on purpose — a plain float64 would scan a DB NULL back as 0,
 //     which the capacity-eligibility gate would misread as "0 V ⇒ from empty" and
 //     mis-count every legacy (pre-F-026) row. NULL means the start SoC is unknown,
 //     so the session is excluded from every capacity metric.
+//
+// F-027 (internal resistance) adds two more additive, nullable columns:
+//   - CCOnsetVoltage / CCOnsetCurrent: the measured terminal (pack) voltage and
+//     current at CC onset — the tick where the charger first sustains the full
+//     charge current in the main phase. Both are *float64 (nullable) for the same
+//     reason as StartVoltage: a plain float64 would scan a DB NULL as 0 and poison
+//     the Rint gate (a 0 V onset ⇒ negative ΔV ⇒ garbage). They are written mid-run
+//     by RecordChargeCCOnset (a targeted, write-once update) and are NULL for any
+//     charge that never reached CC onset (started in CV, ran too short, or pre-F-027).
 type ChargeSession struct {
-	ID           int64  `gorm:"primaryKey;autoIncrement"`
-	ProfileID    int64  `gorm:"index"` // 0 for an ad-hoc run
-	BatteryID    int64  `gorm:"index"` // 0 = unassigned to any library battery (F-026)
-	ProfileName  string `gorm:"size:200"`
-	Chemistry    string `gorm:"size:16"`
-	Cells        int
-	StartedAt    int64  `gorm:"index"`
-	EndedAt      int64  // 0 while running
-	State        string `gorm:"size:16"` // running|completed|stopped|aborted|failed
-	Reason       string `gorm:"size:64"`
-	DeliveredMah float64
-	DeliveredWh  float64
-	PeakVoltage  float64
-	StartVoltage *float64 // pack volts at start, output off; NULL for pre-F-026 rows
-	Snapshot     string   // JSON, opaque phase-timeline / limits snapshot owned by internal/charge
-	CreatedAt    int64    `gorm:"autoCreateTime:milli"`
+	ID             int64  `gorm:"primaryKey;autoIncrement"`
+	ProfileID      int64  `gorm:"index"` // 0 for an ad-hoc run
+	BatteryID      int64  `gorm:"index"` // 0 = unassigned to any library battery (F-026)
+	ProfileName    string `gorm:"size:200"`
+	Chemistry      string `gorm:"size:16"`
+	Cells          int
+	StartedAt      int64  `gorm:"index"`
+	EndedAt        int64  // 0 while running
+	State          string `gorm:"size:16"` // running|completed|stopped|aborted|failed
+	Reason         string `gorm:"size:64"`
+	DeliveredMah   float64
+	DeliveredWh    float64
+	PeakVoltage    float64
+	StartVoltage   *float64 // pack volts at start, output off; NULL for pre-F-026 rows
+	CCOnsetVoltage *float64 // pack volts at CC onset, under load; NULL when not captured (F-027)
+	CCOnsetCurrent *float64 // pack amps at CC onset, under load; NULL when not captured (F-027)
+	Snapshot       string   // JSON, opaque phase-timeline / limits snapshot owned by internal/charge
+	CreatedAt      int64    `gorm:"autoCreateTime:milli"`
 }
 
 // Per-cell "near-empty" thresholds (volts) that mark a pack as started-from-empty
@@ -98,6 +109,37 @@ func emptyThresholdPerCell(chemistry string) (float64, bool) {
 	}
 }
 
+// Per-cell precharge thresholds (volts), mirroring the charger's presets.go
+// (Li-ion 3.0, LiFePO4 2.5, Pb 0 — Pb has no precharge). They are the single
+// source of truth for the F-027 Rint no-precharge gate: a charge whose per-cell
+// StartVoltage is at or above this threshold ran NO precharge phase, so its
+// StartVoltage is a genuine open-circuit voltage at CC onset and the CC-onset
+// step is a clean IR measurement. Below it a precharge trickled first, lifting the
+// true OCV 0.1–0.5 V/cell before onset and inflating Rint ~5–7×, so such charges
+// are excluded from every Rint metric. These are DELIBERATELY distinct from the
+// emptyThreshold* capacity constants (Pb differs: 0 vs 1.90) — reusing the
+// capacity gate would compute Rint over the exact from-empty rows most inflated.
+const (
+	vPrechargeLiIon   = 3.00
+	vPrechargeLiFePO4 = 2.50
+	vPrechargePb      = 0.0
+)
+
+// vPrechargePerCell returns the per-cell precharge threshold for a chemistry and
+// whether it is a known chemistry.
+func vPrechargePerCell(chemistry string) (float64, bool) {
+	switch chemistry {
+	case "liion":
+		return vPrechargeLiIon, true
+	case "lifepo4":
+		return vPrechargeLiFePO4, true
+	case "pb":
+		return vPrechargePb, true
+	default:
+		return 0, false
+	}
+}
+
 // CapacityEligible reports whether this session is a capacity data-point for the
 // battery-health aggregates: it is intrinsic to the row — completed, with a
 // positive delivered charge, a known start voltage, and a per-cell start voltage
@@ -113,6 +155,47 @@ func (s ChargeSession) CapacityEligible() bool {
 		return false
 	}
 	return (*s.StartVoltage / float64(s.Cells)) <= thr
+}
+
+// RintEligible reports whether this session yields a DC internal-resistance
+// data-point for the Rint aggregates (F-027 / design §3.11). It is intrinsic to
+// the row: a known start voltage (OCV) AND a captured CC-onset voltage/current
+// under load, a positive onset current, a positive step (onset ≥ OCV), and a
+// per-cell start voltage AT OR ABOVE the chemistry's precharge threshold — i.e. NO
+// precharge phase ran, so the step is a clean IR measurement rather than a
+// precharge-inflated one. It guards cells > 0 and cc_onset_current > 0 before
+// dividing (RintCellMohm is then never NaN/Inf). Legacy rows (any of the pointers
+// nil) are never eligible. It mirrors rintEligiblePredicate (the SQL twin) and,
+// like CapacityEligible, is driven by the vPrecharge* constants.
+func (s ChargeSession) RintEligible() bool {
+	if s.StartVoltage == nil || s.CCOnsetVoltage == nil || s.CCOnsetCurrent == nil || s.Cells <= 0 {
+		return false
+	}
+	if *s.CCOnsetCurrent <= 0 {
+		return false
+	}
+	if (*s.CCOnsetVoltage - *s.StartVoltage) <= 0 {
+		return false
+	}
+	thr, ok := vPrechargePerCell(s.Chemistry)
+	if !ok {
+		return false
+	}
+	return (*s.StartVoltage / float64(s.Cells)) >= thr
+}
+
+// RintCellMohm returns the computed per-cell DC internal resistance in milliohms,
+// or nil when the session is not Rint-eligible (design §3.11). Rint_pack =
+// (ccOnsetVoltage − startVoltage) / ccOnsetCurrent; per-cell = / cells; × 1000 for
+// mΩ. RintEligible guarantees the guards (cells > 0, cc_onset_current > 0, a
+// positive step), so the result is always finite.
+func (s ChargeSession) RintCellMohm() *float64 {
+	if !s.RintEligible() {
+		return nil
+	}
+	pack := (*s.CCOnsetVoltage - *s.StartVoltage) / *s.CCOnsetCurrent
+	perCell := pack / float64(s.Cells) * 1000
+	return &perCell
 }
 
 // ListChargeProfiles returns every profile ordered by id (creation order,
@@ -223,9 +306,11 @@ func (s *Storage) CreateChargeSession(ctx context.Context, sess *ChargeSession) 
 // StartVoltage and any BatteryID association are preserved from the stored row.
 // This is a full-row Save, so preserving StartVoltage is mandatory: dropping it
 // would zero/null the very datum the capacity-eligibility gate depends on at
-// every completed finalize (design §3.10, the pinned safety invariant). It
-// returns ErrNotFound for an unknown id and ErrUnavailable while the database is
-// down.
+// every completed finalize (design §3.10, the pinned safety invariant). For the
+// same reason it preserves the F-027 CCOnsetVoltage/CCOnsetCurrent captured
+// mid-run: Rint-eligibility does not require a completed run, so a stopped/aborted
+// finalize must keep the capture too (design §3.11, pinned). It returns
+// ErrNotFound for an unknown id and ErrUnavailable while the database is down.
 func (s *Storage) UpdateChargeSession(ctx context.Context, sess *ChargeSession) error {
 	db, err := s.DB()
 	if err != nil {
@@ -246,8 +331,36 @@ func (s *Storage) UpdateChargeSession(ctx context.Context, sess *ChargeSession) 
 	sess.StartedAt = existing.StartedAt
 	sess.CreatedAt = existing.CreatedAt
 	sess.StartVoltage = existing.StartVoltage
+	sess.CCOnsetVoltage = existing.CCOnsetVoltage
+	sess.CCOnsetCurrent = existing.CCOnsetCurrent
 	if err := db.WithContext(ctx).Save(sess).Error; err != nil {
 		return fmt.Errorf("update charge session %d: %w", sess.ID, err)
+	}
+	return nil
+}
+
+// RecordChargeCCOnset writes the CC-onset operating point (cc_onset_voltage,
+// cc_onset_current) onto session id, but ONLY when it has not already been
+// captured — the WHERE cc_onset_voltage IS NULL clause makes the write idempotent
+// (write-once at the database, so a duplicate dispatch never overwrites). It is a
+// targeted two-column Updates (never a full-row Save), so it can run mid-charge
+// without clobbering the concurrently-finalized status/delivered fields (design
+// §3.11). A no-op (row already captured, or id unknown) is not an error — the
+// caller (the charge run loop) logs and swallows any real error and leaves the
+// columns NULL. It returns ErrUnavailable while the database is down.
+func (s *Storage) RecordChargeCCOnset(ctx context.Context, id int64, voltage, current float64) error {
+	db, err := s.DB()
+	if err != nil {
+		return err
+	}
+	res := db.WithContext(ctx).Model(&ChargeSession{}).
+		Where("id = ? AND cc_onset_voltage IS NULL", id).
+		Updates(map[string]any{
+			"cc_onset_voltage": voltage,
+			"cc_onset_current": current,
+		})
+	if res.Error != nil {
+		return fmt.Errorf("record cc onset for charge session %d: %w", id, res.Error)
 	}
 	return nil
 }

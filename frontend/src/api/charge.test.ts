@@ -120,6 +120,10 @@ describe('listBatteries (F-026 normalization)', () => {
       sohPct: null,
       degradationPct: null,
       equivalentCycles: null,
+      // F-027: a brand-new battery has no Rint-eligible sessions.
+      latestRintCellMohm: null,
+      bestRintCellMohm: null,
+      rintCount: 0,
     })
   })
 
@@ -162,6 +166,11 @@ describe('listChargeSessions / assignSessionBattery (F-026)', () => {
       batteryId: null,
       startVoltage: null,
       capacityEligible: false,
+      // F-027: a legacy/omitempty row carries no Rint capture and is not eligible.
+      ccOnsetVoltage: null,
+      ccOnsetCurrent: null,
+      rintCellMohm: null,
+      rintEligible: false,
     })
   })
 

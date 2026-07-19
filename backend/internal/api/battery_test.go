@@ -51,6 +51,35 @@ func insertSession(t *testing.T, store *storage.Storage, chemistry string, cells
 	return sess.ID
 }
 
+// insertRintSession seeds a finalized session with a start voltage and (when
+// onsetI > 0) a mid-run CC-onset capture, mirroring the F-027 charge flow, and
+// returns its id.
+func insertRintSession(t *testing.T, store *storage.Storage, cells int, startedAt int64, state string, startV, onsetV, onsetI float64) int64 {
+	t.Helper()
+	ctx := t.Context()
+	sv := startV
+	sess := storage.ChargeSession{
+		ProfileName: "rint", Chemistry: "liion", Cells: cells,
+		StartedAt: startedAt, State: "running", StartVoltage: &sv,
+	}
+	if err := store.CreateChargeSession(ctx, &sess); err != nil {
+		t.Fatalf("CreateChargeSession: %v", err)
+	}
+	if onsetI > 0 {
+		if err := store.RecordChargeCCOnset(ctx, sess.ID, onsetV, onsetI); err != nil {
+			t.Fatalf("RecordChargeCCOnset: %v", err)
+		}
+	}
+	fin := storage.ChargeSession{
+		ID: sess.ID, State: state, Reason: "x", EndedAt: startedAt + 100,
+		DeliveredMah: 1000, DeliveredWh: 3.7, PeakVoltage: 4.2,
+	}
+	if err := store.UpdateChargeSession(ctx, &fin); err != nil {
+		t.Fatalf("UpdateChargeSession: %v", err)
+	}
+	return sess.ID
+}
+
 const validBatteryBody = `{
 	"name": "Pack A — 3S1P 18650",
 	"chemistry": "liion", "cells": 3,
@@ -259,6 +288,103 @@ func TestSessionBatteryFilterAndHealth(t *testing.T) {
 	}
 	if got.BestCapacityMah != nil && *got.BestCapacityMah != 2900 {
 		t.Errorf("bestCapacityMah = %v, want 2900", *got.BestCapacityMah)
+	}
+}
+
+// TestSessionRintDTO asserts the F-027 additive session fields: a mid-SoC session
+// that captured a CC onset surfaces ccOnsetVoltage/ccOnsetCurrent, a computed
+// rintCellMohm and rintEligible=true; a from-empty session (precharge ran)
+// surfaces the onset but is rintEligible=false with a null rintCellMohm.
+func TestSessionRintDTO(t *testing.T) {
+	store := newChargeTestStore(t)
+	hub := &fakeHub{snap: onlineSnapshot()}
+	r := chargeRouter(hub, store, nil, nil)
+
+	// Mid-SoC top-up: start 3.55 (≥ 3.00 precharge), onset 3.62/1.70 → Rint-eligible.
+	rintID := insertRintSession(t, store, 1, 1000, "completed", 3.55, 3.62, 1.70)
+	w := doCharge(t, r, http.MethodGet, fmt.Sprintf("/api/v1/charge/sessions/%d", rintID), "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET session = %d: %s", w.Code, w.Body.String())
+	}
+	s := decodeSession(t, w.Body.String())
+	if s.CCOnsetVoltage == nil || *s.CCOnsetVoltage != 3.62 {
+		t.Errorf("ccOnsetVoltage = %v, want 3.62", s.CCOnsetVoltage)
+	}
+	if s.CCOnsetCurrent == nil || *s.CCOnsetCurrent != 1.70 {
+		t.Errorf("ccOnsetCurrent = %v, want 1.70", s.CCOnsetCurrent)
+	}
+	if !s.RintEligible {
+		t.Errorf("rintEligible = false, want true (mid-SoC, no precharge)")
+	}
+	wantRint := (3.62 - 3.55) / 1.70 * 1000
+	if s.RintCellMohm == nil || (*s.RintCellMohm-wantRint) > 1e-6 || (wantRint-*s.RintCellMohm) > 1e-6 {
+		t.Errorf("rintCellMohm = %v, want %v", s.RintCellMohm, wantRint)
+	}
+
+	// From-empty: start 2.85 (< 3.00 → precharge ran), onset captured but excluded.
+	emptyID := insertRintSession(t, store, 1, 2000, "completed", 2.85, 3.31, 1.70)
+	w = doCharge(t, r, http.MethodGet, fmt.Sprintf("/api/v1/charge/sessions/%d", emptyID), "")
+	es := decodeSession(t, w.Body.String())
+	if es.CCOnsetVoltage == nil || *es.CCOnsetVoltage != 3.31 {
+		t.Errorf("from-empty ccOnsetVoltage = %v, want 3.31 (still surfaced)", es.CCOnsetVoltage)
+	}
+	if es.RintEligible {
+		t.Errorf("from-empty rintEligible = true, want false (precharge-inflated)")
+	}
+	if es.RintCellMohm != nil {
+		t.Errorf("from-empty rintCellMohm = %v, want null", *es.RintCellMohm)
+	}
+
+	// A legacy session (no onset) reads back null onset, rintEligible false.
+	sv := 3.7
+	legacyID := insertSession(t, store, "liion", 1, 3000, "completed", 900, 3.2, &sv)
+	w = doCharge(t, r, http.MethodGet, fmt.Sprintf("/api/v1/charge/sessions/%d", legacyID), "")
+	ls := decodeSession(t, w.Body.String())
+	if ls.CCOnsetVoltage != nil || ls.CCOnsetCurrent != nil || ls.RintCellMohm != nil || ls.RintEligible {
+		t.Errorf("legacy session rint fields = %v/%v/%v/%v, want null/null/null/false",
+			ls.CCOnsetVoltage, ls.CCOnsetCurrent, ls.RintCellMohm, ls.RintEligible)
+	}
+}
+
+// TestBatteryRintHealthDTO asserts the F-027 additive battery fields: the derived
+// per-cell Rint family (latest by started_at, best = MIN, count) over the
+// battery's Rint-eligible sessions.
+func TestBatteryRintHealthDTO(t *testing.T) {
+	store := newChargeTestStore(t)
+	hub := &fakeHub{snap: onlineSnapshot()}
+	r := chargeRouter(hub, store, nil, nil)
+
+	w := doCharge(t, r, http.MethodPost, "/api/v1/charge/batteries", `{"name":"cell","chemistry":"liion","cells":1,"ratedCapacityMah":3000}`)
+	bat := decodeBattery(t, w.Body.String())
+	// A fresh battery: no Rint yet.
+	if bat.RintCount != 0 || bat.LatestRintCellMohm != nil || bat.BestRintCellMohm != nil {
+		t.Errorf("fresh battery rint = count %d latest %v best %v, want 0/null/null", bat.RintCount, bat.LatestRintCellMohm, bat.BestRintCellMohm)
+	}
+
+	// Two Rint-eligible sessions (older lower Rint = the best baseline) + one
+	// from-empty (excluded), all assigned to the battery.
+	s1 := insertRintSession(t, store, 1, 1000, "completed", 3.55, 3.62, 1.70) // 41.18 mΩ (best)
+	s2 := insertRintSession(t, store, 1, 2000, "completed", 3.60, 3.69, 1.70) // 52.94 mΩ (latest)
+	s3 := insertRintSession(t, store, 1, 3000, "completed", 2.85, 3.31, 1.70) // from-empty, excluded
+	for _, id := range []int64{s1, s2, s3} {
+		w = doCharge(t, r, http.MethodPost, fmt.Sprintf("/api/v1/charge/sessions/%d/battery", id), fmt.Sprintf(`{"batteryId":%d}`, bat.ID))
+		if w.Code != http.StatusOK {
+			t.Fatalf("assign %d = %d: %s", id, w.Code, w.Body.String())
+		}
+	}
+
+	w = doCharge(t, r, http.MethodGet, fmt.Sprintf("/api/v1/charge/batteries/%d", bat.ID), "")
+	got := decodeBattery(t, w.Body.String())
+	if got.RintCount != 2 {
+		t.Errorf("rintCount = %d, want 2 (from-empty excluded)", got.RintCount)
+	}
+	wantLatest := (3.69 - 3.60) / 1.70 * 1000
+	wantBest := (3.62 - 3.55) / 1.70 * 1000
+	if got.LatestRintCellMohm == nil || (*got.LatestRintCellMohm-wantLatest) > 1e-6 || (wantLatest-*got.LatestRintCellMohm) > 1e-6 {
+		t.Errorf("latestRintCellMohm = %v, want %v (newest eligible)", got.LatestRintCellMohm, wantLatest)
+	}
+	if got.BestRintCellMohm == nil || (*got.BestRintCellMohm-wantBest) > 1e-6 || (wantBest-*got.BestRintCellMohm) > 1e-6 {
+		t.Errorf("bestRintCellMohm = %v, want %v (MIN, not MAX)", got.BestRintCellMohm, wantBest)
 	}
 }
 

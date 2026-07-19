@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { ApiError } from '../../api/client'
 import { useDevice } from '../../state/useDevice'
 import {
+  useBatteriesQuery,
   useChargeProfilesQuery,
   useLiveCharge,
   usePreflight,
@@ -36,17 +37,32 @@ export function ChargeLive({ onManageProfiles }: ChargeLiveProps) {
   const { connected } = useDevice()
 
   const profilesQuery = useChargeProfilesQuery()
+  const batteriesQuery = useBatteriesQuery()
   const live = useLiveCharge()
   const preflight = usePreflight()
   const startMutation = useStartCharge()
   const stopMutation = useStopCharge()
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedBatteryId, setSelectedBatteryId] = useState<number | null>(null)
   const [preflightOpen, setPreflightOpen] = useState(false)
   const [sessionTimeoutMs, setSessionTimeoutMs] = useState<number | null>(null)
 
   const profiles = profilesQuery.data?.items ?? []
   const selectedProfile = profiles.find((p) => p.id === selectedId) ?? null
+
+  // Optional start-time battery preselect (F-027): only batteries whose chemistry
+  // AND cell count match the chosen profile are offerable — the same match the
+  // backend enforces (`invalid_battery` otherwise), filtered client-side.
+  const eligibleBatteries = (batteriesQuery.data?.items ?? []).filter(
+    (b) => selectedProfile !== null && b.chemistry === selectedProfile.chemistry && b.cells === selectedProfile.cells,
+  )
+  // Never send an id the current profile no longer matches (profile changed after
+  // a pick) — the picker resets on profile change, this is the belt-and-braces.
+  const effectiveBatteryId =
+    selectedBatteryId !== null && eligibleBatteries.some((b) => b.id === selectedBatteryId)
+      ? selectedBatteryId
+      : undefined
 
   const storageUnavailable =
     profilesQuery.error instanceof ApiError && profilesQuery.error.code === 'storage_unavailable'
@@ -81,7 +97,11 @@ export function ChargeLive({ onManageProfiles }: ChargeLiveProps) {
     startMutation.mutate(
       {
         id: selectedId,
-        body: { confirm: true, confirmDeepDischarge: confirmDeepDischarge || undefined },
+        body: {
+          confirm: true,
+          confirmDeepDischarge: confirmDeepDischarge || undefined,
+          batteryId: effectiveBatteryId,
+        },
       },
       {
         onSuccess: () => {
@@ -177,10 +197,37 @@ export function ChargeLive({ onManageProfiles }: ChargeLiveProps) {
                 placeholder={t('charge.live.selectPlaceholder')}
                 aria-label={t('charge.live.selectProfile')}
                 value={selectedId}
-                onChange={(value: number) => setSelectedId(value)}
+                onChange={(value: number) => {
+                  setSelectedId(value)
+                  // A different profile may not match the picked battery's
+                  // chemistry/cells — clear it so a stale id is never sent.
+                  setSelectedBatteryId(null)
+                }}
                 options={profileOptions}
               />
             </div>
+
+            {selectedId !== null && eligibleBatteries.length > 0 && (
+              <div>
+                <Typography.Text strong>{t('charge.live.battery.label')}</Typography.Text>
+                <Select<number>
+                  style={{ width: '100%', marginTop: 8 }}
+                  placeholder={t('charge.live.battery.placeholder')}
+                  aria-label={t('charge.live.battery.label')}
+                  allowClear
+                  loading={batteriesQuery.isLoading}
+                  value={selectedBatteryId ?? undefined}
+                  onChange={(value?: number) => setSelectedBatteryId(value ?? null)}
+                  options={eligibleBatteries.map((b) => ({
+                    value: b.id,
+                    label: `${b.name} · ${t('charge.chemistry.' + b.chemistry)} · ${t('charge.run.cells', { n: b.cells })}`,
+                  }))}
+                />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {t('charge.live.battery.hint')}
+                </Typography.Text>
+              </div>
+            )}
 
             <Button
               type="primary"

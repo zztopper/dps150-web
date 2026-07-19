@@ -180,6 +180,28 @@
         "totalWh": "Total energy"
       },
       "notDetermined": "not determined",
+      "rint": {
+        "approxNote": "Rint is approximate — read the trend across cycles, not the absolute value. A rising per-cell resistance signals cell aging.",
+        "approximate": "approximate",
+        "chart": {
+          "ariaLabel": "Per-cell internal resistance over session dates",
+          "reference": "As-new reference (best)",
+          "rint": "Rint per cell"
+        },
+        "count": "Rint measurements",
+        "flag": {
+          "eligible": "Rint measurement",
+          "excludedHint": "Excluded from Rint — a precharge (charge from empty) or a missing CC-onset capture would inflate the number.",
+          "fromEmpty": "From empty — not a Rint measurement",
+          "notMeasured": "No Rint measurement"
+        },
+        "latest": "Latest Rint (per cell)",
+        "noEligible": "No Rint measurements yet (a mid-charge top-up with a real CC phase, no precharge)",
+        "table": {
+          "rint": "Rint (mΩ)"
+        },
+        "title": "Internal resistance (Rint)"
+      },
       "saved": "Battery saved",
       "sessions": {
         "battery": "Battery",
@@ -242,6 +264,11 @@
       "titleEdit": "Edit charge profile"
     },
     "live": {
+      "battery": {
+        "hint": "Only batteries matching the profile's chemistry and cell count. The session is assigned to it for health tracking; you can also assign later from History.",
+        "label": "Battery (optional)",
+        "placeholder": "No battery — start unassigned"
+      },
       "deviceOffline": "Measuring and starting a charge is unavailable while the device is offline.",
       "deviceOfflineTitle": "Device offline",
       "goToProfiles": "Go to profiles",
@@ -1129,6 +1156,7 @@
     "ampHour": "Ah",
     "celsius": "°C",
     "milliampHour": "mAh",
+    "milliohm": "mΩ",
     "ohm": "Ω",
     "second": "s",
     "volt": "V",

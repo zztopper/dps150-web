@@ -40,6 +40,14 @@ type run struct {
 	peakV       float64
 	lastRefresh time.Time
 	lastProg    time.Time
+
+	// F-027 CC-onset capture state (single-goroutine, no lock). captured latches
+	// true the instant the gate fires (NOT on DB success) so the observation is
+	// attempted exactly once per charge; ccHighTicks counts consecutive main-phase
+	// ticks whose measured current is ≥ 0.9 × Icharge (reset outside the main phase
+	// or on any dip), so a two-tick sustain is required before capture.
+	captured    bool
+	ccHighTicks int
 }
 
 // execute drives the charge to a terminal state, then unconditionally
@@ -148,6 +156,7 @@ func (r *run) runPhase(ph phase, idx int) error {
 		r.updateStatus(t, ph, delivered)
 		r.maybeRefresh(t.TS)
 		r.maybeProgress(t.TS)
+		r.maybeCaptureCCOnset(ph, t)
 
 		// Termination.
 		switch {
@@ -260,6 +269,72 @@ func (r *run) maybeProgress(ts time.Time) {
 	}
 	r.lastProg = ts
 	r.broadcastProgress()
+}
+
+// maybeCaptureCCOnset observes the operating point at CC onset (F-027 / design
+// §3.11) — the first tick in the main phase where the full charge current is
+// genuinely flowing and stable. It is a pure read-and-record inside the existing
+// tick loop: it issues NO setpoint/output/protection write, so the charge is
+// byte-for-byte unchanged on the wire. The gate, in priority order:
+//   - PRIMARY (P0-C): phase kind must be phaseMain (never precharge/float). At a
+//     slow charge the 0.1C precharge trickle can itself reach 0.9 × Icharge, so a
+//     current-only gate would mis-fire in precharge; the phase-kind gate makes that
+//     impossible regardless of current. Outside the main phase the consecutive-tick
+//     counter is reset so a precharge sustain never carries into the main phase.
+//   - SECONDARY: measured current ≥ 0.9 × Icharge for two consecutive ticks (0.9×,
+//     not 0.5×, which can land mid current-ramp on real hardware).
+//   - TERTIARY: Mode == CC confirms (measured current is more reliable than the
+//     advisory, on-change Mode flag, so it is only a confirm).
+//
+// On the first tick that satisfies all three it latches captured (so it never
+// re-attempts, even if the write fails) and dispatches the write off the hot path.
+func (r *run) maybeCaptureCCOnset(ph phase, t device.Telemetry) {
+	if r.captured {
+		return
+	}
+	// P0-C: phase-kind is the primary gate. Reset the sustain counter outside the
+	// main phase so a precharge/float run of high current can never carry over.
+	if ph.kind != phaseMain {
+		r.ccHighTicks = 0
+		return
+	}
+	if t.Current >= 0.9*r.plan.ChargeA {
+		r.ccHighTicks++
+	} else {
+		r.ccHighTicks = 0
+		return
+	}
+	if r.ccHighTicks < 2 {
+		return
+	}
+	if modeString(t.Mode) != "CC" {
+		return
+	}
+	// Gate fired: latch NOW (not on DB success) and record this tick's V and I.
+	r.captured = true
+	r.recordCCOnset(t.Voltage, t.Current)
+}
+
+// recordCCOnset persists the CC-onset operating point off the hot tick loop
+// (guardrails P0-A / P0-B, design §3.11): a detached goroutine with the values
+// copied by value and its own timeout, so a DB stall can never pause the loop
+// cadence, the staleness watchdog, the terminations or Stop; and the write is
+// fail-soft and non-propagating — a failure is logged and swallowed, leaving the
+// columns NULL, never a fault into runPhase. The capture is write-once (latched
+// captured flag + a DB-level WHERE cc_onset_voltage IS NULL), so this spawns
+// exactly one goroutine per charge.
+func (r *run) recordCCOnset(voltage, current float64) {
+	if r.mgr.store == nil || r.sessID == 0 {
+		return
+	}
+	sessID := r.sessID
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := r.mgr.store.RecordCCOnset(ctx, sessID, voltage, current); err != nil {
+			r.mgr.log.Warn("charge: could not record CC-onset operating point", "sessionId", sessID, "error", err)
+		}
+	}()
 }
 
 func (r *run) reasonFor(err error) string {

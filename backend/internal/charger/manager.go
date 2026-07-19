@@ -99,13 +99,21 @@ type HubController interface {
 // (F-026 / design §3.10); it is a *float64 (nullable) so a session with no
 // captured start voltage persists as NULL rather than a misleading 0. It records
 // a value already read — no new measurement, no change to the charge on the wire.
+// BatteryID is the F-027 optional start-time preselect (0 = unassigned), validated
+// by the API layer before Start. CCOnsetVoltage/CCOnsetCurrent mirror the row's
+// nullable capture columns for symmetry; they are always nil at BeginSession — the
+// CC-onset operating point is captured mid-run via the Store's RecordCCOnset, not
+// at session creation.
 type SessionStart struct {
-	ProfileID    int64
-	ProfileName  string
-	Chemistry    string
-	Cells        int
-	StartedAt    time.Time
-	StartVoltage *float64
+	ProfileID      int64
+	ProfileName    string
+	Chemistry      string
+	Cells          int
+	StartedAt      time.Time
+	StartVoltage   *float64
+	BatteryID      int64
+	CCOnsetVoltage *float64
+	CCOnsetCurrent *float64
 }
 
 // SessionResult finalizes a charge session at its terminal state.
@@ -125,6 +133,12 @@ type SessionResult struct {
 type Store interface {
 	BeginSession(ctx context.Context, s SessionStart) (int64, error)
 	FinishSession(ctx context.Context, id int64, r SessionResult) error
+	// RecordCCOnset persists the CC-onset operating point (F-027) onto a session
+	// mid-run. Implementations must be write-once (ignore a row already captured)
+	// and targeted (never a full-row overwrite of the concurrently-finalized
+	// fields). The run loop dispatches it in a detached goroutine and swallows any
+	// error, so it must be safe to call at most once per charge.
+	RecordCCOnset(ctx context.Context, sessID int64, voltage, current float64) error
 	AppendEvent(ctx context.Context, kind string, data any) error
 	MarkOrphanRunningFailed(ctx context.Context, reason string) (int64, error)
 }
@@ -661,6 +675,7 @@ func (m *Manager) beginSession(req Request, started time.Time, startVoltage *flo
 		Cells:        req.Cells,
 		StartedAt:    started,
 		StartVoltage: startVoltage,
+		BatteryID:    req.BatteryID,
 	})
 	if err != nil {
 		m.log.Warn("charge: could not record session start", "error", err)

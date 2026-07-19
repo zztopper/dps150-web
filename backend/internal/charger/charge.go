@@ -42,6 +42,13 @@ type Request struct {
 	CapacityMah float64
 	ChargeA     float64
 	BmsAttested bool
+
+	// BatteryID is the optional F-027 start-time preselect: the library battery
+	// this run's session is assigned to at BeginSession (0 = unassigned). It is a
+	// metadata field, NOT safety-critical — Compile ignores it, it touches no
+	// setpoint/output/protection, and the API layer validates it (existence +
+	// chemistry×cells match against the profile) BEFORE Start energizes anything.
+	BatteryID int64
 }
 
 // Limits is the computed, non-disable-able safety envelope for a charge. It is

@@ -4,7 +4,9 @@ import { makeChargeSession } from '../../test/chargeRoutes'
 import {
   eligibilityFlag,
   eligibleCapacitySeries,
+  eligibleRintSeries,
   formatOptional,
+  rintFlag,
   sohBarPct,
   sohLevel,
 } from './chargeBatteryFormat'
@@ -78,6 +80,53 @@ describe('chargeBatteryFormat', () => {
       expect(
         eligibilityFlag(makeChargeSession({ capacityEligible: false, startVoltage: 3.8 })),
       ).toBe('notCapacity')
+    })
+  })
+
+  describe('eligibleRintSeries', () => {
+    it('keeps only rintEligible sessions (the same set the backend counts), sorted ascending', () => {
+      const sessions: ChargeSession[] = [
+        makeChargeSession({ id: 1, startedAt: 300, rintEligible: true, rintCellMohm: 44 }),
+        // A from-empty capacity cycle — precharge inflates ΔV → NOT Rint-eligible.
+        makeChargeSession({ id: 2, startedAt: 200, rintEligible: false, rintCellMohm: null, capacityEligible: true }),
+        makeChargeSession({ id: 3, startedAt: 100, rintEligible: true, rintCellMohm: 41 }),
+        // A run with no CC-onset capture — excluded (rintEligible false, mohm null).
+        makeChargeSession({ id: 4, startedAt: 400, rintEligible: false, rintCellMohm: null, ccOnsetVoltage: null }),
+      ]
+      expect(eligibleRintSeries(sessions)).toEqual([
+        { startedAt: 100, rintCellMohm: 41 },
+        { startedAt: 300, rintCellMohm: 44 },
+      ])
+    })
+
+    it('drops an eligible session whose rintCellMohm is somehow null/non-finite (never plots a fabricated point)', () => {
+      const sessions: ChargeSession[] = [
+        makeChargeSession({ id: 1, startedAt: 100, rintEligible: true, rintCellMohm: null }),
+        makeChargeSession({ id: 2, startedAt: 200, rintEligible: true, rintCellMohm: 40 }),
+      ]
+      expect(eligibleRintSeries(sessions)).toEqual([{ startedAt: 200, rintCellMohm: 40 }])
+    })
+
+    it('tie-breaks equal startedAt by id', () => {
+      const sessions: ChargeSession[] = [
+        makeChargeSession({ id: 9, startedAt: 100, rintEligible: true, rintCellMohm: 43 }),
+        makeChargeSession({ id: 5, startedAt: 100, rintEligible: true, rintCellMohm: 40 }),
+      ]
+      expect(eligibleRintSeries(sessions).map((p) => p.rintCellMohm)).toEqual([40, 43])
+    })
+  })
+
+  describe('rintFlag', () => {
+    it('flags Rint-eligible, from-empty (capacity cycle) and un-measured sessions', () => {
+      expect(rintFlag(makeChargeSession({ rintEligible: true }))).toBe('eligible')
+      // Near-disjoint: a from-empty capacity cycle is the "fromEmpty" Rint flag.
+      expect(
+        rintFlag(makeChargeSession({ rintEligible: false, capacityEligible: true })),
+      ).toBe('fromEmpty')
+      // Neither eligible — no CC-onset capture / legacy row.
+      expect(
+        rintFlag(makeChargeSession({ rintEligible: false, capacityEligible: false })),
+      ).toBe('notMeasured')
     })
   })
 })

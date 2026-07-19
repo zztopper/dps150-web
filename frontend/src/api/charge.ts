@@ -215,6 +215,14 @@ export interface StopResponse {
 export interface StartChargeBody {
   confirm: true
   confirmDeepDischarge?: boolean
+  /**
+   * Optional start-time battery preselect (F-027): assign the session to this
+   * battery at creation. Omit (or `0`) to start unassigned. When present the
+   * battery must exist (`404 battery_not_found`) and its `chemistry` AND `cells`
+   * must equal the profile's (`400 invalid_battery`) — validated before the
+   * pre-flight guard and output-on, so a rejected id never energizes anything.
+   */
+  batteryId?: number
 }
 
 // -- Sessions --------------------------------------------------------------
@@ -253,6 +261,31 @@ export interface ChargeSession {
    * top-up is `false` (it would read as false degradation).
    */
   capacityEligible: boolean
+  /**
+   * Rint (F-027, additive): the measured terminal (pack) voltage at CC onset,
+   * under full charge current. `null` when there was no capture (a pre-F-027
+   * legacy row, or a run that never reached the CC-onset gate — started in CV /
+   * too short).
+   */
+  ccOnsetVoltage: number | null
+  /** The measured current at the same CC-onset tick; `null` when not captured. */
+  ccOnsetCurrent: number | null
+  /**
+   * The computed per-cell DC internal resistance in mΩ:
+   * `(ccOnsetVoltage − startVoltage) / ccOnsetCurrent / cells × 1000`. `null`
+   * unless `rintEligible` (approximate — a same-method trend, not an absolute).
+   */
+  rintCellMohm: number | null
+  /**
+   * Intrinsic to the session: `true` iff it is a clean Rint data-point —
+   * `startVoltage != null` ∧ `ccOnsetVoltage != null` ∧ `ccOnsetCurrent > 0` ∧
+   * `(ccOnsetVoltage − startVoltage) > 0` ∧ the start was **above** the
+   * chemistry's precharge threshold (no precharge ran, else ΔV is inflated
+   * ~5–7×). Near-disjoint with `capacityEligible` (a charge measures capacity
+   * xor clean Rint). Only eligible sessions feed the Rint metrics and the trend
+   * curve.
+   */
+  rintEligible: boolean
 }
 
 export interface ChargeSessionsPage {
@@ -437,18 +470,32 @@ export async function getChargeActive(): Promise<ChargeStatus> {
 }
 
 /**
- * Raw session row — the three F-026 additive fields ride the backend's
+ * Raw session row — the F-026/F-027 additive fields ride the backend's
  * int64-zero / omitempty convention (a `0`/absent `batteryId`, an absent
- * `startVoltage`, a `false` `capacityEligible` may all be thinned off the wire),
- * so `normalizeSession` fills them defensively rather than trusting presence.
+ * `startVoltage`/`ccOnset*`/`rintCellMohm`, a `false` `capacityEligible` /
+ * `rintEligible` may all be thinned off the wire), so `normalizeSession` fills
+ * them defensively rather than trusting presence.
  */
-type RawChargeSession = Omit<ChargeSession, 'batteryId' | 'startVoltage' | 'capacityEligible'> & {
+type RawChargeSession = Omit<
+  ChargeSession,
+  | 'batteryId'
+  | 'startVoltage'
+  | 'capacityEligible'
+  | 'ccOnsetVoltage'
+  | 'ccOnsetCurrent'
+  | 'rintCellMohm'
+  | 'rintEligible'
+> & {
   batteryId?: number | null
   startVoltage?: number | null
   capacityEligible?: boolean
+  ccOnsetVoltage?: number | null
+  ccOnsetCurrent?: number | null
+  rintCellMohm?: number | null
+  rintEligible?: boolean
 }
 
-/** Fills the F-026 additive session fields to their documented defaults. */
+/** Fills the F-026/F-027 additive session fields to their documented defaults. */
 function normalizeSession(raw: RawChargeSession): ChargeSession {
   return {
     ...raw,
@@ -456,6 +503,10 @@ function normalizeSession(raw: RawChargeSession): ChargeSession {
     batteryId: raw.batteryId != null && raw.batteryId > 0 ? raw.batteryId : null,
     startVoltage: raw.startVoltage ?? null,
     capacityEligible: raw.capacityEligible ?? false,
+    ccOnsetVoltage: raw.ccOnsetVoltage ?? null,
+    ccOnsetCurrent: raw.ccOnsetCurrent ?? null,
+    rintCellMohm: raw.rintCellMohm ?? null,
+    rintEligible: raw.rintEligible ?? false,
   }
 }
 
@@ -588,6 +639,20 @@ export interface Battery {
   equivalentCycles: number | null
   /** `Σ(deliveredWh)` — lifetime energy through the battery. Defaults to 0. */
   totalWh: number
+  // -- Rint family (F-027 / ADR-012) — over rintEligible sessions only --
+  /**
+   * Per-cell Rint (mΩ) of the newest Rint-eligible session; `null` when none.
+   * **Approximate** — an indicative same-method trend, not an absolute mΩ.
+   */
+  latestRintCellMohm: number | null
+  /**
+   * `MIN` per-cell Rint (mΩ) over Rint-eligible sessions — the "as-new"
+   * baseline (**`MIN`, not `MAX`**: a lower Rint is healthier). Shown as a faint
+   * reference line on the trend curve, never a headline number. `null` when none.
+   */
+  bestRintCellMohm: number | null
+  /** Count of Rint-eligible sessions. Defaults to 0. */
+  rintCount: number
   createdAt: number
   updatedAt: number
 }
@@ -641,6 +706,9 @@ interface RawBattery {
   degradationPct?: number | null
   equivalentCycles?: number | null
   totalWh?: number
+  latestRintCellMohm?: number | null
+  bestRintCellMohm?: number | null
+  rintCount?: number
   createdAt?: number
   updatedAt?: number
 }
@@ -664,6 +732,9 @@ function normalizeBattery(raw: RawBattery): Battery {
     degradationPct: raw.degradationPct ?? null,
     equivalentCycles: raw.equivalentCycles ?? null,
     totalWh: raw.totalWh ?? 0,
+    latestRintCellMohm: raw.latestRintCellMohm ?? null,
+    bestRintCellMohm: raw.bestRintCellMohm ?? null,
+    rintCount: raw.rintCount ?? 0,
     createdAt: raw.createdAt ?? 0,
     updatedAt: raw.updatedAt ?? 0,
   }

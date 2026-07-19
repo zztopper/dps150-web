@@ -42,31 +42,39 @@ type batteryDTO struct {
 	SohPct            *float64 `json:"sohPct"`
 	DegradationPct    *float64 `json:"degradationPct"`
 	TotalWh           float64  `json:"totalWh"`
-	CreatedAt         int64    `json:"createdAt"`
-	UpdatedAt         int64    `json:"updatedAt"`
+	// F-027 internal-resistance family (per-cell mΩ); latest/best null when there
+	// are no Rint-eligible sessions, rintCount defaults 0.
+	LatestRintCellMohm *float64 `json:"latestRintCellMohm"`
+	BestRintCellMohm   *float64 `json:"bestRintCellMohm"`
+	RintCount          int64    `json:"rintCount"`
+	CreatedAt          int64    `json:"createdAt"`
+	UpdatedAt          int64    `json:"updatedAt"`
 }
 
 // batteryJSON maps a stored battery + its derived health onto the contract's
 // Battery object.
 func batteryJSON(b storage.Battery, h storage.BatteryHealth) batteryDTO {
 	return batteryDTO{
-		ID:                b.ID,
-		Name:              b.Name,
-		Chemistry:         b.Chemistry,
-		Cells:             b.Cells,
-		RatedCapacityMah:  b.RatedCapacityMah,
-		PartNumber:        b.PartNumber,
-		Notes:             b.Notes,
-		FullCycleCount:    h.FullCycleCount,
-		EquivalentCycles:  h.EquivalentCycles,
-		LatestCapacityMah: h.LatestCapacityMah,
-		BestCapacityMah:   h.BestCapacityMah,
-		FirstCapacityMah:  h.FirstCapacityMah,
-		SohPct:            h.SohPct,
-		DegradationPct:    h.DegradationPct,
-		TotalWh:           h.TotalWh,
-		CreatedAt:         b.CreatedAt,
-		UpdatedAt:         b.UpdatedAt,
+		ID:                 b.ID,
+		Name:               b.Name,
+		Chemistry:          b.Chemistry,
+		Cells:              b.Cells,
+		RatedCapacityMah:   b.RatedCapacityMah,
+		PartNumber:         b.PartNumber,
+		Notes:              b.Notes,
+		FullCycleCount:     h.FullCycleCount,
+		EquivalentCycles:   h.EquivalentCycles,
+		LatestCapacityMah:  h.LatestCapacityMah,
+		BestCapacityMah:    h.BestCapacityMah,
+		FirstCapacityMah:   h.FirstCapacityMah,
+		SohPct:             h.SohPct,
+		DegradationPct:     h.DegradationPct,
+		TotalWh:            h.TotalWh,
+		LatestRintCellMohm: h.LatestRintCellMohm,
+		BestRintCellMohm:   h.BestRintCellMohm,
+		RintCount:          h.RintCount,
+		CreatedAt:          b.CreatedAt,
+		UpdatedAt:          b.UpdatedAt,
 	}
 }
 

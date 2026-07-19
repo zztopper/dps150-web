@@ -21,21 +21,33 @@ type chargeStore struct {
 	log   *slog.Logger
 }
 
-// BeginSession inserts a running ChargeSession and returns its new id.
+// BeginSession inserts a running ChargeSession and returns its new id. It carries
+// the F-026 StartVoltage and the F-027 start-time BatteryID preselect (0 =
+// unassigned); the CC-onset columns are left NULL here and captured mid-run.
 func (a chargeStore) BeginSession(ctx context.Context, s charger.SessionStart) (int64, error) {
 	sess := &storage.ChargeSession{
-		ProfileID:    s.ProfileID,
-		ProfileName:  s.ProfileName,
-		Chemistry:    s.Chemistry,
-		Cells:        s.Cells,
-		StartedAt:    s.StartedAt.UnixMilli(),
-		State:        charger.StateRunning,
-		StartVoltage: s.StartVoltage,
+		ProfileID:      s.ProfileID,
+		BatteryID:      s.BatteryID,
+		ProfileName:    s.ProfileName,
+		Chemistry:      s.Chemistry,
+		Cells:          s.Cells,
+		StartedAt:      s.StartedAt.UnixMilli(),
+		State:          charger.StateRunning,
+		StartVoltage:   s.StartVoltage,
+		CCOnsetVoltage: s.CCOnsetVoltage,
+		CCOnsetCurrent: s.CCOnsetCurrent,
 	}
 	if err := a.store.CreateChargeSession(ctx, sess); err != nil {
 		return 0, err
 	}
 	return sess.ID, nil
+}
+
+// RecordCCOnset persists the mid-run CC-onset operating point (F-027). It is a
+// targeted, write-once update in storage; a nil-store never reaches here (the
+// Manager only calls it when a session was created).
+func (a chargeStore) RecordCCOnset(ctx context.Context, sessID int64, voltage, current float64) error {
+	return a.store.RecordChargeCCOnset(ctx, sessID, voltage, current)
 }
 
 // FinishSession finalizes the run's session with its terminal fields. A

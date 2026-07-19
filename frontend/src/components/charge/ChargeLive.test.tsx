@@ -6,10 +6,12 @@ import { ResizeObserverStub } from '../../test/resizeObserver'
 import { FakeWebSocket } from '../../test/fakeWebSocket'
 import { makeSnapshot } from '../../test/fixtures'
 import {
+  batteriesListRoute,
   chargeActiveRoute,
   chargePreflightRoute,
   chargeProfilesListRoute,
   chargeStartRoute,
+  makeBattery,
   makeChargeProfile,
   makePreflightOk,
   makePreflightRefused,
@@ -50,6 +52,7 @@ describe('ChargeLive confirmation flow', () => {
     const { calls } = stubFetchRoutes([
       chargeProfilesListRoute(store),
       chargeActiveRoute({ active: false }),
+      batteriesListRoute({ items: [] }),
       chargePreflightRoute(makePreflightOk()),
       chargeStartRoute(1),
     ])
@@ -87,6 +90,7 @@ describe('ChargeLive confirmation flow', () => {
     const { calls } = stubFetchRoutes([
       chargeProfilesListRoute(store),
       chargeActiveRoute({ active: false }),
+      batteriesListRoute({ items: [] }),
       chargePreflightRoute(makePreflightOk({ needsConfirm: true })),
       chargeStartRoute(1),
     ])
@@ -122,6 +126,7 @@ describe('ChargeLive confirmation flow', () => {
     stubFetchRoutes([
       chargeProfilesListRoute(store),
       chargeActiveRoute({ active: false }),
+      batteriesListRoute({ items: [] }),
       chargePreflightRoute(makePreflightOk()),
       // Battery changed between measure and start → the backend re-guard refuses.
       chargeStartRoute(1, () => ({
@@ -153,6 +158,7 @@ describe('ChargeLive confirmation flow', () => {
     stubFetchRoutes([
       chargeProfilesListRoute(store),
       chargeActiveRoute({ active: false }),
+      batteriesListRoute({ items: [] }),
       chargePreflightRoute(
         makePreflightRefused({ reason: 'cell_count_mismatch', cells: 3, suggestedCells: 2 }),
       ),
@@ -170,5 +176,83 @@ describe('ChargeLive confirmation flow', () => {
     expect(
       within(dialog).getByRole('button', { name: /Повторить проверку/ }),
     ).toBeInTheDocument()
+  })
+
+  it('offers only chemistry+cells-matching batteries in the optional start-time picker', async () => {
+    const store = { items: [makeChargeProfile()] } // liion, 1 cell
+    stubFetchRoutes([
+      chargeProfilesListRoute(store),
+      chargeActiveRoute({ active: false }),
+      // One match (liion 1S) + two that must be filtered out (wrong chemistry,
+      // wrong cell count) — the picker filters client-side to what the backend
+      // would accept, avoiding the common invalid_battery mismatch up front.
+      batteriesListRoute({
+        items: [
+          makeBattery({ id: 42, name: 'Match Pack', chemistry: 'liion', cells: 1 }),
+          makeBattery({ id: 43, name: 'Wrong Chem', chemistry: 'lifepo4', cells: 1 }),
+          makeBattery({ id: 44, name: 'Wrong Cells', chemistry: 'liion', cells: 3 }),
+        ],
+      }),
+      chargePreflightRoute(makePreflightOk()),
+      chargeStartRoute(1),
+    ])
+
+    renderWithProviders(<ChargeLive />)
+
+    connectDevice()
+    // Pick the profile — the battery picker only appears once a profile (hence a
+    // chemistry+cells target) is chosen.
+    fireEvent.mouseDown(await screen.findByRole('combobox'))
+    fireEvent.click(await screen.findByText(/18650 Li-ion 1S/))
+
+    // A second combobox (the battery picker) is now present; open it.
+    const combos = screen.getAllByRole('combobox')
+    expect(combos).toHaveLength(2)
+    fireEvent.mouseDown(combos[1])
+
+    // Only the matching battery is offered; the mismatched ones never render.
+    expect(await screen.findByText(/Match Pack/)).toBeInTheDocument()
+    expect(screen.queryByText(/Wrong Chem/)).toBeNull()
+    expect(screen.queryByText(/Wrong Cells/)).toBeNull()
+  })
+
+  it('passes the chosen batteryId in the start request', async () => {
+    const store = { items: [makeChargeProfile()] }
+    const { calls } = stubFetchRoutes([
+      chargeProfilesListRoute(store),
+      chargeActiveRoute({ active: false }),
+      batteriesListRoute({
+        items: [makeBattery({ id: 42, name: 'Match Pack', chemistry: 'liion', cells: 1 })],
+      }),
+      chargePreflightRoute(makePreflightOk()),
+      chargeStartRoute(1),
+    ])
+
+    renderWithProviders(<ChargeLive />)
+
+    connectDevice()
+    fireEvent.mouseDown(await screen.findByRole('combobox'))
+    fireEvent.click(await screen.findByText(/18650 Li-ion 1S/))
+
+    // Select the matching battery.
+    const combos = screen.getAllByRole('combobox')
+    fireEvent.mouseDown(combos[1])
+    fireEvent.click(await screen.findByText(/Match Pack/))
+
+    // Prepare → confirm → Start.
+    fireEvent.click(screen.getByRole('button', { name: /Предстартовая проверка/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('checkbox'))
+    fireEvent.click(within(dialog).getByRole('button', { name: /Начать заряд/ }))
+
+    await waitFor(
+      () => expect(calls.some((c) => c.url === '/api/v1/charge/profiles/1/start')).toBe(true),
+      { timeout: 5000 },
+    )
+    const startCall = calls.find((c) => c.url === '/api/v1/charge/profiles/1/start')
+    expect(JSON.parse(String(startCall?.init?.body))).toMatchObject({
+      confirm: true,
+      batteryId: 42,
+    })
   })
 })
