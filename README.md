@@ -41,6 +41,24 @@ stack with no hardware attached.
   and every exit path (finish, stop, protection trip, restart) switches it off
   again, with live step-by-step progress and a 409 guard that blocks manual
   control while a program owns the device.
+- **Battery charging (CC-CV)** — a backend-supervised charger for Li-ion /
+  LiFePO4 / lead-acid with chemistry presets, pre-flight validation (measures the
+  pack with the output off, refuses on wrong cell count / reverse polarity), and a
+  strict, non-disable-able safety envelope (staleness watchdog, `SafeOutputOff`,
+  capacity cap, shared interlock). See the
+  [charging & battery-health guide](docs/guides/charging.md).
+- **Battery health & cycle tracking** — a library of your physical packs with
+  per-battery state-of-health, capacity-degradation curve and cycle counts.
+  Capacity is honestly gated to genuine *from-empty* charges (a top-up is charge
+  accepted, not capacity), so it never mistakes a top-up for a failing cell.
+- **IV curve tracer (ВАХ)** — sweep an LED, diode, Zener, resistor or lamp under a
+  current/voltage compliance and get its I(V) curve plus per-component analysis
+  (Vf, ideality, R, Vz, cold/hot R). Metrics are never fabricated — an unreliable
+  fit shows "—" with a reason. See the
+  [IV tracer & library guide](docs/guides/iv-tracer.md).
+- **IV comparison + component library** — overlay several curves on one chart
+  (linear/log, bookmarkable, same-type metrics table for matching/binning) and
+  keep a catalogue of characterised parts with a pinned reference curve.
 - **CSV export** — download the current history or event view as CSV.
 - **API tokens** — Bearer-token access for scripts (scoped `read` / `control`),
   see the auth model below.
@@ -76,8 +94,31 @@ The step-tree editor — a CC-CV charge, a discharge, then a 3× ramp/hold loop:
 
 ![Automation](docs/screenshots/automation.png)
 
+### Battery charging — CC-CV charger with chemistry presets and health tracking
+
+![Battery charging](docs/screenshots/charge.png)
+
+### IV curve tracer — sweep a component and analyse its I(V) curve
+
+The sweep detail: the I(V) curve with the compliance band, and analysis that
+honestly shows "—" for metrics it can't compute reliably.
+
+![IV curve tracer](docs/screenshots/iv-tracer.png)
+
 <details>
-<summary>More screens — Profiles, Events, Settings</summary>
+<summary>More screens — IV comparison &amp; library, Battery health, Profiles, Events, Settings</summary>
+
+**IV comparison** — overlay several curves with a same-type metrics table (min/max/spread)
+
+![IV comparison](docs/screenshots/iv-compare.png)
+
+**Component library** — a characterised part with its pinned reference curve
+
+![Component library](docs/screenshots/iv-library.png)
+
+**Battery health** — state-of-health and the capacity-degradation curve, from genuine from-empty charges only
+
+![Battery health](docs/screenshots/battery-health.png)
 
 **Profiles** — named V/I + protection presets, apply to the device or a hardware M1–M6 slot
 
