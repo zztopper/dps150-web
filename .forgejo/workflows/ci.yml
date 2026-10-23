@@ -1,0 +1,102 @@
+# ci — перенос .gitlab-ci.yml (GitLab → Forgejo, фаза 07 batch B) на host-раннер k8s + шаблоны claude/ci-templates@v1:
+#   backend  — go.yml (go vet + go test + golangci-lint v2 по backend/.golangci.yml);
+#   frontend — npm ci + oxlint + tsc -b + vitest (--no-file-parallelism: один раннер, флейк AntD-портала);
+#   changelog — changelog.yml на PR (маркер "[skip changelog]"), commits — commitlint на PR;
+#   images   — image.yml ×2 (backend, frontend) из deploy/docker/Dockerfile.*; теги <sha8> (+latest на master).
+#              На PR образы не собираются (в GitLab собирались без push) — экономим единственный раннер.
+#
+# TODO (backlog #82, нет heavy-раннера): e2e (Playwright chromium против backend с DPS_TRANSPORT=mock://)
+# НЕ перенесён — браузеру нужен glibc (mcr.microsoft.com/playwright), в Alpine host-раннере его нет;
+# нужна метка k8s-docker/heavy с container: mcr.microsoft.com/playwright:v1.61.1-noble. Пока — `npm run e2e` локально.
+# Forgejo 17: у вызывающих джоб НЕТ runs-on; `if:` считается в контексте workflow_call → только github.ref.
+name: ci
+on:
+  push:
+    branches: [master]
+  pull_request:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  meta:
+    runs-on: k8s
+    timeout-minutes: 5
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: image tags
+        id: meta
+        run: |
+          if [ "$GITHUB_REF" = refs/heads/master ]; then echo "tags=${GITHUB_SHA:0:8},latest" >> "$GITHUB_OUTPUT"
+          else echo "tags=${GITHUB_SHA:0:8}" >> "$GITHUB_OUTPUT"; fi
+  backend:
+    uses: claude/ci-templates/.forgejo/workflows/go.yml@v1
+    with:
+      working_dir: backend
+      test_args: -cover ./...
+    secrets: inherit
+  frontend:
+    runs-on: k8s
+    timeout-minutes: 20
+    steps:
+      - name: checkout (SHA-pinned mirror action)
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      - name: cache npm
+        uses: https://data.forgejo.org/actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4.3.0
+        with:
+          path: .npm
+          key: npm-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: npm-
+      - name: npm ci + lint + tsc + vitest
+        run: |
+          set -euo pipefail
+          export npm_config_cache="$PWD/.npm"
+          cd frontend
+          node --version
+          npm ci --prefer-offline
+          npm run lint
+          npx tsc -b
+          npm run test -- --no-file-parallelism
+  changelog:
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: claude/ci-templates/.forgejo/workflows/changelog.yml@v1
+    secrets: inherit
+  commits:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: k8s
+    timeout-minutes: 10
+    steps:
+      - name: checkout (SHA-pinned mirror action)
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: commitlint (Conventional Commits, commitlint.config.js)
+        run: |
+          set -euo pipefail
+          test -f commitlint.config.js || { echo "::error::commitlint.config.js not found"; exit 1; }
+          export npm_config_cache="$PWD/.npm"
+          BASE="${GITHUB_BASE_REF:-master}"
+          git fetch -q origin "$BASE"
+          echo "Validating commits in origin/$BASE..HEAD"
+          npx --yes -p @commitlint/cli -p @commitlint/config-conventional commitlint --from "origin/$BASE" --to HEAD
+  image-backend:
+    needs: [meta, backend, frontend]
+    if: ${{ github.ref == 'refs/heads/master' }}
+    uses: claude/ci-templates/.forgejo/workflows/image.yml@v1
+    with:
+      image: git.zztopper.ru/applications/dps150-web/backend
+      tags: "${{ needs.meta.outputs.tags }}"
+      dockerfile: deploy/docker/Dockerfile.backend
+    secrets: inherit
+  image-frontend:
+    needs: [meta, backend, frontend]
+    if: ${{ github.ref == 'refs/heads/master' }}
+    uses: claude/ci-templates/.forgejo/workflows/image.yml@v1
+    with:
+      image: git.zztopper.ru/applications/dps150-web/frontend
+      tags: "${{ needs.meta.outputs.tags }}"
+      dockerfile: deploy/docker/Dockerfile.frontend
+    secrets: inherit
