@@ -5,9 +5,8 @@
 #   images   — image.yml ×2 (backend, frontend) из deploy/docker/Dockerfile.*; теги <sha8> (+latest на master).
 #              На PR образы не собираются (в GitLab собирались без push) — экономим единственный раннер.
 #
-# TODO (backlog #82, нет heavy-раннера): e2e (Playwright chromium против backend с DPS_TRANSPORT=mock://)
-# НЕ перенесён — браузеру нужен glibc (mcr.microsoft.com/playwright), в Alpine host-раннере его нет;
-# нужна метка k8s-docker/heavy с container: mcr.microsoft.com/playwright:v1.61.1-noble. Пока — `npm run e2e` локально.
+#   e2e      — на раннере k8s-heavy (Ubuntu/glibc, backlog #82): go build backend, Playwright chromium (браузер качается в кэш
+#              пода $PLAYWRIGHT_BROWSERS_PATH, системные либы в образе) против backend с DPS_TRANSPORT=mock:// (webServer конфига).
 # Forgejo 17: у вызывающих джоб НЕТ runs-on; `if:` считается в контексте workflow_call → только github.ref.
 name: ci
 on:
@@ -60,6 +59,22 @@ jobs:
           npm run lint
           npx tsc -b
           npm run test -- --no-file-parallelism
+  e2e:
+    runs-on: k8s-heavy
+    timeout-minutes: 30
+    env:
+      CI: "1"
+    steps:
+      - name: checkout (SHA-pinned mirror action)
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      - name: go build backend (mock transport) + npm ci + playwright install chromium + e2e
+        run: |
+          set -euo pipefail
+          cd backend && go version && CGO_ENABLED=0 go build -o bin/dps150-server ./cmd/server && cd ..
+          cd frontend
+          npm ci --prefer-offline
+          npx playwright install chromium
+          npm run e2e
   changelog:
     if: ${{ github.event_name == 'pull_request' }}
     uses: claude/ci-templates/.forgejo/workflows/changelog.yml@v1
@@ -83,7 +98,7 @@ jobs:
           echo "Validating commits in origin/$BASE..HEAD"
           npx --yes -p @commitlint/cli -p @commitlint/config-conventional commitlint --from "origin/$BASE" --to HEAD
   image-backend:
-    needs: [meta, backend, frontend]
+    needs: [meta, backend, frontend, e2e]
     if: ${{ github.ref == 'refs/heads/master' }}
     uses: claude/ci-templates/.forgejo/workflows/image.yml@v1
     with:
@@ -92,7 +107,7 @@ jobs:
       dockerfile: deploy/docker/Dockerfile.backend
     secrets: inherit
   image-frontend:
-    needs: [meta, backend, frontend]
+    needs: [meta, backend, frontend, e2e]
     if: ${{ github.ref == 'refs/heads/master' }}
     uses: claude/ci-templates/.forgejo/workflows/image.yml@v1
     with:
