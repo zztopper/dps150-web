@@ -12,6 +12,8 @@ import (
 )
 
 const (
+	// Authenticated connections close at most 300s after upgrade.
+	maxAuthenticatedWSSessionTTL = 5 * time.Minute
 	// wsWriteTimeout bounds every frame write; a client that cannot keep
 	// up is disconnected instead of stalling the handler.
 	wsWriteTimeout = 5 * time.Second
@@ -30,7 +32,7 @@ type wsMessage struct {
 // contract. Backpressure never reaches the hub: the subscription drops
 // updates a slow client cannot buffer, and writes are bounded by
 // wsWriteTimeout.
-func handleWS(hub DeviceHub) gin.HandlerFunc {
+func handleWS(hub DeviceHub, deps routerDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		conn, err := websocket.Accept(c.Writer, c.Request, nil)
 		if err != nil {
@@ -41,7 +43,24 @@ func handleWS(hub DeviceHub) gin.HandlerFunc {
 
 		// The client never sends data; CloseRead pumps control frames and
 		// cancels the context when the connection dies.
-		ctx := conn.CloseRead(c.Request.Context())
+		sessionCtx := c.Request.Context()
+		if deps.authRequired {
+			ttl := deps.wsSessionTTL
+			if ttl <= 0 || ttl > maxAuthenticatedWSSessionTTL {
+				ttl = maxAuthenticatedWSSessionTTL
+			}
+			withTimeout := deps.wsSessionContext
+			if withTimeout == nil {
+				withTimeout = context.WithTimeout
+			}
+			var cancel context.CancelFunc
+			sessionCtx, cancel = withTimeout(sessionCtx, ttl)
+			defer cancel()
+		}
+		// CloseRead closes the socket when its context expires, even while a
+		// ping/write is in progress. No credential or identity enters a close
+		// reason or log. The client must reconnect through authentication.
+		ctx := conn.CloseRead(sessionCtx)
 
 		updates := hub.Subscribe(ctx)
 

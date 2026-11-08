@@ -26,6 +26,6 @@ COPY --from=builder /out/dps150-server /usr/local/bin/dps150-server
 
 USER app
 
-EXPOSE 8080
+EXPOSE 8080 9090
 
 ENTRYPOINT ["dps150-server"]

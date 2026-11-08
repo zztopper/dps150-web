@@ -39,7 +39,7 @@ func NewRouter(hub DeviceHub, opts ...RouterOption) *gin.Engine {
 	v1.GET("/device", getDevice(hub))
 	v1.PUT("/device/setpoints", seqGate, putSetpoints(hub))
 	v1.PUT("/device/output", seqGate, putOutput(hub))
-	v1.GET("/ws", handleWS(hub))
+	v1.GET("/ws", handleWS(hub, deps))
 
 	// Stage-2 assembly anchors. Each parallel track replaces EXACTLY its own
 	// anchor line below with its route registrations (r and v1 are in scope)

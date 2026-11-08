@@ -15,3 +15,9 @@ frontend/coverage
 *.md
 .env
 .env.*
+
+# Defense in depth; native CI already uses a sealed tracked-only context.
+.secrets
+.tokensave
+**/.secrets
+**/.tokensave

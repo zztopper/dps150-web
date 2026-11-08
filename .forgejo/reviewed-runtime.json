@@ -1,0 +1,1108 @@
+{
+  "phase": "A",
+  "reviewed_commit": "90f134c27aae8bcdbfb2b4c5a972dc0690e1fcee",
+  "native_base": "751b492fb424eb717abf681305d21aa2d6d92ba5",
+  "native_template": "daa2434f659a4c7aaf00d9848c526896ed0b9648",
+  "runtime": {
+    "backend/.golangci.yml": {
+      "mode": "100644",
+      "object": "ca457a241ac5d8c0cfe77f85930d28680f2c2d3f"
+    },
+    "backend/cmd/server/chargestore.go": {
+      "mode": "100644",
+      "object": "6fcee399f5ad808deb25d1b61da25a262ea971f5"
+    },
+    "backend/cmd/server/ivstore.go": {
+      "mode": "100644",
+      "object": "5079a1c34d58998bb30d2c7987aae049c80254b1"
+    },
+    "backend/cmd/server/main.go": {
+      "mode": "100644",
+      "object": "b4d75014d7ee3a161b048aedab5cfad5b05059f7"
+    },
+    "backend/go.mod": {
+      "mode": "100644",
+      "object": "0a18217324ac943dbd873036d08b05f3f744186a"
+    },
+    "backend/go.sum": {
+      "mode": "100644",
+      "object": "8849aeec756f23b4415854bb0123171005cc5272"
+    },
+    "backend/internal/api/auth.go": {
+      "mode": "100644",
+      "object": "dde9f1abe931a139fdd767be87a81575659f1d73"
+    },
+    "backend/internal/api/automation.go": {
+      "mode": "100644",
+      "object": "c99e79f2045cdb992b220555c8bea6ecfc0ac814"
+    },
+    "backend/internal/api/battery.go": {
+      "mode": "100644",
+      "object": "58cdbe49c72a75230a68ac86e32c2ae60c396f8b"
+    },
+    "backend/internal/api/charge.go": {
+      "mode": "100644",
+      "object": "8d9117583e276d7894258def0c4f6a129488f08d"
+    },
+    "backend/internal/api/device.go": {
+      "mode": "100644",
+      "object": "7ea6a4ba0719497e89c4202f17814a04147e058c"
+    },
+    "backend/internal/api/dto.go": {
+      "mode": "100644",
+      "object": "8ec1894b4c60af3633dfb1cdd119215a314880d4"
+    },
+    "backend/internal/api/events.go": {
+      "mode": "100644",
+      "object": "49ef5bfa2d9d544d727b61b2d39b9689b94a944f"
+    },
+    "backend/internal/api/export.go": {
+      "mode": "100644",
+      "object": "b95cced4250360ee7a2a14357ccd77fa55575609"
+    },
+    "backend/internal/api/history.go": {
+      "mode": "100644",
+      "object": "dc12d7e0052f15d70ac416a87f871366f3c5899d"
+    },
+    "backend/internal/api/iv.go": {
+      "mode": "100644",
+      "object": "494af0ce6c3cc431b17ae6beb22b30216e327f78"
+    },
+    "backend/internal/api/metrics.go": {
+      "mode": "100644",
+      "object": "f9830248209f6d652649643c135cf370afa41e07"
+    },
+    "backend/internal/api/notifications.go": {
+      "mode": "100644",
+      "object": "9c69cbff48c50e3816e59bfc7fc497c2e12e6f8c"
+    },
+    "backend/internal/api/options.go": {
+      "mode": "100644",
+      "object": "a44fc5aa19c86e31eabb96d0016dfcaae8bb6d8c"
+    },
+    "backend/internal/api/presets.go": {
+      "mode": "100644",
+      "object": "b849095f68697d17b7dcd8b434090a483fc93656"
+    },
+    "backend/internal/api/profiles.go": {
+      "mode": "100644",
+      "object": "f1d262d683d9752742b2ab933570718c092bc2e2"
+    },
+    "backend/internal/api/protections.go": {
+      "mode": "100644",
+      "object": "566e26050f8e01efe360e4024b0afce5e35b2ef9"
+    },
+    "backend/internal/api/router.go": {
+      "mode": "100644",
+      "object": "9a88d63b5fc731d6fe8bd4d6b550363d002f9d78"
+    },
+    "backend/internal/api/sequences.go": {
+      "mode": "100644",
+      "object": "3d4a694d83073c0b0e336e3fb135665af94d0364"
+    },
+    "backend/internal/api/tokens.go": {
+      "mode": "100644",
+      "object": "056d4b96e2053a03f338c92bc8b568a458340848"
+    },
+    "backend/internal/api/ws.go": {
+      "mode": "100644",
+      "object": "7949261a0fbfd89783c96cb22cace7c9898a328d"
+    },
+    "backend/internal/automation/engine.go": {
+      "mode": "100644",
+      "object": "5d7b05adea7437a5f9d600cf86bdf2e55fcb8fbb"
+    },
+    "backend/internal/charger/charge.go": {
+      "mode": "100644",
+      "object": "b716fe071af20b7863c84d19eb52f1a7f84cc252"
+    },
+    "backend/internal/charger/manager.go": {
+      "mode": "100644",
+      "object": "e3c8a406e6c8b282b84520b857b8c41dfcf84338"
+    },
+    "backend/internal/charger/presets.go": {
+      "mode": "100644",
+      "object": "5e06b260b264e1240df7e97d1ce1f1f2dce731d4"
+    },
+    "backend/internal/charger/run.go": {
+      "mode": "100644",
+      "object": "3ce159acdf8cb30b543b49ba7e72cda3b5ecfa53"
+    },
+    "backend/internal/config/config.go": {
+      "mode": "100644",
+      "object": "3b299020d1df5aed2a5f242df096793570c68bbc"
+    },
+    "backend/internal/device/apply.go": {
+      "mode": "100644",
+      "object": "ec977f4c0f9412c8cea8d94b12f436c82ae358c3"
+    },
+    "backend/internal/device/doc.go": {
+      "mode": "100644",
+      "object": "f187eb4b7d207f9d4cbcd0e31ab8f0f25a508e01"
+    },
+    "backend/internal/device/emulator/battery.go": {
+      "mode": "100644",
+      "object": "b2c85b25dc815fa47b1d6e3059b05a3174cea4ca"
+    },
+    "backend/internal/device/emulator/doc.go": {
+      "mode": "100644",
+      "object": "7b196f222fc8ce3a7e8bc8230dad7b41d55dcde1"
+    },
+    "backend/internal/device/emulator/dut.go": {
+      "mode": "100644",
+      "object": "ae1ad0d65adfdf451b20943f2c2dda4273108280"
+    },
+    "backend/internal/device/emulator/emulator.go": {
+      "mode": "100644",
+      "object": "8260664fb8aae7e22bb89690e9db4bf9f1867ef7"
+    },
+    "backend/internal/device/emulator/pipe.go": {
+      "mode": "100644",
+      "object": "cfbf71695c9ed07b9f9ab4decc475e13b1089623"
+    },
+    "backend/internal/device/emulator/txparser.go": {
+      "mode": "100644",
+      "object": "69b875ee3c5c7d1e2a6323187fccf460fc4944ed"
+    },
+    "backend/internal/device/hub.go": {
+      "mode": "100644",
+      "object": "6439cb8941a96d1f19ca888c7865b0c5714091ad"
+    },
+    "backend/internal/device/protocol/decode.go": {
+      "mode": "100644",
+      "object": "2a6247368cfae14395ef02586ba7e49b67f88f79"
+    },
+    "backend/internal/device/protocol/doc.go": {
+      "mode": "100644",
+      "object": "366177f88b938e996835558daf4bf02eeebc2896"
+    },
+    "backend/internal/device/protocol/encode.go": {
+      "mode": "100644",
+      "object": "76e8470818f3812bc9b259f97c19beac443be59c"
+    },
+    "backend/internal/device/protocol/frame.go": {
+      "mode": "100644",
+      "object": "d2ff995a60b41ece4225ec9de6a4a9ff1fb7b3aa"
+    },
+    "backend/internal/device/protocol/parser.go": {
+      "mode": "100644",
+      "object": "cd339cc0009df1723fde76939be54107674d1bdc"
+    },
+    "backend/internal/device/protocol/register.go": {
+      "mode": "100644",
+      "object": "9c245d9ec2a8267b0457f7e35a0efe183eabcf68"
+    },
+    "backend/internal/device/safety.go": {
+      "mode": "100644",
+      "object": "cb0bfcba52edb6c2fd62bdcc8751acd8598c4d21"
+    },
+    "backend/internal/device/state.go": {
+      "mode": "100644",
+      "object": "9d3b90601b4a53f5762c7b3a8a925d6bd8d8711b"
+    },
+    "backend/internal/device/update.go": {
+      "mode": "100644",
+      "object": "1238aea9b018d4dfa67f4e233040a9746c45e7d5"
+    },
+    "backend/internal/history/history.go": {
+      "mode": "100644",
+      "object": "2c6dc420a43d8a4b6db4f1217657926163b13503"
+    },
+    "backend/internal/history/jobs.go": {
+      "mode": "100644",
+      "object": "63c81020066470f62c9fbde80944d123ff0b28fb"
+    },
+    "backend/internal/history/reader.go": {
+      "mode": "100644",
+      "object": "5e510f4eddb39fc4ff10fd938a461fa827ad43a9"
+    },
+    "backend/internal/history/recorder.go": {
+      "mode": "100644",
+      "object": "a22df8c26fac58494bcaf03d6f040d1ea8450a3b"
+    },
+    "backend/internal/ivtrace/analyze.go": {
+      "mode": "100644",
+      "object": "54ada16aaffa91addfad91666eba6bf3bc449646"
+    },
+    "backend/internal/ivtrace/manager.go": {
+      "mode": "100644",
+      "object": "43442f743f99abff754bbfd29ea98f94dcf46b8f"
+    },
+    "backend/internal/ivtrace/presets.go": {
+      "mode": "100644",
+      "object": "bf6dcdcee2163ea6c6c97b58d239aed144bcb527"
+    },
+    "backend/internal/ivtrace/run.go": {
+      "mode": "100644",
+      "object": "00b2d3e3ef1e0443ce6298064efcfbd2cdb34c5c"
+    },
+    "backend/internal/ivtrace/sweep.go": {
+      "mode": "100644",
+      "object": "db948cba67fd5278b9e331a1770485fcd88feb7c"
+    },
+    "backend/internal/journal/journal.go": {
+      "mode": "100644",
+      "object": "940f830596766051ca57871a01144d2b8c4670c4"
+    },
+    "backend/internal/metrics/hub.go": {
+      "mode": "100644",
+      "object": "d7e82dbfa7ad69d004f502318b5542ccbadb7075"
+    },
+    "backend/internal/metrics/metrics.go": {
+      "mode": "100644",
+      "object": "ae61503111ca7ec6564ea50adfdd6bf7d7dffcba"
+    },
+    "backend/internal/mqtt/client.go": {
+      "mode": "100644",
+      "object": "8a45b10d2f297aab3cf843e994b77b160ddb7711"
+    },
+    "backend/internal/mqtt/config.go": {
+      "mode": "100644",
+      "object": "0ed48e93940846d4483097c5085ed56a5374c6f8"
+    },
+    "backend/internal/mqtt/discovery.go": {
+      "mode": "100644",
+      "object": "6a92aafff718e053a33ac8101c1c9e5c9a3f1208"
+    },
+    "backend/internal/mqtt/service.go": {
+      "mode": "100644",
+      "object": "02f6c4b669f9529d5771e11963740596995f10b9"
+    },
+    "backend/internal/notify/metering.go": {
+      "mode": "100644",
+      "object": "ee546da6fa8e7e0eb6e3d176ee264587d8b130cb"
+    },
+    "backend/internal/notify/notifier.go": {
+      "mode": "100644",
+      "object": "fc4457754e94cfec18876a2ebde3ae0f129a1a12"
+    },
+    "backend/internal/notify/settings.go": {
+      "mode": "100644",
+      "object": "d689a41f34ecda34884d6932d82cad7fbea96c3c"
+    },
+    "backend/internal/notify/telegram.go": {
+      "mode": "100644",
+      "object": "32a02239240e6f8856b2ab842b2994d5874a1a63"
+    },
+    "backend/internal/notify/throttle.go": {
+      "mode": "100644",
+      "object": "41c9a56e6f7ed3b585a657efd719fd089aa7095b"
+    },
+    "backend/internal/sequence/manager.go": {
+      "mode": "100644",
+      "object": "9a7320f674ad2f6bad5f689179e06bd65c2f1e62"
+    },
+    "backend/internal/sequence/program.go": {
+      "mode": "100644",
+      "object": "8c5a6a73bfdf57c46ebbba8c3086788a47d2c0ab"
+    },
+    "backend/internal/storage/automation.go": {
+      "mode": "100644",
+      "object": "0db6f75258a80dc8ac73080333d6e75355f1ff76"
+    },
+    "backend/internal/storage/battery.go": {
+      "mode": "100644",
+      "object": "3d3ad111b8cbcddc336ee3eb2a868908c79d7825"
+    },
+    "backend/internal/storage/charge.go": {
+      "mode": "100644",
+      "object": "6f2ac279e2e2a256a3e0068faaddeeca974cf526"
+    },
+    "backend/internal/storage/events.go": {
+      "mode": "100644",
+      "object": "1cb200f37c77b8568f91194838f79eb378865043"
+    },
+    "backend/internal/storage/iv.go": {
+      "mode": "100644",
+      "object": "9664450e328186af970c088c755af03563a1f1e7"
+    },
+    "backend/internal/storage/profiles.go": {
+      "mode": "100644",
+      "object": "c6f572a32f93e0c32dca7e060e83fdac309ff529"
+    },
+    "backend/internal/storage/sequences.go": {
+      "mode": "100644",
+      "object": "53d53952303d06b2adc9cf3dad5361e12375e961"
+    },
+    "backend/internal/storage/settings.go": {
+      "mode": "100644",
+      "object": "43c900c041fc38c6d7eefe35358eee129d275139"
+    },
+    "backend/internal/storage/storage.go": {
+      "mode": "100644",
+      "object": "afa4d0474b22b0d5f878822d3955f8664a45b822"
+    },
+    "backend/internal/storage/tokens.go": {
+      "mode": "100644",
+      "object": "35ccbcd1eb0a5564140b56d5b0f34ccfb0bd54f4"
+    },
+    "backend/internal/transport/serial.go": {
+      "mode": "100644",
+      "object": "c534f6d5272176cbef69501e4f3dfe77bd62ee75"
+    },
+    "backend/internal/transport/tcp.go": {
+      "mode": "100644",
+      "object": "9a343fef208b0fa328edd1b0b78d10777ceea272"
+    },
+    "backend/internal/transport/transport.go": {
+      "mode": "100644",
+      "object": "d175ee05b921f5c0a70058a6ce5b54d501f3d739"
+    },
+    "backend/internal/webui/dist/.gitkeep": {
+      "mode": "100644",
+      "object": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    },
+    "backend/internal/webui/webui.go": {
+      "mode": "100644",
+      "object": "eab736d459bc8158efba89153c2a5b39a5b6f10f"
+    },
+    "deploy/docker/Dockerfile.backend": {
+      "mode": "100644",
+      "object": "5ea6177ab19900f1df3d8c34222521dcee5f65cf"
+    },
+    "deploy/docker/Dockerfile.frontend": {
+      "mode": "100644",
+      "object": "21642717cdc42ca6650fbbf26c106fd355d25382"
+    },
+    "deploy/docker/Dockerfile.standalone": {
+      "mode": "100644",
+      "object": "66f3651d13e867efef8a3beebae86bbc57033f36"
+    },
+    "deploy/docker/nginx.conf": {
+      "mode": "100644",
+      "object": "f735e04266db6f78a8779881b55636df6c91286c"
+    },
+    "deploy/grafana/README.md": {
+      "mode": "100644",
+      "object": "2b9ec00faadb8f7100fce27fdc5f293bdaf1d7eb"
+    },
+    "deploy/grafana/dashboard.json": {
+      "mode": "100644",
+      "object": "cb09335684fb40427a9c2cccc37295893a669bc0"
+    },
+    "frontend/.gitignore": {
+      "mode": "100644",
+      "object": "c4722f8f162c9b314e5d4712f7243ea26e72a687"
+    },
+    "frontend/.oxlintrc.json": {
+      "mode": "100644",
+      "object": "6fa991dad24b57eb19c9cefba8ea12fd1870ed07"
+    },
+    "frontend/e2e/automation.spec.ts": {
+      "mode": "100644",
+      "object": "ce268f6725966994ed6e357ab4b102b6532ef513"
+    },
+    "frontend/e2e/dashboard.spec.ts": {
+      "mode": "100644",
+      "object": "a22ec1ba939fb7a59042f4134daced67ac459aef"
+    },
+    "frontend/e2e/events.spec.ts": {
+      "mode": "100644",
+      "object": "241d49b9e4733052050443c6196ec780c66a0ab2"
+    },
+    "frontend/e2e/export.spec.ts": {
+      "mode": "100644",
+      "object": "4445bc222940837baf2a56d26d17fbe9aa70966b"
+    },
+    "frontend/e2e/history.spec.ts": {
+      "mode": "100644",
+      "object": "c5eeb236ed7f57f018075d4df4abb278be83e59e"
+    },
+    "frontend/e2e/profiles.spec.ts": {
+      "mode": "100644",
+      "object": "860925917b245e3bb6fdd3f76602c9e8a0bd9895"
+    },
+    "frontend/e2e/settings.spec.ts": {
+      "mode": "100644",
+      "object": "d37742312005ca976e6cee61b59871401485aa86"
+    },
+    "frontend/e2e/tokens.spec.ts": {
+      "mode": "100644",
+      "object": "e84a211e3f136c7328c66e0256b07c574df76594"
+    },
+    "frontend/index.html": {
+      "mode": "100644",
+      "object": "093d297c86fe4c3eddbb6cd59681a8b453594819"
+    },
+    "frontend/package-lock.json": {
+      "mode": "100644",
+      "object": "8f81f57dbaa0976f840428129e12ee5243e32366"
+    },
+    "frontend/package.json": {
+      "mode": "100644",
+      "object": "a02b132588016fd93fd556e9c86c7748bb989042"
+    },
+    "frontend/public/favicon.svg": {
+      "mode": "100644",
+      "object": "6893eb13237060adc0c968a690149a49faa2d7d3"
+    },
+    "frontend/src/App.test.tsx": {
+      "mode": "100644",
+      "object": "08c260a5a9f26de55f2f389d937cdab0ca686fc2"
+    },
+    "frontend/src/App.tsx": {
+      "mode": "100644",
+      "object": "e201c8c32a43f32acdf4e631715014232cce1698"
+    },
+    "frontend/src/api/automation.ts": {
+      "mode": "100644",
+      "object": "8c9faf5883a4620971a016e684d8b65c05a912b6"
+    },
+    "frontend/src/api/charge.test.ts": {
+      "mode": "100644",
+      "object": "287bb20bb72ce6743e319c0a15deeb0a3b5d9555"
+    },
+    "frontend/src/api/charge.ts": {
+      "mode": "100644",
+      "object": "3ce26580abcd3589cd84633ac2739dab19f69e32"
+    },
+    "frontend/src/api/client.ts": {
+      "mode": "100644",
+      "object": "0570bdda8a9814520ca4734bf3df9741ed3d879d"
+    },
+    "frontend/src/api/events.ts": {
+      "mode": "100644",
+      "object": "e54c1db69bf7fc0419cf65e3b43f37c69ab01b8f"
+    },
+    "frontend/src/api/export.test.ts": {
+      "mode": "100644",
+      "object": "0f9325a10e49c65ddc0e6f0c05755ce757e94d5b"
+    },
+    "frontend/src/api/export.ts": {
+      "mode": "100644",
+      "object": "e6bb38b1bd9bb9a2b6f09b637d04532946b25148"
+    },
+    "frontend/src/api/iv.test.ts": {
+      "mode": "100644",
+      "object": "1d64ebef0f923c4897f92cf3ee922566f797eb61"
+    },
+    "frontend/src/api/iv.ts": {
+      "mode": "100644",
+      "object": "fcb4a3939fb4bdea72c96f81ea9a3a2cbb2badd8"
+    },
+    "frontend/src/api/profiles.ts": {
+      "mode": "100644",
+      "object": "079492c212bb60ede91242512b4beefe93d68144"
+    },
+    "frontend/src/api/protections.ts": {
+      "mode": "100644",
+      "object": "73112aedc9648b24b2137b84b8b9427b9441d435"
+    },
+    "frontend/src/api/sequences.test.ts": {
+      "mode": "100644",
+      "object": "582e4c101b035da1ebec5c490431c8501f12b514"
+    },
+    "frontend/src/api/sequences.ts": {
+      "mode": "100644",
+      "object": "656f6042349cd80e1930753468ea1d97e242ba66"
+    },
+    "frontend/src/api/tokens.ts": {
+      "mode": "100644",
+      "object": "49b656d4c82e9021ef500aa6f3f7f009fc32e90a"
+    },
+    "frontend/src/api/types.ts": {
+      "mode": "100644",
+      "object": "0e4c47e122f9b5cb8a754b1c06e2c5685f365444"
+    },
+    "frontend/src/components/ApiTokensSection.test.tsx": {
+      "mode": "100644",
+      "object": "280aa570798ccbd5f48c70829b8fdef271cf61e8"
+    },
+    "frontend/src/components/ApiTokensSection.tsx": {
+      "mode": "100644",
+      "object": "37b49fbe62993b12ff62744fbdf0571410944ddc"
+    },
+    "frontend/src/components/AppLayout.test.tsx": {
+      "mode": "100644",
+      "object": "421f6cb459c38767ea7889239786db3ae5b01ea8"
+    },
+    "frontend/src/components/AppLayout.tsx": {
+      "mode": "100644",
+      "object": "2f1629ad62f376d92908cf05639767521490329f"
+    },
+    "frontend/src/components/ErrorBoundary.test.tsx": {
+      "mode": "100644",
+      "object": "ffe63c90abe8d63839ba18fe4d98f9a528e2d89e"
+    },
+    "frontend/src/components/ErrorBoundary.tsx": {
+      "mode": "100644",
+      "object": "8cb1bd49b2ccb865222d80d946c3e84921bb22c4"
+    },
+    "frontend/src/components/LiveChart.test.tsx": {
+      "mode": "100644",
+      "object": "1f0841fae2ff885d0fcd3cc2434d236e875dd83c"
+    },
+    "frontend/src/components/LiveChart.tsx": {
+      "mode": "100644",
+      "object": "d31c0e59006b1add145c600f891f90789fabf912"
+    },
+    "frontend/src/components/MeteringCard.test.tsx": {
+      "mode": "100644",
+      "object": "cd8e49be2ef56e6a9fa459206a2e889279cdb9fd"
+    },
+    "frontend/src/components/MeteringCard.tsx": {
+      "mode": "100644",
+      "object": "d3ac4b3fb16c113f56b3d29f48d93be4747fab9b"
+    },
+    "frontend/src/components/OutputControl.test.tsx": {
+      "mode": "100644",
+      "object": "39ac9d1ed79a927fe1fd34aab7e39df3143d4f48"
+    },
+    "frontend/src/components/OutputControl.tsx": {
+      "mode": "100644",
+      "object": "a1628c537a6490cbd7a9acb44b634576b49c14bd"
+    },
+    "frontend/src/components/ProfileFormModal.test.tsx": {
+      "mode": "100644",
+      "object": "36fa9d85e51fe3d502428d49930a5b07942ba655"
+    },
+    "frontend/src/components/ProfileFormModal.tsx": {
+      "mode": "100644",
+      "object": "3c5a883f026ad56aadadd100e646f9a787dc6eb1"
+    },
+    "frontend/src/components/ProtectionsPanel.test.tsx": {
+      "mode": "100644",
+      "object": "d967ab029c8733de3dff03496865cce031c2e58b"
+    },
+    "frontend/src/components/ProtectionsPanel.tsx": {
+      "mode": "100644",
+      "object": "5f2290c3c6fba9f753e5ef7b39b909141c7f7757"
+    },
+    "frontend/src/components/QuickProfiles.test.tsx": {
+      "mode": "100644",
+      "object": "1b82b8deb5c85c140ab5cdac9f6f00db3d6d6ee8"
+    },
+    "frontend/src/components/QuickProfiles.tsx": {
+      "mode": "100644",
+      "object": "a345d5154e31c736b3b73b3830fa4bf6e4750dd1"
+    },
+    "frontend/src/components/Readings.tsx": {
+      "mode": "100644",
+      "object": "6b15249a8b828d8d8cc1954977e167294d5e5711"
+    },
+    "frontend/src/components/SetpointsForm.test.tsx": {
+      "mode": "100644",
+      "object": "fae94d44b5e2f954f46fcf5d2c61bd196bdf5dc9"
+    },
+    "frontend/src/components/SetpointsForm.tsx": {
+      "mode": "100644",
+      "object": "00bd34866c7197b0ecfe22f043f2f1b5f05289fe"
+    },
+    "frontend/src/components/TokenCreateModal.tsx": {
+      "mode": "100644",
+      "object": "976b464d003da10b15444cd07e9dd60b8099c67d"
+    },
+    "frontend/src/components/TokenSecretModal.tsx": {
+      "mode": "100644",
+      "object": "b77c34276c5e4c75f8fb0edd4ea2d3be7fe9ca1c"
+    },
+    "frontend/src/components/automation/RuleFormModal.test.tsx": {
+      "mode": "100644",
+      "object": "3d5d7cfaafee71c00d871deac551bc37ae837dca"
+    },
+    "frontend/src/components/automation/RuleFormModal.tsx": {
+      "mode": "100644",
+      "object": "255e902a285c6c92c2f21be545dbc8ff8f7bd0a9"
+    },
+    "frontend/src/components/automation/conditionText.test.ts": {
+      "mode": "100644",
+      "object": "3f7f004258090bb74507b93634f3384dce19021d"
+    },
+    "frontend/src/components/automation/conditionText.ts": {
+      "mode": "100644",
+      "object": "5c01dd5aa3da67c7b8ce2f6bf6dff9c0e72a8f8f"
+    },
+    "frontend/src/components/charge/ChargeAssignBatteryModal.tsx": {
+      "mode": "100644",
+      "object": "b0d0a76cafff26b389d34a66b56a8a824333a385"
+    },
+    "frontend/src/components/charge/ChargeBatteries.test.tsx": {
+      "mode": "100644",
+      "object": "290c1cea2c079b2f8c6559c095806680acb6ec4d"
+    },
+    "frontend/src/components/charge/ChargeBatteries.tsx": {
+      "mode": "100644",
+      "object": "f1bd520467d43e35f82c9c987fc5e428d2d80734"
+    },
+    "frontend/src/components/charge/ChargeBatteryChart.tsx": {
+      "mode": "100644",
+      "object": "798858644c26f3a609321d17d977cccc7537c40c"
+    },
+    "frontend/src/components/charge/ChargeBatteryDetail.tsx": {
+      "mode": "100644",
+      "object": "27d00ba568161c5424ea794ca7b9c32943415205"
+    },
+    "frontend/src/components/charge/ChargeBatteryFormModal.tsx": {
+      "mode": "100644",
+      "object": "76db946d346f5262800b1d616a5e34ccf3ee7dc4"
+    },
+    "frontend/src/components/charge/ChargeChart.tsx": {
+      "mode": "100644",
+      "object": "0aeac26c42177c11e18db0b84cdf6b145b508598"
+    },
+    "frontend/src/components/charge/ChargeLive.test.tsx": {
+      "mode": "100644",
+      "object": "2bc1dc8151e12ed40603fabd162c4182b8ee7dd6"
+    },
+    "frontend/src/components/charge/ChargeLive.tsx": {
+      "mode": "100644",
+      "object": "6868096d0f599a193a6434c1da31ad1bb9ad1211"
+    },
+    "frontend/src/components/charge/ChargePreflightModal.tsx": {
+      "mode": "100644",
+      "object": "466962124d70ae65af74708639bb8ee51f662910"
+    },
+    "frontend/src/components/charge/ChargeProfileFormModal.test.tsx": {
+      "mode": "100644",
+      "object": "49a41fa11cb033d068909e77a4876c823a3ec9ec"
+    },
+    "frontend/src/components/charge/ChargeProfileFormModal.tsx": {
+      "mode": "100644",
+      "object": "f0b23e37ea63f07b459da9d0eb2d1f18f2cedca4"
+    },
+    "frontend/src/components/charge/ChargeProfiles.tsx": {
+      "mode": "100644",
+      "object": "f27a6faf5e1910d13994a71445885db9b11a10ab"
+    },
+    "frontend/src/components/charge/ChargeRintChart.tsx": {
+      "mode": "100644",
+      "object": "502faac0eaa0cb1607487c98b6c6e73af104a12b"
+    },
+    "frontend/src/components/charge/ChargeRunView.test.tsx": {
+      "mode": "100644",
+      "object": "78044fde7fc5ec24800f5013e6c009dd5cd3f124"
+    },
+    "frontend/src/components/charge/ChargeRunView.tsx": {
+      "mode": "100644",
+      "object": "aa2bc716f2fcf3659414ee6c329f3b948c602f5d"
+    },
+    "frontend/src/components/charge/ChargeSessions.test.tsx": {
+      "mode": "100644",
+      "object": "29ba9b64009ac424faf32039614b464e62b296c1"
+    },
+    "frontend/src/components/charge/ChargeSessions.tsx": {
+      "mode": "100644",
+      "object": "71111fd518f62ac0cfa70c83b4053ed1336d4ea1"
+    },
+    "frontend/src/components/charge/chargeBatteryFormat.test.ts": {
+      "mode": "100644",
+      "object": "d235d62e013e96b175c48fe537a1a46dac2a97a6"
+    },
+    "frontend/src/components/charge/chargeBatteryFormat.ts": {
+      "mode": "100644",
+      "object": "dbc739746db9801c56b0c2573b24b14b322c265e"
+    },
+    "frontend/src/components/charge/chargeFormat.test.ts": {
+      "mode": "100644",
+      "object": "91693c6ba6c23ae5b9ae559f89938f3f4e7f1080"
+    },
+    "frontend/src/components/charge/chargeFormat.ts": {
+      "mode": "100644",
+      "object": "d81478e0e4989887db928f59c17b94065b599909"
+    },
+    "frontend/src/components/chart/EventMarkers.test.tsx": {
+      "mode": "100644",
+      "object": "ac4c9cb842a2c18f233a5b780746d43baa4f5f26"
+    },
+    "frontend/src/components/chart/EventMarkers.tsx": {
+      "mode": "100644",
+      "object": "079f20beb1a8b53e88d6351a1ad8d7bcc26e88dd"
+    },
+    "frontend/src/components/chart/HistoryChart.tsx": {
+      "mode": "100644",
+      "object": "82696d73f5c5fdec59b7b821adba2e340ca67e01"
+    },
+    "frontend/src/components/chart/LiveChartCanvas.tsx": {
+      "mode": "100644",
+      "object": "18940397c02b9e1272ffcefad456d7abbf0840ee"
+    },
+    "frontend/src/components/chart/canvasSupported.ts": {
+      "mode": "100644",
+      "object": "ee1cc8164d5f00cf4df958af52eba4a1e90b3aeb"
+    },
+    "frontend/src/components/chart/colors.ts": {
+      "mode": "100644",
+      "object": "c405d3611c4aa6a3fee5b98272e9df0d9870975f"
+    },
+    "frontend/src/components/chart/eventDescription.test.ts": {
+      "mode": "100644",
+      "object": "62b1df8fc5a10f7d9aed443cae366aa14621692e"
+    },
+    "frontend/src/components/chart/eventDescription.ts": {
+      "mode": "100644",
+      "object": "cb8effe117e148a1fd1afc813f11a68de25a7dcc"
+    },
+    "frontend/src/components/chart/liveWindow.test.ts": {
+      "mode": "100644",
+      "object": "c105d54ab98ac6a0c925dde5843ff4847fdbe5a4"
+    },
+    "frontend/src/components/chart/liveWindow.ts": {
+      "mode": "100644",
+      "object": "8e3819be152614c82b34408aae9ebb9e4abf7025"
+    },
+    "frontend/src/components/chart/mapHistory.test.ts": {
+      "mode": "100644",
+      "object": "49692f4a7c1bd039c883b5984cafae78f6f72991"
+    },
+    "frontend/src/components/chart/mapHistory.ts": {
+      "mode": "100644",
+      "object": "41f066eaebfa6758a963840abe79ed461981915e"
+    },
+    "frontend/src/components/chart/rangePresets.test.ts": {
+      "mode": "100644",
+      "object": "77d6b827ac66778eaff2a5e44f7b3188a83e648a"
+    },
+    "frontend/src/components/chart/rangePresets.ts": {
+      "mode": "100644",
+      "object": "93db61e0cacfaa52a7a7f5a201ecf3b58f36c43a"
+    },
+    "frontend/src/components/chart/useContainerSize.ts": {
+      "mode": "100644",
+      "object": "8aec20b2bcef760a1c3b90c0ec3b8e8e7071ec99"
+    },
+    "frontend/src/components/chart/usePageVisible.ts": {
+      "mode": "100644",
+      "object": "72bcaade3b90834787be39c163f5f9eb832807bc"
+    },
+    "frontend/src/components/iv/IVAssignComponentModal.tsx": {
+      "mode": "100644",
+      "object": "92834b65dd61d31cf3813bb6f973fe02b052bc8d"
+    },
+    "frontend/src/components/iv/IVChart.tsx": {
+      "mode": "100644",
+      "object": "3d1e71803b6bd5bbcdfaf25a9c015a5e42c5e196"
+    },
+    "frontend/src/components/iv/IVCompare.test.tsx": {
+      "mode": "100644",
+      "object": "28dccca5fb67637f7209fc5ae49f57d84eaae28d"
+    },
+    "frontend/src/components/iv/IVCompare.tsx": {
+      "mode": "100644",
+      "object": "a2f640f7ff8b9226334a0a79bb5a754a931e4546"
+    },
+    "frontend/src/components/iv/IVCompareChart.tsx": {
+      "mode": "100644",
+      "object": "e028d484f4e109439db162be245a97273c20c433"
+    },
+    "frontend/src/components/iv/IVComponentDetail.tsx": {
+      "mode": "100644",
+      "object": "493f6ba45c9dc276ed5ba31446791fa1a1b31381"
+    },
+    "frontend/src/components/iv/IVComponentFormModal.tsx": {
+      "mode": "100644",
+      "object": "080496ce98eced857c68510aea393ab911cb1881"
+    },
+    "frontend/src/components/iv/IVComponents.test.tsx": {
+      "mode": "100644",
+      "object": "dea8959a87eb7210e1eb105967743b7f3629969b"
+    },
+    "frontend/src/components/iv/IVComponents.tsx": {
+      "mode": "100644",
+      "object": "07329faba0c8d37edc81f73c70cb0468ba34e7fe"
+    },
+    "frontend/src/components/iv/IVLive.test.tsx": {
+      "mode": "100644",
+      "object": "d32bfe07128a3ceec43f96471acc1fe67358f178"
+    },
+    "frontend/src/components/iv/IVLive.tsx": {
+      "mode": "100644",
+      "object": "5e230125632865d382702d470a6f4419f3e7ccab"
+    },
+    "frontend/src/components/iv/IVMetrics.tsx": {
+      "mode": "100644",
+      "object": "51bcc168cdcced9062ca7f5f6d93f4c93335fabf"
+    },
+    "frontend/src/components/iv/IVProfileFormModal.tsx": {
+      "mode": "100644",
+      "object": "b699fcf67e97b003dd351dd5e8b695a8bc7ac6a6"
+    },
+    "frontend/src/components/iv/IVProfiles.tsx": {
+      "mode": "100644",
+      "object": "6d8bc954d5747d4ade1528e0ef672d87cdbd962b"
+    },
+    "frontend/src/components/iv/IVRunView.tsx": {
+      "mode": "100644",
+      "object": "2064df4cebe18a17c9c15a7abfc0443afc61ebd0"
+    },
+    "frontend/src/components/iv/IVStartModal.tsx": {
+      "mode": "100644",
+      "object": "f92f6daedfb060936e33df32b72cb32fa49ab6ce"
+    },
+    "frontend/src/components/iv/IVSweeps.test.tsx": {
+      "mode": "100644",
+      "object": "252f339a8373c5608616bc69243d4b0ff897a094"
+    },
+    "frontend/src/components/iv/IVSweeps.tsx": {
+      "mode": "100644",
+      "object": "447f6e988c6be245be0cfdb244e4ec666ecb0e12"
+    },
+    "frontend/src/components/iv/ivCompareUtils.test.ts": {
+      "mode": "100644",
+      "object": "ca75e9b1a5ee9524cb3da34d57435cf853cc8664"
+    },
+    "frontend/src/components/iv/ivCompareUtils.ts": {
+      "mode": "100644",
+      "object": "e56ac6e4f24b315aec4ac3bb4597ada91283d376"
+    },
+    "frontend/src/components/iv/ivFormat.test.ts": {
+      "mode": "100644",
+      "object": "ca6ba2bac95defb9be337113bb50fc121e7a02a8"
+    },
+    "frontend/src/components/iv/ivFormat.ts": {
+      "mode": "100644",
+      "object": "deb0a325038322360009646d4b3cf1d29635fcc6"
+    },
+    "frontend/src/components/meteringFormat.test.ts": {
+      "mode": "100644",
+      "object": "a672c93df93fe0bcce1f69c8f9a2a7244b0ac3af"
+    },
+    "frontend/src/components/meteringFormat.ts": {
+      "mode": "100644",
+      "object": "e84dbfb4162c01a5c1caf635bf40a4e657bfadda"
+    },
+    "frontend/src/components/sequences/RunPanel.tsx": {
+      "mode": "100644",
+      "object": "9df03b99cc879a69288d84eed659adbac9536220"
+    },
+    "frontend/src/components/sequences/SequenceFormModal.tsx": {
+      "mode": "100644",
+      "object": "8b004ed4fd6f0e15fe35a3b42302d1f53fa7c263"
+    },
+    "frontend/src/components/sequences/StepTreeEditor.css": {
+      "mode": "100644",
+      "object": "37b423122f38d7d824d9872c97e253f0acf90676"
+    },
+    "frontend/src/components/sequences/StepTreeEditor.test.tsx": {
+      "mode": "100644",
+      "object": "ff99bff8c5cbb1c2d8f03ceb87bd3e293e5110c2"
+    },
+    "frontend/src/components/sequences/StepTreeEditor.tsx": {
+      "mode": "100644",
+      "object": "dbf30f244d1d8f757004814cebacb8146c06d90f"
+    },
+    "frontend/src/components/sequences/stepTree.test.ts": {
+      "mode": "100644",
+      "object": "94fae4eac6a5730ec696faced21fa3f5b77c6b8f"
+    },
+    "frontend/src/components/sequences/stepTree.ts": {
+      "mode": "100644",
+      "object": "89d0091753bbafbc41c15dabfc7fdc73d0b22083"
+    },
+    "frontend/src/hooks/useAutomation.ts": {
+      "mode": "100644",
+      "object": "554a7aa5354b49348068715c6870555ee30fad64"
+    },
+    "frontend/src/hooks/useCharge.ts": {
+      "mode": "100644",
+      "object": "545a4ff2d84b7f2f0a60a82d5414baba51a82b80"
+    },
+    "frontend/src/hooks/useDeviceMutations.ts": {
+      "mode": "100644",
+      "object": "352b84582f2b277184f452227279a1a2c0c577aa"
+    },
+    "frontend/src/hooks/useDeviceState.test.ts": {
+      "mode": "100644",
+      "object": "10df962d4996115c76e77eed4bc326307fda5b3c"
+    },
+    "frontend/src/hooks/useDeviceState.ts": {
+      "mode": "100644",
+      "object": "df156756e8a55332a8eec03a0aca749ba40dd103"
+    },
+    "frontend/src/hooks/useEvents.ts": {
+      "mode": "100644",
+      "object": "bd81b9cb2271c235d6a1abd11277d38fd49ee307"
+    },
+    "frontend/src/hooks/useIV.ts": {
+      "mode": "100644",
+      "object": "10ac7cc1b6c0b299fa0022a84b44c3b994edfcb9"
+    },
+    "frontend/src/hooks/usePageTitle.ts": {
+      "mode": "100644",
+      "object": "00655cbd9698e0fee0336596a148d8fce39267fb"
+    },
+    "frontend/src/hooks/usePrefersReducedMotion.ts": {
+      "mode": "100644",
+      "object": "3fdc79c7562f8b74df77db165270871db8853247"
+    },
+    "frontend/src/hooks/useProfiles.ts": {
+      "mode": "100644",
+      "object": "8316dc236e5f463c0c78794bd789cd8b86b5358d"
+    },
+    "frontend/src/hooks/useProtections.ts": {
+      "mode": "100644",
+      "object": "b329483a6e4f4c6e13923f7ea49148204b0d9331"
+    },
+    "frontend/src/hooks/useSequences.ts": {
+      "mode": "100644",
+      "object": "254d17df94bb420f8940cbc07d30532b8b267b83"
+    },
+    "frontend/src/hooks/useTokens.ts": {
+      "mode": "100644",
+      "object": "3a5e1d1d9907e6794e2a890f58abda41c16b5cc3"
+    },
+    "frontend/src/i18n.ts": {
+      "mode": "100644",
+      "object": "9137bcf5b09acaee611bcbf76c8879216a78ed3e"
+    },
+    "frontend/src/index.css": {
+      "mode": "100644",
+      "object": "d86b52e0b03fe54596bda75f5d5a6a191fead77b"
+    },
+    "frontend/src/locales/en.json": {
+      "mode": "100644",
+      "object": "07728f5950d34058c2b3129eededdc57836f2db7"
+    },
+    "frontend/src/locales/ru.json": {
+      "mode": "100644",
+      "object": "49a6d3ff54017fa75e5044497722f1c025cf9d9e"
+    },
+    "frontend/src/main.tsx": {
+      "mode": "100644",
+      "object": "a1a0d6f1dac060959c7a26654552712d11c5d040"
+    },
+    "frontend/src/pages/AutomationPage.test.tsx": {
+      "mode": "100644",
+      "object": "10e2446f08d495e9bf6c5d7acc31055586f46038"
+    },
+    "frontend/src/pages/AutomationPage.tsx": {
+      "mode": "100644",
+      "object": "8d1ae8f94b3e127b61a7236aad5ce697f06796dd"
+    },
+    "frontend/src/pages/ChargePage.test.tsx": {
+      "mode": "100644",
+      "object": "5d3dc5e9fcb00cdf535c4b86ca254b47dff79a8d"
+    },
+    "frontend/src/pages/ChargePage.tsx": {
+      "mode": "100644",
+      "object": "84fde0f3d2dfd7d8000b107fabf6625cb564f8b9"
+    },
+    "frontend/src/pages/DashboardPage.test.tsx": {
+      "mode": "100644",
+      "object": "cab11a94522f95ce03abb48d7ee9d704104675fc"
+    },
+    "frontend/src/pages/DashboardPage.tsx": {
+      "mode": "100644",
+      "object": "131fd54908dac3a2bfc3f82162b3148634ac6d25"
+    },
+    "frontend/src/pages/EventsPage.test.tsx": {
+      "mode": "100644",
+      "object": "dbf9c275a7eba1629eac085c81e84fe990ee7799"
+    },
+    "frontend/src/pages/EventsPage.tsx": {
+      "mode": "100644",
+      "object": "8bff101a0fa224bc3c092ff302803f14d54ab4ac"
+    },
+    "frontend/src/pages/HistoryPage.test.tsx": {
+      "mode": "100644",
+      "object": "4e95ac4b5c868cb6d305a6b2f77e5f6b51708168"
+    },
+    "frontend/src/pages/HistoryPage.tsx": {
+      "mode": "100644",
+      "object": "7f2cbc83f465f1e0c3aa6d58147f3ed0847a6419"
+    },
+    "frontend/src/pages/IVPage.test.tsx": {
+      "mode": "100644",
+      "object": "8466f77f6916ee558a42048d9cab00f8801914a5"
+    },
+    "frontend/src/pages/IVPage.tsx": {
+      "mode": "100644",
+      "object": "11a737c45c5f7df267b611495f5053ca69687795"
+    },
+    "frontend/src/pages/ProfilesPage.test.tsx": {
+      "mode": "100644",
+      "object": "d85c880ef39a4ca248ff9b10f86fad2707d517c2"
+    },
+    "frontend/src/pages/ProfilesPage.tsx": {
+      "mode": "100644",
+      "object": "b0a026b63e28cff72a7c6c8cea2950af9e375240"
+    },
+    "frontend/src/pages/SequencesPage.test.tsx": {
+      "mode": "100644",
+      "object": "89794944df634699ed99c08abebb44d15dcb49f6"
+    },
+    "frontend/src/pages/SequencesPage.tsx": {
+      "mode": "100644",
+      "object": "58d7a832abc0a4a9b21aabc2a4c43250458513f0"
+    },
+    "frontend/src/pages/SettingsPage.test.tsx": {
+      "mode": "100644",
+      "object": "e4b23423b7ddcc4fdba533cce0a34398ee958a79"
+    },
+    "frontend/src/pages/SettingsPage.tsx": {
+      "mode": "100644",
+      "object": "a62c0ff47c4c00526c2f07538b1491c5bddd0c2a"
+    },
+    "frontend/src/state/DeviceStateProvider.tsx": {
+      "mode": "100644",
+      "object": "27162cb4de4eea7aecb1728fdfa083349df996a6"
+    },
+    "frontend/src/state/useDevice.ts": {
+      "mode": "100644",
+      "object": "8f4cb06b7d818667741adee6b6e711438f381770"
+    },
+    "frontend/src/styles/charge.css": {
+      "mode": "100644",
+      "object": "34d7ff40465e75fb51bbc61c128156174942086a"
+    },
+    "frontend/src/styles/iv.css": {
+      "mode": "100644",
+      "object": "e610f8cd01ef054c3f8674f35ca0ca74087850b9"
+    },
+    "frontend/src/styles/metering.css": {
+      "mode": "100644",
+      "object": "df60b807d41e15d2fb630354d91b5d87a1ed1439"
+    },
+    "frontend/src/styles/responsive.css": {
+      "mode": "100644",
+      "object": "8dc5326cb82c696a6e634d0119958bbeee57c76d"
+    },
+    "frontend/src/test/chargeRoutes.ts": {
+      "mode": "100644",
+      "object": "7a1645a81d75b2f5526b7926df973472c4099ad1"
+    },
+    "frontend/src/test/fakeWebSocket.ts": {
+      "mode": "100644",
+      "object": "f05ec318a7ca6e1f63346a86126217195ac63976"
+    },
+    "frontend/src/test/fetchRouter.ts": {
+      "mode": "100644",
+      "object": "2bade8c6e2fdb092aae0b3aa62a08859fd0b3601"
+    },
+    "frontend/src/test/fixtures.ts": {
+      "mode": "100644",
+      "object": "c806a4c6a1c434c28abb6db49710280a3bf41376"
+    },
+    "frontend/src/test/ivRoutes.ts": {
+      "mode": "100644",
+      "object": "de0c7584250746b317429efd487ce1e51b4c7a95"
+    },
+    "frontend/src/test/render.tsx": {
+      "mode": "100644",
+      "object": "6f819bb97c5b404c6053a12dc42935ccbbc8a6e2"
+    },
+    "frontend/src/test/resizeObserver.ts": {
+      "mode": "100644",
+      "object": "3cd49648e8796efa3e5be5867b1fb02820241ec3"
+    },
+    "frontend/src/test/setup.ts": {
+      "mode": "100644",
+      "object": "3488360d172094e0d4e18b067a5ff6d056b7266d"
+    },
+    "frontend/tsconfig.app.json": {
+      "mode": "100644",
+      "object": "6830b6f759f55aec32f0a2fd367ee63cf68db8b7"
+    },
+    "frontend/tsconfig.json": {
+      "mode": "100644",
+      "object": "1ffef600d959ec9e396d5a260bd3f5b927b2cef8"
+    },
+    "frontend/tsconfig.node.json": {
+      "mode": "100644",
+      "object": "4adc0095c067bdeb22e89aaef48ed1ab97e13a93"
+    },
+    "frontend/vite.config.ts": {
+      "mode": "100644",
+      "object": "b1dca2e3023cf8103c02c6f7c7ac4f6e00a40615"
+    }
+  }
+}

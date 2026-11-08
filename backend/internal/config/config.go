@@ -6,12 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 )
 
 // Config holds all runtime settings of the backend service.
 type Config struct {
 	// ListenAddr is the HTTP listen address, e.g. ":8080".
 	ListenAddr string
+	// MetricsListenAddr is the separate metrics-only HTTP address.
+	MetricsListenAddr string
 	// TransportURI selects the device transport:
 	// serial:///dev/ttyUSB0, tcp://host:port or mock://
 	TransportURI string
@@ -26,6 +29,8 @@ type Config struct {
 	// trusted Remote-User). Off by default for local single-user runs;
 	// the cluster deployment sets it behind Authelia.
 	AuthRequired bool
+	// WSSessionTTL bounds authenticated telemetry before reauthorization.
+	WSSessionTTL time.Duration
 }
 
 // Load reads configuration from command-line flags and DPS_* environment
@@ -36,9 +41,12 @@ type Config struct {
 // while the user believes they control real hardware.
 func Load(args []string) (Config, error) {
 	var cfg Config
+	var wsSessionTTL string
 	fs := flag.NewFlagSet("dps150-server", flag.ContinueOnError)
 	fs.StringVar(&cfg.ListenAddr, "listen", getenv("DPS_LISTEN_ADDR", ":8080"),
 		"HTTP listen address (env DPS_LISTEN_ADDR)")
+	fs.StringVar(&cfg.MetricsListenAddr, "metrics-listen", getenv("DPS_METRICS_LISTEN_ADDR", ":9090"),
+		"metrics-only HTTP listen address (env DPS_METRICS_LISTEN_ADDR)")
 	fs.StringVar(&cfg.TransportURI, "transport", getenv("DPS_TRANSPORT", "mock://"),
 		"device transport: serial:///dev/ttyUSB0, tcp://host:port or mock:// (env DPS_TRANSPORT)")
 	fs.StringVar(&cfg.LogLevel, "log-level", getenv("DPS_LOG_LEVEL", "info"),
@@ -49,6 +57,8 @@ func Load(args []string) (Config, error) {
 		"database DSN: file path for sqlite, postgres://user:pass@host:port/db for postgres (env DPS_DB_DSN)")
 	fs.BoolVar(&cfg.AuthRequired, "auth-required", getenvBool("DPS_AUTH_REQUIRED", false),
 		"require Bearer token or Authelia Remote-User on /api (env DPS_AUTH_REQUIRED)")
+	fs.StringVar(&wsSessionTTL, "ws-session-ttl", getenv("DPS_WS_SESSION_TTL", "300s"),
+		"authenticated WS lifetime, positive and at most 300s (env DPS_WS_SESSION_TTL)")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
@@ -57,6 +67,11 @@ func Load(args []string) (Config, error) {
 		fs.Usage()
 		return Config{}, fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
+	ttl, err := time.ParseDuration(wsSessionTTL)
+	if err != nil || ttl <= 0 || ttl > 5*time.Minute {
+		return Config{}, fmt.Errorf("ws-session-ttl must be positive and at most 300s")
+	}
+	cfg.WSSessionTTL = ttl
 	return cfg, nil
 }
 

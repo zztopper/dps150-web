@@ -3,10 +3,11 @@
 #   frontend — npm ci + oxlint + tsc -b + vitest (--no-file-parallelism: один раннер, флейк AntD-портала);
 #   changelog — changelog.yml на PR (маркер "[skip changelog]"), commits — commitlint на PR;
 #   images   — image.yml ×2 (backend, frontend) из deploy/docker/Dockerfile.*; теги <sha8> (+latest на master).
+#              Sealed tracked context + app-local adapter of reviewed image.yml; one native route.
 #              На PR образы не собираются (в GitLab собирались без push) — экономим единственный раннер.
 #
-#   e2e      — на раннере k8s-heavy (Ubuntu/glibc, backlog #82): go build backend, Playwright chromium (браузер качается в кэш
-#              пода $PLAYWRIGHT_BROWSERS_PATH, системные либы в образе) против backend с DPS_TRANSPORT=mock:// (webServer конфига).
+#   e2e      — на раннере k8s-heavy (Ubuntu/glibc, backlog #82): compile test-only fixture, Playwright chromium (браузер качается в кэш
+#              пода, системные либы в образе) против isolated _test.go HTTP fixture в loopback-only netns.
 # Forgejo 17: у вызывающих джоб НЕТ runs-on; `if:` считается в контексте workflow_call → только github.ref.
 name: ci
 on:
@@ -32,7 +33,7 @@ jobs:
           if [ "$GITHUB_REF" = refs/heads/master ]; then echo "tags=${GITHUB_SHA:0:8},latest" >> "$GITHUB_OUTPUT"
           else echo "tags=${GITHUB_SHA:0:8}" >> "$GITHUB_OUTPUT"; fi
   backend:
-    uses: claude/ci-templates/.forgejo/workflows/go.yml@v1
+    uses: claude/ci-templates/.forgejo/workflows/go.yml@daa2434f659a4c7aaf00d9848c526896ed0b9648
     with:
       working_dir: backend
       test_args: -cover ./...
@@ -43,6 +44,8 @@ jobs:
     steps:
       - name: checkout (SHA-pinned mirror action)
         uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      - name: offline sealed-context security fixtures
+        run: python3 .forgejo/scripts/test-seal-context.py -v
       - name: cache npm
         uses: https://data.forgejo.org/actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4.3.0
         with:
@@ -67,17 +70,11 @@ jobs:
     steps:
       - name: checkout (SHA-pinned mirror action)
         uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
-      - name: go build backend (mock transport) + npm ci + playwright install chromium + e2e
-        run: |
-          set -euo pipefail
-          cd backend && go version && CGO_ENABLED=0 go build -o bin/dps150-server ./cmd/server && cd ..
-          cd frontend
-          npm ci --prefer-offline
-          npx playwright install chromium
-          npm run e2e
+      - name: isolated fixture + npm ci + chromium + full existing e2e suite
+        run: bash .forgejo/scripts/isolated-e2e.sh
   changelog:
     if: ${{ github.event_name == 'pull_request' }}
-    uses: claude/ci-templates/.forgejo/workflows/changelog.yml@v1
+    uses: claude/ci-templates/.forgejo/workflows/changelog.yml@daa2434f659a4c7aaf00d9848c526896ed0b9648
     secrets: inherit
   commits:
     if: ${{ github.event_name == 'pull_request' }}
@@ -100,18 +97,94 @@ jobs:
   image-backend:
     needs: [meta, backend, frontend, e2e]
     if: ${{ github.ref == 'refs/heads/master' }}
-    uses: claude/ci-templates/.forgejo/workflows/image.yml@v1
-    with:
-      image: git.zztopper.ru/applications/dps150-web/backend
-      tags: "${{ needs.meta.outputs.tags }}"
-      dockerfile: deploy/docker/Dockerfile.backend
-    secrets: inherit
+    runs-on: k8s
+    timeout-minutes: 45
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      context_sha256: ${{ steps.build.outputs.context_sha256 }}
+      phase: ${{ steps.build.outputs.phase }}
+      reviewed_commit: ${{ steps.build.outputs.reviewed_commit }}
+    steps:
+      - name: checkout (SHA-pinned mirror action)
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: seal exact tracked source before credentials
+        run: |
+          set -euo pipefail
+          publication_dir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/dps-publication.XXXXXX")
+          echo "PUBLICATION_DIR=$publication_dir" >> "$GITHUB_ENV"
+          python3 .forgejo/scripts/seal-context.py "$publication_dir/context"
+      - name: native BuildKit publication with external client auth
+        id: build
+        env:
+          IN_IMAGE: git.zztopper.ru/applications/dps150-web/backend
+          IN_TAGS: "${{ needs.meta.outputs.tags }}"
+          IN_DOCKERFILE: deploy/docker/Dockerfile.backend
+          REGISTRY_PUSH_USER: ${{ vars.REGISTRY_PUSH_USER }}
+          PKG_TOKEN: ${{ secrets.CI_PACKAGES_TOKEN }}
+        run: bash .forgejo/scripts/publish-image.sh
+      - name: cleanup isolated source and auth
+        if: always()
+        run: |
+          if [ -n "${PUBLICATION_DIR:-}" ]; then rm -rf -- "$PUBLICATION_DIR"; fi
   image-frontend:
     needs: [meta, backend, frontend, e2e]
     if: ${{ github.ref == 'refs/heads/master' }}
-    uses: claude/ci-templates/.forgejo/workflows/image.yml@v1
-    with:
-      image: git.zztopper.ru/applications/dps150-web/frontend
-      tags: "${{ needs.meta.outputs.tags }}"
-      dockerfile: deploy/docker/Dockerfile.frontend
-    secrets: inherit
+    runs-on: k8s
+    timeout-minutes: 45
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      context_sha256: ${{ steps.build.outputs.context_sha256 }}
+      phase: ${{ steps.build.outputs.phase }}
+      reviewed_commit: ${{ steps.build.outputs.reviewed_commit }}
+    steps:
+      - name: checkout (SHA-pinned mirror action)
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: seal exact tracked source before credentials
+        run: |
+          set -euo pipefail
+          publication_dir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/dps-publication.XXXXXX")
+          echo "PUBLICATION_DIR=$publication_dir" >> "$GITHUB_ENV"
+          python3 .forgejo/scripts/seal-context.py "$publication_dir/context"
+      - name: native BuildKit publication with external client auth
+        id: build
+        env:
+          IN_IMAGE: git.zztopper.ru/applications/dps150-web/frontend
+          IN_TAGS: "${{ needs.meta.outputs.tags }}"
+          IN_DOCKERFILE: deploy/docker/Dockerfile.frontend
+          REGISTRY_PUSH_USER: ${{ vars.REGISTRY_PUSH_USER }}
+          PKG_TOKEN: ${{ secrets.CI_PACKAGES_TOKEN }}
+        run: bash .forgejo/scripts/publish-image.sh
+      - name: cleanup isolated source and auth
+        if: always()
+        run: |
+          if [ -n "${PUBLICATION_DIR:-}" ]; then rm -rf -- "$PUBLICATION_DIR"; fi
+  release-binding:
+    needs: [image-backend, image-frontend]
+    runs-on: k8s
+    timeout-minutes: 5
+    env:
+      BACKEND_DIGEST: ${{ needs.image-backend.outputs.digest }}
+      FRONTEND_DIGEST: ${{ needs.image-frontend.outputs.digest }}
+      BACKEND_CONTEXT: ${{ needs.image-backend.outputs.context_sha256 }}
+      FRONTEND_CONTEXT: ${{ needs.image-frontend.outputs.context_sha256 }}
+      BACKEND_PHASE: ${{ needs.image-backend.outputs.phase }}
+      FRONTEND_PHASE: ${{ needs.image-frontend.outputs.phase }}
+      BACKEND_REVIEW: ${{ needs.image-backend.outputs.reviewed_commit }}
+      FRONTEND_REVIEW: ${{ needs.image-frontend.outputs.reviewed_commit }}
+    steps:
+      - name: require both native images from the same reviewed tracked source
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, re
+          for key in ("BACKEND_DIGEST", "FRONTEND_DIGEST"):
+              assert re.fullmatch(r"sha256:[0-9a-f]{64}", os.environ[key]), key
+          for field in ("CONTEXT", "PHASE", "REVIEW"):
+              assert os.environ["BACKEND_" + field] == os.environ["FRONTEND_" + field], field
+          record = {"integration_commit": os.environ["GITHUB_SHA"],
+                    "phase": os.environ["BACKEND_PHASE"], "reviewed_commit": os.environ["BACKEND_REVIEW"],
+                    "context_sha256": os.environ["BACKEND_CONTEXT"],
+                    "backend": os.environ["BACKEND_DIGEST"], "frontend": os.environ["FRONTEND_DIGEST"],
+                    "rollout_gate": "actual image-content attestation and ordered A/chart/B acceptance still required"}
+          with open(os.environ.get("FORGEJO_STEP_SUMMARY", "/dev/null"), "a") as out:
+              out.write("```json\n" + json.dumps(record, indent=2) + "\n```\n")
+          PYTHON
