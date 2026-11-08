@@ -275,7 +275,7 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	router := api.NewRouter(appMetrics.InstrumentHub(hub),
 		api.WithStore(store), api.WithHistory(hist),
-		api.WithAuthRequired(cfg.AuthRequired),
+		api.WithAuthRequired(cfg.AuthRequired), api.WithWSSessionTTL(cfg.WSSessionTTL),
 		api.WithSequenceManager(seqManager),
 		api.WithChargeManager(chargeManager),
 		api.WithIVManager(ivManager),

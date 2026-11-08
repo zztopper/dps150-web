@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"time"
+
 	"dps150-web/backend/internal/charger"
 	"dps150-web/backend/internal/device"
 	"dps150-web/backend/internal/ivtrace"
@@ -27,6 +30,10 @@ type routerDeps struct {
 	// the API is open. It is set true only in the cluster deployment, which
 	// sits behind Authelia on the UI host and issues tokens on the API host.
 	authRequired bool
+	// Authenticated WS sessions must reconnect and authorize again by this TTL.
+	wsSessionTTL time.Duration
+	// Test-only clock seam; nil uses context.WithTimeout.
+	wsSessionContext func(context.Context, time.Duration) (context.Context, context.CancelFunc)
 	// sequenceManager backs the F-022 run/stop/active routes and (when no
 	// interlock is wired) the 409 gate on manual device mutations; nil when
 	// storage is not configured, which makes the run routes answer 503 and the
@@ -112,4 +119,11 @@ func (d *routerDeps) tokens() tokenStore {
 		return nil
 	}
 	return d.store
+}
+
+// WithWSSessionTTL sets the maximum authenticated telemetry session duration.
+// Zero/invalid values retain the safe 300s default; local unauthenticated
+// sessions are unaffected. Runtime config rejects invalid values explicitly.
+func WithWSSessionTTL(ttl time.Duration) RouterOption {
+	return func(d *routerDeps) { d.wsSessionTTL = ttl }
 }

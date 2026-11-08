@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadDefaults(t *testing.T) {
 	cfg, err := Load(nil)
@@ -122,5 +125,37 @@ func TestMetricsListenConfiguration(t *testing.T) {
 	cfg, err = Load([]string{"-metrics-listen", ":29090"})
 	if err != nil || cfg.MetricsListenAddr != ":29090" {
 		t.Fatalf("metrics flag: addr=%q, err=%v", cfg.MetricsListenAddr, err)
+	}
+}
+
+func TestWSSessionTTLConfiguration(t *testing.T) {
+	cfg, err := Load(nil)
+	if err != nil || cfg.WSSessionTTL != 5*time.Minute {
+		t.Fatalf("default TTL=%v, err=%v", cfg.WSSessionTTL, err)
+	}
+	t.Setenv("DPS_WS_SESSION_TTL", "30s")
+	cfg, err = Load(nil)
+	if err != nil || cfg.WSSessionTTL != 30*time.Second {
+		t.Fatalf("env TTL=%v, err=%v", cfg.WSSessionTTL, err)
+	}
+	cfg, err = Load([]string{"-ws-session-ttl", "1m"})
+	if err != nil || cfg.WSSessionTTL != time.Minute {
+		t.Fatalf("flag TTL=%v, err=%v", cfg.WSSessionTTL, err)
+	}
+	for _, value := range []string{"0", "-1s", "301s", "bad"} {
+		t.Setenv("DPS_WS_SESSION_TTL", value)
+		if _, err := Load(nil); err == nil {
+			t.Errorf("invalid env TTL accepted: %s", value)
+		}
+	}
+	t.Setenv("DPS_WS_SESSION_TTL", "bad")
+	if cfg, err := Load([]string{"-ws-session-ttl", "1m"}); err != nil || cfg.WSSessionTTL != time.Minute {
+		t.Fatalf("valid flag must override invalid env: ttl=%v, err=%v", cfg.WSSessionTTL, err)
+	}
+	t.Setenv("DPS_WS_SESSION_TTL", "300s")
+	for _, value := range []string{"0", "-1s", "301s", "bad"} {
+		if _, err := Load([]string{"-ws-session-ttl", value}); err == nil {
+			t.Errorf("invalid flag TTL accepted: %s", value)
+		}
 	}
 }

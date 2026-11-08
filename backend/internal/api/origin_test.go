@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,11 +48,15 @@ func TestMetricsListenerHasNoAPI(t *testing.T) {
 	}
 }
 
-// The API keeps its existing upgrade-time authorization. Retiring a token
-// rejects the next HTTP/WS handshake; an already open telemetry stream remains
-// open. This test records that limit without using a real hub or device.
+// Retirement rejects the next HTTP/WS handshake. An existing authenticated
+// stream can survive only until its server deadline, then must authorize again.
+// The injected deadline avoids waiting five minutes or contacting a device.
 func TestNativeTelemetryRetirementBoundary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	logBuf := &syncBuffer{}
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
 	store := newAuthTestStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -58,12 +64,23 @@ func TestNativeTelemetryRetirementBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	independent, _, err := store.CreateToken(ctx, "synthetic independent", storage.ScopeRead)
+	independent, _, err := store.CreateToken(ctx, "synthetic independent", storage.ScopeControl)
 	if err != nil {
 		t.Fatal(err)
 	}
 	hub := &fakeHub{snap: onlineSnapshot(), updates: make(chan device.Update, 1)}
-	srv := httptest.NewServer(NewRouter(hub, WithStore(store), WithAuthRequired(true)))
+	expirations := make(chan context.CancelFunc, 2)
+	clock := RouterOption(func(d *routerDeps) {
+		d.wsSessionContext = func(parent context.Context, ttl time.Duration) (context.Context, context.CancelFunc) {
+			if ttl != 5*time.Minute {
+				t.Errorf("default authenticated TTL=%v", ttl)
+			}
+			ctx, cancel := context.WithCancel(parent)
+			expirations <- cancel
+			return ctx, cancel
+		}
+	})
+	srv := httptest.NewServer(NewRouter(hub, WithStore(store), WithAuthRequired(true), clock))
 	defer srv.Close()
 	conn, _, err := websocket.Dial(ctx, srv.URL+"/api/v1/ws", &websocket.DialOptions{
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + secret}},
@@ -72,6 +89,7 @@ func TestNativeTelemetryRetirementBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
+	expire := <-expirations
 	if typ, _ := readMessage(t, ctx, conn); typ != "state" {
 		t.Fatalf("initial frame = %q", typ)
 	}
@@ -90,5 +108,77 @@ func TestNativeTelemetryRetirementBoundary(t *testing.T) {
 	hub.updates <- device.Telemetry{Voltage: 1.25}
 	if typ, _ := readMessage(t, ctx, conn); typ != "telemetry" {
 		t.Fatalf("held stream frame = %q", typ)
+	}
+	expire()
+	if _, _, err := conn.Read(ctx); err == nil {
+		t.Fatal("retired token's held stream survived the server deadline")
+	} else if strings.Contains(err.Error(), secret) {
+		t.Fatal("stream close exposed a credential")
+	}
+	if ctx.Err() != nil {
+		t.Fatal("fixture timed out before stream retirement")
+	}
+	fresh, _, err := websocket.Dial(ctx, srv.URL+"/api/v1/ws", &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + independent}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fresh.CloseNow()
+	if typ, _ := readMessage(t, ctx, fresh); typ != "state" {
+		t.Fatalf("independent reconnect frame = %q", typ)
+	}
+	if strings.Contains(logBuf.String(), secret) || strings.Contains(logBuf.String(), independent) {
+		t.Fatal("session lifecycle logged a credential")
+	}
+}
+
+func TestAuthenticatedWSSessionDeadline(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, authRequired := range []bool{true, false} {
+		t.Run(map[bool]string{true: "authenticated", false: "local"}[authRequired], func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			hub := &fakeHub{snap: onlineSnapshot(), updates: make(chan device.Update, 1)}
+			clockUsed := make(chan struct{}, 1)
+			clock := RouterOption(func(d *routerDeps) {
+				d.wsSessionContext = func(parent context.Context, ttl time.Duration) (context.Context, context.CancelFunc) {
+					clockUsed <- struct{}{}
+					if ttl != 100*time.Millisecond {
+						t.Errorf("configured TTL=%v", ttl)
+					}
+					return context.WithTimeout(parent, ttl)
+				}
+			})
+			srv := httptest.NewServer(NewRouter(hub, WithAuthRequired(authRequired), WithWSSessionTTL(100*time.Millisecond), clock))
+			defer srv.Close()
+			conn, _, err := websocket.Dial(ctx, srv.URL+"/api/v1/ws", &websocket.DialOptions{HTTPHeader: http.Header{"Remote-User": {"synthetic-user"}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.CloseNow()
+			if typ, _ := readMessage(t, ctx, conn); typ != "state" {
+				t.Fatalf("initial frame=%q", typ)
+			}
+			if authRequired {
+				if _, _, err := conn.Read(ctx); err == nil {
+					t.Fatal("authenticated stream did not expire")
+				}
+				if ctx.Err() != nil {
+					t.Fatal("fixture timed out before server enforced deadline")
+				}
+				<-clockUsed
+			} else {
+				select {
+				case <-clockUsed:
+					t.Fatal("local session received authentication deadline")
+				default:
+				}
+				hub.updates <- device.Telemetry{Voltage: 1}
+				if typ, _ := readMessage(t, ctx, conn); typ != "telemetry" {
+					t.Fatalf("local telemetry=%q", typ)
+				}
+			}
+		})
 	}
 }
