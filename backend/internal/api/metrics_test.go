@@ -9,11 +9,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TestMetricsRoute checks that GET /metrics is registered outside /api/v1
-// and serves the Prometheus text exposition of the default registry.
+// TestMetricsRoute checks the separate metrics handler serves the same registry.
 func TestMetricsRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	r := NewRouter(&fakeHub{})
+	r := NewMetricsHandler()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)

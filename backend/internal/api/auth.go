@@ -33,9 +33,11 @@ const (
 //
 // SECURITY REQUIREMENT (ADR-006): Remote-User is trusted UNCONDITIONALLY by
 // this middleware -- it assumes the header can only reach the backend after
-// Authelia's forward-auth has set it. That guarantee is enforced at the
-// Ingress, NOT here: the browser-facing host (dps150.example.com) runs Authelia
-// forward-auth in front of this service, while the script-facing host
+// Authelia's forward-auth has set it. NetworkPolicy must admit ONLY the
+// Traefik namespace AND pod to the API listener; metrics scrapers use the
+// separate metrics-only listener. The browser-facing host
+// (dps150.example.com) runs Authelia forward-auth in front of this service;
+// the script-facing host
 // (dps150-api.example.com) MUST run a headers-middleware that unconditionally
 // strips any client-supplied Remote-User/Remote-Groups before the request
 // reaches the backend. If that stripping is ever missing on a host

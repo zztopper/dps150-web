@@ -56,6 +56,6 @@ ENV DPS_TRANSPORT=mock:// \
     DPS_DB_DSN=/data/dps150.db
 VOLUME ["/data"]
 
-EXPOSE 8080
+EXPOSE 8080 9090
 
 ENTRYPOINT ["dps150-server"]

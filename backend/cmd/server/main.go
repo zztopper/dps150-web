@@ -289,6 +289,19 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	metricsSrv := &http.Server{
+		Addr:              cfg.MetricsListenAddr,
+		Handler:           api.NewMetricsHandler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		slog.Info("metrics server starting", "addr", cfg.MetricsListenAddr)
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("metrics server failed", "error", err)
+			stop()
+		}
+	}()
+
 	go func() {
 		slog.Info("server starting", "addr", cfg.ListenAddr, "transport", cfg.TransportURI)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -302,6 +315,9 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("metrics graceful shutdown failed", "error", err)
+	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("graceful shutdown failed", "error", err)
 	}

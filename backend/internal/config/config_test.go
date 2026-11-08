@@ -11,6 +11,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ListenAddr != ":8080" {
 		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":8080")
 	}
+	if cfg.MetricsListenAddr != ":9090" {
+		t.Errorf("MetricsListenAddr = %q, want :9090", cfg.MetricsListenAddr)
+	}
 	if cfg.TransportURI != "mock://" {
 		t.Errorf("TransportURI = %q, want %q", cfg.TransportURI, "mock://")
 	}
@@ -107,5 +110,17 @@ func TestLoadUnexpectedArgument(t *testing.T) {
 	// start the mock transport.
 	if _, err := Load([]string{"transport", "serial:///dev/ttyUSB0"}); err == nil {
 		t.Error("Load() with positional arguments: want error, got nil")
+	}
+}
+
+func TestMetricsListenConfiguration(t *testing.T) {
+	t.Setenv("DPS_METRICS_LISTEN_ADDR", "127.0.0.1:19090")
+	cfg, err := Load(nil)
+	if err != nil || cfg.MetricsListenAddr != "127.0.0.1:19090" {
+		t.Fatalf("metrics env: addr=%q, err=%v", cfg.MetricsListenAddr, err)
+	}
+	cfg, err = Load([]string{"-metrics-listen", ":29090"})
+	if err != nil || cfg.MetricsListenAddr != ":29090" {
+		t.Fatalf("metrics flag: addr=%q, err=%v", cfg.MetricsListenAddr, err)
 	}
 }

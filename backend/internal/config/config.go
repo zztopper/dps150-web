@@ -12,6 +12,8 @@ import (
 type Config struct {
 	// ListenAddr is the HTTP listen address, e.g. ":8080".
 	ListenAddr string
+	// MetricsListenAddr is the separate metrics-only HTTP address.
+	MetricsListenAddr string
 	// TransportURI selects the device transport:
 	// serial:///dev/ttyUSB0, tcp://host:port or mock://
 	TransportURI string
@@ -39,6 +41,8 @@ func Load(args []string) (Config, error) {
 	fs := flag.NewFlagSet("dps150-server", flag.ContinueOnError)
 	fs.StringVar(&cfg.ListenAddr, "listen", getenv("DPS_LISTEN_ADDR", ":8080"),
 		"HTTP listen address (env DPS_LISTEN_ADDR)")
+	fs.StringVar(&cfg.MetricsListenAddr, "metrics-listen", getenv("DPS_METRICS_LISTEN_ADDR", ":9090"),
+		"metrics-only HTTP listen address (env DPS_METRICS_LISTEN_ADDR)")
 	fs.StringVar(&cfg.TransportURI, "transport", getenv("DPS_TRANSPORT", "mock://"),
 		"device transport: serial:///dev/ttyUSB0, tcp://host:port or mock:// (env DPS_TRANSPORT)")
 	fs.StringVar(&cfg.LogLevel, "log-level", getenv("DPS_LOG_LEVEL", "info"),
