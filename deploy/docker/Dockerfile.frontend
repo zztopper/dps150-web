@@ -12,7 +12,8 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM public.ecr.aws/nginx/nginx-unprivileged:1.31.9-alpine  # CVE-2026-123007 fixed
+# CVE-2026-123007 fixed
+FROM public.ecr.aws/nginx/nginx-unprivileged:1.31.9-alpine
 
 # nginx-unprivileged runs as UID 101; apk needs root, then drop back.
 USER root
