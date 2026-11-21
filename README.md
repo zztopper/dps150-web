@@ -1,4 +1,9 @@
 # dps150-web
+<!-- repo-badges-start -->
+[![issues](https://badges.zztopper.ru/badge/dynamic/json?url=https%3A%2F%2Fgit.zztopper.ru%2Fapi%2Fv1%2Frepos%2Fapplications%2Fdps150-web%3Ftoken%3Dcfe9fd96580bcba1eae375afba49f2074cf5a9a8&query=%24.open_issues_count&label=issues&color=blue&logo=forgejo&logoColor=white&cacheSeconds=300)](https://git.zztopper.ru/applications/dps150-web/issues)
+[![pull requests](https://badges.zztopper.ru/badge/dynamic/json?url=https%3A%2F%2Fgit.zztopper.ru%2Fapi%2Fv1%2Frepos%2Fapplications%2Fdps150-web%3Ftoken%3Dcfe9fd96580bcba1eae375afba49f2074cf5a9a8&query=%24.open_pr_counter&label=pull%20requests&color=blueviolet&logo=forgejo&logoColor=white&cacheSeconds=300)](https://git.zztopper.ru/applications/dps150-web/pulls)
+![language](https://badges.zztopper.ru/badge/dynamic/json?url=https%3A%2F%2Fgit.zztopper.ru%2Fapi%2Fv1%2Frepos%2Fapplications%2Fdps150-web%3Ftoken%3Dcfe9fd96580bcba1eae375afba49f2074cf5a9a8&query=%24.language&label=language&color=bluegrey&logo=forgejo&logoColor=white&cacheSeconds=3600)
+<!-- repo-badges-end -->
 
 Web-based control panel for the **FNIRSI DPS-150** programmable DC power supply
 (0–30 V / 0–5 A / 150 W, USB-CDC serial). Drive the supply from your desktop or
