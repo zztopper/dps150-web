@@ -1,5 +1,6 @@
 # dps150-web
 <!-- repo-badges-start -->
+[![build](https://badges.zztopper.ru/endpoint?url=https%3A%2F%2Fbadges-bridge.r2bnj.ru%2Fendpoint%2Fci%2Fapplications%2Fdps150-web&style=flat)](https://git.zztopper.ru/applications/dps150-web/actions)
 [![issues](https://badges.zztopper.ru/badge/dynamic/json?url=https%3A%2F%2Fgit.zztopper.ru%2Fapi%2Fv1%2Frepos%2Fapplications%2Fdps150-web%3Ftoken%3Dd8a0b4649bc64f68834c5b9ae7a369a25feefff1&query=%24.open_issues_count&label=issues&color=blue&logo=forgejo&logoColor=white&cacheSeconds=300)](https://git.zztopper.ru/applications/dps150-web/issues)
 [![pull requests](https://badges.zztopper.ru/badge/dynamic/json?url=https%3A%2F%2Fgit.zztopper.ru%2Fapi%2Fv1%2Frepos%2Fapplications%2Fdps150-web%3Ftoken%3Dd8a0b4649bc64f68834c5b9ae7a369a25feefff1&query=%24.open_pr_counter&label=pull%20requests&color=blueviolet&logo=forgejo&logoColor=white&cacheSeconds=300)](https://git.zztopper.ru/applications/dps150-web/pulls)
 [![image](https://badges.zztopper.ru/badge/dynamic/json?url=https%3A%2F%2Fgit.zztopper.ru%2Fapi%2Fv1%2Fpackages%2Fapplications%3Fq%3Ddps150-web%26limit%3D1%26token%3Dd8a0b4649bc64f68834c5b9ae7a369a25feefff1&query=%24%5B0%5D.version&label=image&color=0969da&logo=forgejo&logoColor=white&cacheSeconds=3600)](https://git.zztopper.ru/applications/-/packages/container/dps150-web)
